@@ -1,0 +1,39 @@
+---
+argument_specs:
+  main:
+    short_description: "Installs and configures the podman rootless base for La Suite Territoriale applications on Debian systems."
+    options:
+      st_podman_unprivileged_port_start:
+        type: "str"
+        description: "Port number to pass to sysctl net.ipv4.ip_unprivileged_port."
+      st_podman_user:
+        type: "str"
+        description: "The unix user that will be configured to manage the podman rootless containers."
+        required: true
+      st_podman_group:
+        type: "str"
+        description: "The unix group of st_podman_user."
+        default: "{{ st_podman_user }}"
+      st_podman_home:
+        type: "str"
+        description: "The home of st_podman_user."
+        default: "/opt/{{ st_podman_user }}"
+      st_podman_uid:
+        type: "int"
+        description: "A custom UID for st_podman_user."
+      st_podman_gid:
+        type: "int"
+        description: "A custom GID for st_podman_group."
+      st_podman_application_name:
+        type: "str"
+        description:
+          - "The name of the application to deploy."
+          - "This is used mainly for the systemd unit filename and the default application_dir."
+        default: ""
+      st_podman_application_dir:
+        type: "str"
+        description: "The base directory to deploy the application compose to."
+        default: "{{ st_podman_home }}/{{ st_podman_application_name }}"
+      st_podman_application_compose_template:
+        type: "str"
+        description: "Local path to the docker compose template for the application."

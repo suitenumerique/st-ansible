@@ -1,0 +1,14 @@
+---
+- name: "Install podman and docker-compose."
+  ansible.builtin.apt:
+    name:
+      - "podman"
+      - "docker-compose"
+    update_cache: true
+
+- name: "Allow unprivileged ports binding."
+  when: st_podman_unprivileged_port_start is defined
+  ansible.posix.sysctl:
+    name: "net.ipv4.ip_unprivileged_port_start"
+    value: "{{ st_podman_unprivileged_port_start }}"
+    sysctl_set: true

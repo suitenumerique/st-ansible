@@ -1,0 +1,24 @@
+---
+- name: "Import Suite Territoriale podman role."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+  vars:
+    st_podman_user: "messages"
+
+- name: "Deploy mta-in."
+  ansible.builtin.import_tasks: mta_in.yml
+  when: st_messages_mta_in_enabled
+  tags: ['messages_mta_in']
+
+- name: "Deploy mta-out."
+  ansible.builtin.import_tasks: mta_out.yml
+  when: st_messages_mta_out_enabled
+  tags: ['messages_mta_out']
+
+- name: "Deploy global compose file."
+  ansible.builtin.template:
+    src: base_compose.yaml.j2
+    dest: "/opt/messages/compose.yaml"
+    owner: "messages"
+    group: "messages"
+    mode: "0640"

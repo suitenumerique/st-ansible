@@ -1,0 +1,26 @@
+---
+- name: "Ensure mta-in application directory."
+  ansible.builtin.file:
+    name: "/opt/messages/mta-in"
+    owner: "messages"
+    group: "messages"
+    mode: "0750"
+    state: directory
+
+- name: "Deploy mta-in env file."
+  ansible.builtin.template:
+    src: "{{ st_messages_mta_in_env_template }}"
+    dest: "/opt/messages/mta-in/env"
+    owner: "messages"
+    group: "messages"
+    mode: "0640"
+  notify: "systemctl --user restart mta-in"
+
+- name: "Create mta-in application."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "messages"
+    st_podman_application_name: "mta-in"
+    st_podman_application_compose_template: mta_in_compose.yaml.j2

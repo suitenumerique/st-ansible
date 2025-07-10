@@ -1,0 +1,39 @@
+---
+- name: "Ensure {{ st_podman_application_name }} application dir permissions."
+  ansible.builtin.file:
+    name: "{{ st_podman_application_dir }}"
+    owner: "{{ st_podman_user }}"
+    group: "{{ st_podman_group }}"
+    mode: "0750"
+    state: directory
+
+- name: "Deploy {{ st_podman_application_name }} application docker-compose file."
+  ansible.builtin.template:
+    src: "{{ st_podman_application_compose_template }}"
+    dest: "{{ st_podman_application_dir }}/compose.yaml"
+    owner: "{{ st_podman_user }}"
+    group: "{{ st_podman_group }}"
+    mode: "0640"
+
+- name: "Deploy {{ st_podman_application_name }} application systemd unit."
+  ansible.builtin.template:
+    src: "application_systemd_unit.j2"
+    dest: "{{ st_podman_home }}/.config/systemd/user/{{ st_podman_application_name }}.service"
+    owner: "{{ st_podman_user }}"
+    group: "{{ st_podman_group }}"
+    mode: "0640"
+  notify: "systemctl --user daemon-reload"
+
+- name: "Flush handlers."
+  ansible.builtin.meta: flush_handlers
+
+- name: "Ensure {{ st_podman_application_name }} application is started and enabled."
+  become: true
+  become_user: "{{ st_podman_user }}"
+  become_method: ansible.builtin.sudo
+  become_flags: "-i"
+  ansible.builtin.systemd_service:
+    name: "{{ st_podman_application_name }}"
+    state: started
+    enabled: true
+    scope: user

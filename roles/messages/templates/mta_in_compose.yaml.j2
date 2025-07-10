@@ -1,0 +1,8 @@
+---
+name: messages
+services:
+  mta-in:
+    image: ghcr.io/suitenumerique/messages-mta-in:{{ st_messages_mta_in_tag }}
+    env_file: ./env
+    ports:
+      - "8025:25"

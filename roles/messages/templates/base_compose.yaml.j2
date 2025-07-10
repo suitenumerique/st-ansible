@@ -1,0 +1,9 @@
+---
+{{ ansible_managed | comment }}
+include:
+{% if st_messages_mta_in_enabled %}
+  - mta-in/compose.yaml
+{%- endif -%}
+{% if st_messages_mta_out_enabled %}
+  - mta-out/compose.yaml
+{%- endif -%}

@@ -1,0 +1,17 @@
+---
+dependencies: []
+galaxy_info:
+  role_name: messages
+  author: La Suite territoriale
+  company: Agence Nationale de la Cohésion des Territoires
+  description: This role deploys the Messages applications from La Suite Territoriale on a rootless podman base on Debian systems.
+  license: AGPL
+  min_ansible_version: 2.18.0
+  issue_tracker_url: https://github.com/suitenumerique/st-ansible/issues
+  platforms:
+    - name: Debian
+      versions:
+        - trixie
+  galaxy_tags:
+    - suiteterritoriale
+    - system

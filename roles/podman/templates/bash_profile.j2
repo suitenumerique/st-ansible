@@ -1,0 +1,17 @@
+{{ ansible_managed | comment }}
+# Load bashrc
+if [ -n "$BASH_VERSION" ]; then
+    # include .bashrc if it exists
+    if [ -f "$HOME/.bashrc" ]; then
+        . "$HOME/.bashrc"
+    fi
+fi
+
+# Set prompt colors
+PS1='${debian_chroot:+($debian_chroot)}\[$(tput setaf 208)\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+
+# This allows to `systemctl --user` while using sudo -u on the user
+export XDG_RUNTIME_DIR="/run/user/$UID"
+export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
+# This allows docker-compose to connect to the podman socket
+export DOCKER_HOST="unix:///run/user/$UID/podman/podman.sock"

@@ -1,0 +1,8 @@
+---
+name: messages
+services:
+  mta-out:
+    image: ghcr.io/suitenumerique/messages-mta-out:{{ st_messages_mta_out_tag }}
+    env_file: ./env
+    ports:
+      - "8587:587"

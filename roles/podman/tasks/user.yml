@@ -1,0 +1,28 @@
+---
+- name: "Ensure {{ st_podman_group }} group is present."
+  ansible.builtin.group:
+    name: "{{ st_podman_group }}"
+    gid: "{{ st_podman_gid | default(omit) }}"
+
+- name: "Ensure {{ st_podman_user }} user is present."
+  ansible.builtin.user:
+    name: "{{ st_podman_user }}"
+    group: "{{ st_podman_group }}"
+    home: "{{ st_podman_home }}"
+    uid: "{{ st_podman_uid | default(omit) }}"
+    shell: "/bin/bash"
+    create_home: true
+    password_lock: true
+
+- name: "Ensure lingering is enabled for {{ st_podman_user }} user."
+  ansible.builtin.command:
+    cmd: "loginctl enable-linger {{ st_podman_user }}"
+    creates: "/var/lib/systemd/linger/{{ st_podman_user }}"
+
+- name: "Ensure {{ st_podman_user }} user bash_profile."
+  ansible.builtin.template:
+    src: bash_profile.j2
+    dest: "{{ st_podman_home }}/.bash_profile"
+    owner: "{{ st_podman_user }}"
+    group: "{{ st_podman_group }}"
+    mode: "0640"

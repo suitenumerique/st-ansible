@@ -1,0 +1,12 @@
+---
+- name: "Import install.yml."
+  ansible.builtin.import_tasks: "install.yml"
+  tags: ["st_podman_install"]
+
+- name: "Include user.yml."
+  ansible.builtin.import_tasks: "user.yml"
+  tags: ["st_podman_user"]
+
+- name: "Import socket.yml."
+  ansible.builtin.import_tasks: "socket.yml"
+  tags: ["st_podman_socket"]
