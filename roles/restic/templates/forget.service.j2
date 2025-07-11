@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Restic forget
+After=syslog.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User={{ restic_user }}
+ExecStart={{ restic_binary_path }} forget --verbose --prune --keep-daily {{ restic_forget_keep_daily }} --keep-weekly {{ restic_forget_keep_weekly }} --keep-monthly {{ restic_forget_keep_monthly }} --keep-yearly {{ restic_forget_keep_yearly }}
+EnvironmentFile={{ restic_config_dir }}/env
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+---
+- name: "Ensure restic group."
+  when: restic_manage_user
+  ansible.builtin.group:
+    name: "{{ restic_group }}"
+
+- name: "Ensure restic user."
+  when: restic_manage_user
+  ansible.builtin.user:
+    name: "{{ restic_user }}"
+    group: "{{ restic_group }}"
+    shell: "/usr/sbin/nologin"
+    home: "{{ restic_home }}"
+    create_home: true
+    system: true
+
+- name: "Ensure restic configuration and cache directories."
+  ansible.builtin.file:
+    name: "{{ item }}"
+    owner: "{{ restic_user }}"
+    group: "{{ restic_group }}"
+    mode: "0750"
+    state: directory
+  loop:
+    - "{{ restic_config_dir }}"
+    - "{{ restic_cache_dir }}"

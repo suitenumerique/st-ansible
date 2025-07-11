@@ -1,0 +1,48 @@
+---
+- name: "Create remote tempdir for restic downloads."
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: restic-download
+  register: tempdir_restic_download
+
+- name: "Download, verify and install restic."
+  block:
+    - name: "Download restic v{{ restic_version }} archive, hash and signature."
+      ansible.builtin.get_url:
+        url: "https://github.com/restic/restic/releases/download/v{{ restic_version }}/{{ item }}"
+        dest: "{{ tempdir_restic_download.path }}"
+        mode: "0600"
+      loop:
+        - restic_{{ restic_version }}_linux_amd64.bz2
+        - SHA256SUMS
+        - SHA256SUMS.asc
+
+    - name: "Ensure bzip2 package is installed."
+      ansible.builtin.package:
+        name: "bzip2"
+
+    - name: "Import restic PGP key, verify SHA256SUMS.asc signature and verify archive integrity."
+      ansible.builtin.shell: |
+        set -euo pipefail
+        wget -qO- https://restic.net/gpg-key-alex.asc | gpg --import
+        cd {{ tempdir_restic_download.path }}
+        gpg --verify SHA256SUMS.asc SHA256SUMS
+        grep _linux_amd64.bz2 SHA256SUMS | sha256sum -c
+        bzip2 -d restic_{{ restic_version }}_linux_amd64.bz2
+        mv restic_{{ restic_version }}_linux_amd64 {{ restic_binary_path }}
+      args:
+        executable: /bin/bash
+        creates: "{{ restic_binary_path }}"
+
+    - name: "Ensure restic binary permissions."
+      ansible.builtin.file:
+        name: "{{ restic_binary_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+
+  always:
+    - name: "Remove remote tempdir for restic downloads."
+      ansible.builtin.file:
+        path: "{{ tempdir_restic_download.path }}"
+        state: absent

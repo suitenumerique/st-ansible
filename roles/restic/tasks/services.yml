@@ -1,0 +1,36 @@
+---
+- name: "Configure restic-backup systemd unit and timer."
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "/etc/systemd/system/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - { src: backup.service.j2, dest: restic-backup.service }
+    - { src: backup.timer.j2, dest: restic-backup.timer }
+  notify: "systemctl daemon-reload"
+
+- name: "Configure restic-forget systemd unit and timer."
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "/etc/systemd/system/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - { src: forget.service.j2, dest: restic-forget.service }
+    - { src: forget.timer.j2, dest: restic-forget.timer }
+  notify: "systemctl daemon-reload"
+
+- name: "Ensure systemctl daemon-reload."
+  ansible.builtin.meta: flush_handlers
+
+- name: "Ensure restic-backup and restic-forget systemd timer are started and enabled."
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - restic-backup.timer
+    - restic-forget.timer

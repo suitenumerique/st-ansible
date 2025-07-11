@@ -1,0 +1,97 @@
+---
+argument_specs:
+  main:
+    short_description: "Install and configure a restic instance on Debian systems."
+    options:
+      restic_repository:
+        type: "str"
+        description:
+          - "The repository's path. Populates the RESTIC_REPOSITORY var value."
+          - "For now this role only supports s3 repositories."
+        required: true
+      restic_password:
+        type: "str"
+        description: "The repository's password. Populates the RESTIC_PASSWORD var."
+        required: true
+      restic_s3_access_key:
+        type: "str"
+        description: "The access key for the S3 bucket."
+        required: true
+      restic_s3_secret_key:
+        type: "str"
+        description: "The secret key for the S3 bucket."
+        required: true
+      restic_files:
+        type: "list"
+        elements: "str"
+        description: "A list containing the files to backup on the system."
+        required: true
+      restic_binary_path:
+        type: "str"
+        description: "Path to the restic binary."
+        default: "/usr/local/bin/restic"
+      restic_force_install:
+        type: "bool"
+        description: "Force the installation of restic even if the binary already exists."
+        default: false
+      restic_version:
+        type: "str"
+        description: "Version of restic to install."
+        default: "0.18.0"
+      restic_config_dir:
+        type: "str"
+        description: "Path to the configuration directory of restic."
+        default: "/etc/restic"
+      restic_cache_dir:
+        type: "str"
+        description: "Path to the cache directory of restic."
+        default: "/var/cache/restic"
+      restic_backup_precmd:
+        type: "str"
+        description: "Command to add to the ExecStartPre field of the restic-backup systemd unit."
+      restic_backup_timer:
+        type: "str"
+        description: "Systemd OnCalendar timer to trigger the restic-backup systemd unit."
+        default: "Mon..Sun 6:00:00"
+      restic_forget_timer:
+        type: "str"
+        description: "Systemd OnCalendar timer to trigger the restic-forget systemd unit."
+        default: "Mon..Sun 18:00:00"
+      restic_forget_keep_daily:
+        type: "int"
+        description: "Number of daily backups to keep."
+        default: 7
+      restic_forget_keep_weekly:
+        type: "int"
+        description: "Number of weekly backups to keep."
+        default: 4
+      restic_forget_keep_monthly:
+        type: "int"
+        description: "Number of monthly backups to keep."
+        default: 12
+      restic_forget_keep_yearly:
+        type: "int"
+        description: "Number of yearly backups to keep."
+        default: 0
+      restic_setcap_read_search:
+        type: "bool"
+        description:
+          - "Add the CAP_DAC_READ_SEARCH ambient capability to the backup systemd unit."
+          - "This is used when we need the restic user to read anywhere in the system, to backup files from multiple users."
+        default: true
+      restic_manage_user:
+        type: "bool"
+        description: "Controls wether the role manages the restic_user and restic_group (true) or if they're created externally (false)."
+        default: true
+      restic_user:
+        type: "str"
+        description: "The unix user to create and start the backups with."
+        default: "restic"
+      restic_group:
+        type: "str"
+        description: "The unix group to create associated to restic_user."
+        default: "{{ restic_user }}"
+      restic_home:
+        type: "str"
+        description: "Path to the home directory of the restic_user."
+        default: "/var/lib/restic"

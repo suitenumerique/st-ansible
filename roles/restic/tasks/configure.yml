@@ -1,0 +1,28 @@
+---
+- name: "Deploy restic files configuration."
+  ansible.builtin.template:
+    src: "files.j2"
+    dest: "{{ restic_config_dir }}/files"
+    owner: "{{ restic_user }}"
+    group: "{{ restic_group }}"
+    mode: "0440"
+
+- name: "Deploy restic env configuration."
+  ansible.builtin.template:
+    src: "env.j2"
+    dest: "{{ restic_config_dir }}/env"
+    owner: "{{ restic_user }}"
+    group: "{{ restic_group }}"
+    mode: "0440"
+
+- name: "Ensure restic repository is initialized."
+  ansible.builtin.shell: |
+    set -a
+    source {{ restic_config_dir }}/env
+    {{ restic_binary_path }} snapshots || {{ restic_binary_path }} init
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: "{{ restic_user }}"
+  register: restic_init
+  changed_when: "'created restic repository' in restic_init.stdout"

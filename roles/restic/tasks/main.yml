@@ -1,0 +1,22 @@
+---
+- name: "Ensure restic is already installed."
+  ansible.builtin.stat:
+    path: "{{ restic_binary_path }}"
+  register: restic_binary
+
+- name: "Import install.yml."
+  ansible.builtin.import_tasks: "install.yml"
+  when: not restic_binary.stat.exists or restic_force_install
+  tags: ["restic_install"]
+
+- name: "Import user.yml."
+  ansible.builtin.import_tasks: "user.yml"
+  tags: ["restic_user"]
+
+- name: "Import configure.yml."
+  ansible.builtin.import_tasks: "configure.yml"
+  tags: ["restic_configure"]
+
+- name: "Import services.yml."
+  ansible.builtin.import_tasks: "services.yml"
+  tags: ["restic_services"]

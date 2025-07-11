@@ -1,0 +1,18 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Restic backup
+After=syslog.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User={{ restic_user }}
+{% if restic_backup_precmd is defined %}
+ExecStartPre={{ restic_backup_precmd }}
+{% endif -%}
+ExecStart={{ restic_binary_path }} backup --files-from {{ restic_config_dir }}/files --cache-dir {{ restic_cache_dir }}
+EnvironmentFile={{ restic_config_dir }}/env
+{{ 'AmbientCapabilities=CAP_DAC_READ_SEARCH' if restic_setcap_read_search else '' }}
+
+[Install]
+WantedBy=multi-user.target

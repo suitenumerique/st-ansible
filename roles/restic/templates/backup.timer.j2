@@ -1,0 +1,9 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Run Restic
+
+[Timer]
+OnCalendar={{ restic_backup_timer }}
+
+[Install]
+WantedBy=timers.target
