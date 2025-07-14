@@ -2,6 +2,7 @@
 name: messages
 services:
   mta-in:
+    container_name: mta-in
     image: ghcr.io/suitenumerique/messages-mta-in:{{ st_messages_mta_in_tag }}
     env_file: ./env
     ports:

@@ -4,7 +4,7 @@
     name: "/opt/messages/mta-out"
     owner: "messages"
     group: "messages"
-    mode: "0750"
+    mode: "0700"
     state: directory
 
 - name: "Deploy mta-out env file."
@@ -13,7 +13,7 @@
     dest: "/opt/messages/mta-out/env"
     owner: "messages"
     group: "messages"
-    mode: "0640"
+    mode: "0600"
   notify: "systemctl --user restart mta-out"
 
 - name: "Create mta-out app"

@@ -4,7 +4,7 @@
     name: "/opt/messages/mta-in"
     owner: "messages"
     group: "messages"
-    mode: "0750"
+    mode: "0700"
     state: directory
 
 - name: "Deploy mta-in env file."
@@ -13,7 +13,7 @@
     dest: "/opt/messages/mta-in/env"
     owner: "messages"
     group: "messages"
-    mode: "0640"
+    mode: "0600"
   notify: "systemctl --user restart mta-in"
 
 - name: "Create mta-in application."
