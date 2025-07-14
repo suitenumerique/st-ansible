@@ -1,0 +1,22 @@
+---
+- name: "Add grafana gpg key."
+  ansible.builtin.shell: |
+    set -euo pipefail
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://apt.grafana.com/gpg.key | gpg --dearmor -o /etc/apt/keyrings/grafana.gpg
+  args:
+    executable: /bin/bash
+    creates: "/etc/apt/keyrings/grafana.gpg"
+
+- name: "Add grafana repository."
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main"
+    filename: "grafana"
+    state: present
+
+- name: "Install alloy latest version."
+  ansible.builtin.apt:
+    name:
+      - alloy
+    update_cache: true
+    install_recommends: false

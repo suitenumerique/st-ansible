@@ -1,0 +1,17 @@
+---
+- name: "Import install.yml."
+  ansible.builtin.import_tasks: "install.yml"
+  tags: ["st_alloy_install"]
+
+- name: "Import user.yml."
+  ansible.builtin.import_tasks: "user.yml"
+  when: st_alloy_manage_user
+  tags: ["st_alloy_user"]
+
+- name: "Import configure.yml."
+  ansible.builtin.import_tasks: "configure.yml"
+  tags: ["st_alloy_configure"]
+
+- name: "Import services.yml."
+  ansible.builtin.import_tasks: "services.yml"
+  tags: ["st_alloy_services"]

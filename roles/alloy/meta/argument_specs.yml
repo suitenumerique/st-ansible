@@ -1,0 +1,33 @@
+---
+argument_specs:
+  main:
+    short_description: "Install and configure a alloy instance on Debian systems."
+    options:
+      st_alloy_manage_user:
+        type: "bool"
+        description: "Controls wether the role manages the alloy user of if it's externally managed."
+        default: true
+      st_alloy_user:
+        type: "str"
+        description: "The unix user to run alloy as."
+        default: "alloy"
+      st_alloy_group:
+        type: "str"
+        description: "The primary group of the alloy user."
+        default: "{{ st_alloy_user }}"
+      st_alloy_config_template:
+        type: "str"
+        required: true
+        description: "Local path to the alloy configuration template."
+      st_alloy_config_dir:
+        type: "str"
+        description: "Absolute path to the alloy configurations directory."
+        default: "/etc/alloy"
+      st_alloy_env_template:
+        type: "str"
+        description: "Local path to the alloy environment config file."
+        default: "default_env.j2"
+      st_alloy_env_dir:
+        type: "str"
+        description: "Absolute path to the environment configurations directory."
+        default: "/etc/default"

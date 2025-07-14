@@ -1,0 +1,33 @@
+---
+- name: "Deploy alloy environment vars."
+  ansible.builtin.template:
+    src: "{{ st_alloy_env_template }}"
+    dest: "{{ st_alloy_env_dir }}/alloy"
+    owner: root
+    group: root
+    mode: "0400"
+  notify: "systemctl restart alloy"
+
+- name: "Deploy alloy configuration directory permissions."
+  ansible.builtin.file:
+    name: "{{ st_alloy_config_dir }}"
+    owner: root
+    group: "{{ st_alloy_group }}"
+    mode: "0750"
+
+- name: "Deploy alloy working directory permissions."
+  ansible.builtin.file:
+    name: "/var/lib/alloy"
+    owner: "{{ st_alloy_user }}"
+    group: "{{ st_alloy_group }}"
+    recurse: true
+    state: directory
+
+- name: "Deploy alloy configuration."
+  ansible.builtin.template:
+    src: "{{ st_alloy_config_template }}"
+    dest: "{{ st_alloy_config_dir }}/config.alloy"
+    owner: root
+    group: "{{ st_alloy_group }}"
+    mode: "0640"
+  notify: "systemctl reload alloy"

@@ -1,0 +1,28 @@
+---
+- name: "Override alloy.service systemd unit when user is different from the default one."
+  when: st_alloy_user != 'alloy'
+  block:
+    - name: "Create alloy.service override directory."
+      ansible.builtin.file:
+        name: "/etc/systemd/system/alloy.service.d"
+        owner: root
+        group: root
+        mode: "0750"
+        state: directory
+
+    - name: "Deploy alloy.service override config."
+      ansible.builtin.template:
+        src: systemd_override.j2
+        dest: "/etc/systemd/system/alloy.service.d/override.conf"
+        owner: root
+        group: root
+        mode: "0640"
+      notify:
+        - "systemctl daemon-reload"
+        - "systemctl restart alloy"
+
+- name: "Ensure alloy is started and enabled."
+  ansible.builtin.service:
+    name: "alloy"
+    state: started
+    enabled: true

@@ -3,6 +3,14 @@ argument_specs:
   main:
     short_description: "Installs and configures the Messages application from La Suite Territoriale on Debian systems."
     options:
+      st_messages_uid:
+        type: "int"
+        description: "UID of the `messages` user, used for the podman role."
+        default: 1100
+      st_messages_gid:
+        type: "int"
+        description: "GID of the `messages` group, used for the podman role."
+        default: "{{ st_messages_uid }}"
       st_messages_mta_in_enabled:
         type: "bool"
         description: "Triggers the installation of the mta-in."
@@ -25,3 +33,13 @@ argument_specs:
       st_messages_mta_out_env:
         type: "str"
         description: "Content of the default mta_out_env_template, not used if st_messages_mta_out_env_template is defined."
+      st_messages_monitoring_enabled:
+        type: "bool"
+        description: "Triggers the installation of the alloy agent, used to send metrics to a Prometheus compatible server and logs to a Loki server."
+        default: false
+      st_messages_monitoring_prometheus_url:
+        type: "str"
+        description: "When monitoring deployment is enabled, specifies the Prometheus URL to send metrics to."
+      st_messages_monitoring_loki_url:
+        type: "str"
+        description: "When monitoring deployment is enabled, specifies the Loki URL to send logs to."

@@ -1,0 +1,9 @@
+---
+- name: "Ensure {{ st_alloy_group }} group exists."
+  ansible.builtin.group:
+    name: "{{ st_alloy_group }}"
+
+- name: "Ensure {{ st_alloy_user }} user exists and is in the right groups."
+  ansible.builtin.user:
+    name: "{{ st_alloy_user }}"
+    group: "{{ st_alloy_group }}"
