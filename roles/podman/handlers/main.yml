@@ -1,4 +1,13 @@
 ---
+- name: "systemctl --user daemon-reload"
+  become: true
+  become_user: "{{ st_podman_user }}"
+  become_method: ansible.builtin.sudo
+  become_flags: "-i"
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+    scope: user
+
 - name: "systemctl --user restart {{ st_podman_application_name }}"
   become: true
   become_user: "{{ st_podman_user }}"
@@ -9,11 +18,12 @@
     state: restarted
     scope: user
 
-- name: "systemctl --user daemon-reload"
+- name: "systemctl --user is-active {{ st_podman_application_name }}"
   become: true
   become_user: "{{ st_podman_user }}"
   become_method: ansible.builtin.sudo
   become_flags: "-i"
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-    scope: user
+  changed_when: false
+  ansible.builtin.shell: |
+    set -eu
+    systemctl --user is-active {{ st_podman_application_name }}

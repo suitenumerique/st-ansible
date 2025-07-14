@@ -4,7 +4,7 @@
     name: "{{ st_podman_application_dir }}"
     owner: "{{ st_podman_user }}"
     group: "{{ st_podman_group }}"
-    mode: "0750"
+    mode: "0700"
     state: directory
 
 - name: "Deploy {{ st_podman_application_name }} application docker-compose file."
@@ -13,7 +13,10 @@
     dest: "{{ st_podman_application_dir }}/compose.yaml"
     owner: "{{ st_podman_user }}"
     group: "{{ st_podman_group }}"
-    mode: "0640"
+    mode: "0600"
+  notify:
+    - "systemctl --user restart {{ st_podman_application_name }}"
+    - "systemctl --user is-active {{ st_podman_application_name }}"
 
 - name: "Deploy {{ st_podman_application_name }} application systemd unit."
   ansible.builtin.template:
@@ -21,7 +24,7 @@
     dest: "{{ st_podman_home }}/.config/systemd/user/{{ st_podman_application_name }}.service"
     owner: "{{ st_podman_user }}"
     group: "{{ st_podman_group }}"
-    mode: "0640"
+    mode: "0600"
   notify: "systemctl --user daemon-reload"
 
 - name: "Flush handlers."
@@ -37,3 +40,4 @@
     state: started
     enabled: true
     scope: user
+  notify: "systemctl --user is-active {{ st_podman_application_name }}"
