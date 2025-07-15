@@ -51,7 +51,7 @@ None.
 
 ## License
 
-AGPL
+MIT
 
 ## Author and Project Information
 La Suite territoriale @ Agence Nationale de la Cohésion des Territoires

@@ -23,6 +23,6 @@ The collection contains the following roles:
 
 ## Licensing
 
-This codebase is under AGPL version 3.
+This codebase is under MIT License.
 
-See [LICENSE](https://www.gnu.org/licenses/agpl-3.0.txt) for full text.
+See [LICENSE](https://github.com/suitenumerique/st-ansible/blob/main/LICENSE) for full text.

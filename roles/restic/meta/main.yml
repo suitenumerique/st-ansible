@@ -5,7 +5,7 @@ galaxy_info:
   author: La Suite Territoriale
   company: Agence Nationale de la Cohésion des Territoires
   description: This role installs and configure restic on Debian systems.
-  license: AGPL
+  license: MIT
   min_ansible_version: 2.18.0
   issue_tracker_url: https://github.com/suitenumerique/st-ansible/issues
   platforms:

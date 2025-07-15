@@ -3,7 +3,7 @@ namespace: suitenumerique
 name: st
 readme: README.md
 authors:
-  - La Suite Territoriale
+  - Agence nationale de la cohésion des territoires
 license_file: "LICENSE"
 repository: https://github.com/suitenumerique/st-ansible
 issues: https://github.com/suitenumerique/st-ansible/issues
