@@ -33,14 +33,8 @@ prometheus.remote_write "default" {
 *******/
 
 // Relabeling rules for journald logs
-discovery.relabel "logs_journal" {
-  targets = []
-
-  rule {
-    // Extract systemd unit information into a label
-    source_labels = ["__journal__systemd_unit"]
-    target_label  = "unit"
-  }
+loki.relabel "journal_messages" {
+  forward_to = []
 
   rule {
     // Extract systemd user unit information into a label
@@ -65,7 +59,51 @@ discovery.relabel "logs_journal" {
 loki.source.journal "messages" {
   max_age       = "24h0m0s"
   matches       = "_UID={{ st_messages_uid }} {{ '_SYSTEMD_USER_UNIT=mta-out.service' if st_messages_mta_out_enabled }} {{ '_SYSTEMD_USER_UNIT=mta-in.service' if st_messages_mta_in_enabled }}"
-  relabel_rules = discovery.relabel.logs_journal.rules
+  relabel_rules = loki.relabel.journal_messages.rules
+  forward_to    = [loki.process.default.receiver]
+}
+
+loki.relabel "journal_auth" {
+  forward_to = []
+
+  rule {
+    // Extract systemd unit information into a label
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+
+  rule {
+    // Extract log priority into a level label
+    source_labels = ["__journal_priority_keyword"]
+    target_label  = "level"
+  }
+
+  rule {
+    // Extract the _COMM field into a label
+    source_labels = ["__journal__comm"]
+    target_label  = "comm"
+  }
+
+  rule {
+    // replace ugly default service_name
+    target_label = "service_name"
+    replacement = "auth"
+  }
+}
+
+// Get ssh logs from journald
+loki.source.journal "ssh" {
+  max_age       = "24h0m0s"
+  matches       = "_SYSTEMD_UNIT=ssh.service"
+  relabel_rules = loki.relabel.journal_auth.rules
+  forward_to    = [loki.process.default.receiver]
+}
+
+// Get sudo logs from journald
+loki.source.journal "sudo" {
+  max_age       = "24h0m0s"
+  matches       = "_COMM=sudo"
+  relabel_rules = loki.relabel.journal_auth.rules
   forward_to    = [loki.process.default.receiver]
 }
 
