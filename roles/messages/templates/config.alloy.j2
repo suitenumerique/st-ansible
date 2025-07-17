@@ -19,12 +19,25 @@ prometheus.scrape "default" {
   )
   scrape_interval = "10s"
 
+  forward_to = [prometheus.relabel.default.receiver]
+}
+
+// Relabel the 'instance' label to hostname, needed for some exporters
+prometheus.relabel "default" {
   forward_to = [prometheus.remote_write.default.receiver]
+  rule {
+    target_label = "instance"
+    replacement  = "{{ ansible_fqdn }}"
+  }
 }
 
 prometheus.remote_write "default" {
   endpoint {
     url = "{{ st_messages_monitoring_prometheus_url }}"
+  }
+
+  wal {
+    max_keepalive_time = "2h"
   }
 }
 
