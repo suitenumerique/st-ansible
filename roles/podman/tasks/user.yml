@@ -14,6 +14,14 @@
     create_home: true
     password_lock: true
 
+- name: "Ensure {{ st_podman_user }} user home directory permissions."
+  ansible.builtin.file:
+    name: "{{ st_podman_home }}"
+    owner: "{{ st_podman_user }}"
+    group: "{{ st_podman_group }}"
+    mode: "0750"
+    state: directory
+
 - name: "Ensure lingering is enabled for {{ st_podman_user }} user."
   ansible.builtin.command:
     cmd: "loginctl enable-linger {{ st_podman_user }}"
@@ -23,6 +31,22 @@
   ansible.builtin.template:
     src: bash_profile.j2
     dest: "{{ st_podman_home }}/.bash_profile"
+    owner: "{{ st_podman_user }}"
+    group: "{{ st_podman_group }}"
+    mode: "0640"
+
+- name: "Ensure {{ st_podman_user }} user containers configuration directory."
+  ansible.builtin.file:
+    name: "{{ st_podman_home }}/.config/containers"
+    owner: "{{ st_podman_user }}"
+    group: "{{ st_podman_group }}"
+    mode: "0750"
+    state: directory
+
+- name: "Ensure {{ st_podman_user }} user containers.conf."
+  ansible.builtin.template:
+    src: "{{ st_podman_containers_config_template }}"
+    dest: "{{ st_podman_home }}/.config/containers/containers.conf"
     owner: "{{ st_podman_user }}"
     group: "{{ st_podman_group }}"
     mode: "0640"

@@ -4,6 +4,11 @@
 st_podman_group: '{{ st_podman_user }}'
 # The home of st_podman_user.
 st_podman_home: /opt/{{ st_podman_user }}
+# Local path to the template for the containers.conf configuration file.
+# This file will be put under st_podman_user homedir.
+st_podman_containers_config_template: containers.conf.j2
+# Sets the default timezone for all containers, in the default containers.conf template.
+st_podman_tz: Europe/Paris
 # The name of the application to deploy.
 # This is used mainly for the systemd unit filename and the default application_dir.
 st_podman_application_name: ''
