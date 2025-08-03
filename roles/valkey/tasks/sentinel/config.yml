@@ -1,0 +1,30 @@
+---
+- name: "Initialize blockinfile markers into sentinel.conf."
+  ansible.builtin.lineinfile:
+    path: "{{ st_valkey_sentinel_config_dir }}/sentinel.conf"
+    line: "{{ item.line }}"
+    insertbefore: "{{ item.insertbefore | default(omit) }}"
+    insertafter: "{{ item.insertafter | default(omit) }}"
+    state: present
+  loop:
+    - { line: "# BEGIN ANSIBLE MANAGED BLOCK", insertbefore: "BOF" }
+    - { line: "# END ANSIBLE MANAGED BLOCK", insertafter: "EOF" }
+
+- name: "Deploy valkey-sentinel configuration."
+  ansible.builtin.blockinfile:
+    path: "{{ st_valkey_sentinel_config_dir }}/sentinel.conf"
+    block: "{{ lookup('template', st_valkey_sentinel_config_template) }}"
+    owner: valkey
+    group: valkey
+    mode: "0640"
+  notify: "systemctl restart valkey-sentinel"
+
+# For now rspamd does not support sentinel with ACLs :(
+# - name: "Deploy valkey-sentinel ACL file."
+#   ansible.builtin.template:
+#     src: "{{ st_valkey_sentinel_users_template }}"
+#     dest: "{{ st_valkey_config_dir }}/sentinel-users.acl"
+#     owner: valkey
+#     group: valkey
+#     mode: "0640"
+#   notify: "systemctl restart valkey-sentinel"

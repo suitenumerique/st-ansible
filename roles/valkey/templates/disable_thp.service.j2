@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Disable Transparent Huge Pages
+Before=valkey.service
+ 
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'echo never > /sys/kernel/mm/transparent_hugepage/enabled'
+ 
+[Install]
+WantedBy=multi-user.target

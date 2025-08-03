@@ -1,0 +1,81 @@
+---
+argument_specs:
+  main:
+    short_description: "Installs, configures and manages a Valkey instance. The role also handles valkey-sentinel configurations."
+    options:
+      st_valkey_instance_name:
+        type: "str"
+        description: "Name of the instance to deploy."
+        default: "stvalkey"
+      st_valkey_instance_config_dir:
+        type: "str"
+        description: "Path to the valkey instance configuration directory."
+        default: "/opt/valkey/{{ st_valkey_instance_name }}/config"
+      st_valkey_instance_config_template:
+        type: "str"
+        description: "Local path to the valkey instance configuration file template."
+        default: "instance/persistence.j2"
+      st_valkey_instance_users_template:
+        type: "str"
+        description: "Local path to the valkey instance users (ACL) template."
+        default: "instance/users.acl.j2"
+      st_valkey_instance_compose_template:
+        type: "str"
+        description: "Local path to the valkey docker compose template."
+        default: "instance/compose.yml.j2"
+      st_valkey_instance_port:
+        type: "str"
+        description: "When using the role provided templates, specify the port to bind valkey process to."
+        default: "56379"
+      st_valkey_instance_version:
+        type: "str"
+        description: "The docker hub tag to use for the valkey container."
+        default: "8"
+      st_valkey_instance_maxmemory:
+        type: "str"
+        description:
+          - "When using the role provided templates, specify the maxmemory parameter."
+          - "Defaults to 70% of total RAM."
+        default: "{{ (ansible_memtotal_mb * 0.7) | int }}mb"
+      st_valkey_sentinel_password:
+        type: "str"
+        description:
+          - "When using the role provided templates, specify the 'sentinel' user password. This one is the same for all instances."
+      st_valkey_admin_password:
+        type: "str"
+        description:
+          - "When using the role provided templates, specify the 'admin' user password. This one is the same for all instances."
+      st_valkey_instance_replication_enabled:
+        type: "bool"
+        description: "When using the role provided templates, include the replication configuration in the valkey instance configuration template."
+        default: false
+      st_valkey_instance_replication_password:
+        type: "str"
+        description:
+          - "When using the role provided templates and when replication is enabled, specify the 'replica' user password."
+      st_valkey_instance_monitoring_password:
+        type: "str"
+        description:
+          - "When using the role provided templates, adds a 'monitoring' user to the ACL file with the provided password."
+      st_valkey_instance_application_users:
+        type: "list"
+        elements: "str"
+        description:
+          - "When using the role provided ACL templates, add additional users with custom permissions."
+          - "The default permissions allow pretty much everything an application has to do on all keys and removes the dangerous commands."
+      st_valkey_sentinel_config_dir:
+        type: "str"
+        description: "Remote path to the valkey-sentinel configuration directory."
+        default: "/etc/valkey"
+      st_valkey_sentinel_config_template:
+        type: "str"
+        description: "Local path to the sentinel configuration template, used after the first run."
+        default: "sentinel/sentinel.j2"
+      st_valkey_sentinel_users_template:
+        type: "str"
+        description: "Local path to the sentinel users (ACL) configuration template."
+        default: "sentinel/sentinel-users.acl.j2"
+      st_valkey_sentinel_port:
+        type: "str"
+        description: "When using role provided config template, specify the port to bind sentinel to."
+        default: "26379"

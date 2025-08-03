@@ -1,0 +1,6 @@
+---
+- name: "Ensure valkey-sentinel is started and enabled"
+  ansible.builtin.service:
+    name: "valkey-sentinel"
+    state: started
+    enabled: true

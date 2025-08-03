@@ -1,0 +1,11 @@
+{% include '_base.j2' %}
+
+## CACHE MODE
+tcp-keepalive 30
+maxmemory {{ st_valkey_instance_maxmemory }}
+maxmemory-policy allkeys-lru
+save ""
+
+{% if st_valkey_instance_replication_enabled %}
+{% include '_replication.j2' %}
+{% endif %}

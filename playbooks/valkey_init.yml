@@ -1,0 +1,36 @@
+---
+- name: "Valkey initialization playbook."
+  hosts: "{{ targets | default('valkey') }}"
+  tasks:
+    - name: "Configure primary."
+      when: primary_ip in ansible_all_ipv4_addresses
+      block:
+        - name: "Configure sentinel on primary."
+          when: st_valkey_sentinel_password is defined
+          changed_when: true
+          ansible.builtin.shell: |
+            set -eu
+            valkey-cli -p {{ st_valkey_sentinel_port | default('26379') }} -e sentinel monitor {{ primary_name }} {{ primary_ip }} {{ primary_port | default('56379') }} {{ quorum | default('2') }}
+            valkey-cli -p {{ st_valkey_sentinel_port | default('26379') }} -e sentinel set {{ primary_name }} auth-user sentinel
+            valkey-cli -p {{ st_valkey_sentinel_port | default('26379') }} -e sentinel set {{ primary_name }} auth-pass {{ st_valkey_sentinel_password }}
+
+    - name: "Configure replicas."
+      when: primary_ip not in ansible_all_ipv4_addresses
+      block:
+        - name: "Configure valkey replication on replicas."
+          changed_when: true
+          ansible.builtin.shell: |
+            set -eu
+            valkey-cli -p {{ st_valkey_instance_port | default(primary_port) }} --user admin -e replicaof {{ primary_ip }} {{ primary_port | default('56379') }}
+          environment:
+            REDISCLI_AUTH: "{{ st_valkey_admin_password }}"
+            VALKEYCLI_AUTH: "{{ st_valkey_admin_password }}"
+
+        - name: "Configure sentinel on replicas."
+          when: st_valkey_sentinel_password is defined
+          changed_when: true
+          ansible.builtin.shell: |
+            set -eu
+            valkey-cli -p {{ st_valkey_sentinel_port | default('26379') }} -e sentinel monitor {{ primary_name }} {{ primary_ip }} {{ primary_port | default('56379') }} {{ quorum | default('2') }}
+            valkey-cli -p {{ st_valkey_sentinel_port | default('26379') }} -e sentinel set {{ primary_name }} auth-user sentinel
+            valkey-cli -p {{ st_valkey_sentinel_port | default('26379') }} -e sentinel set {{ primary_name }} auth-pass {{ st_valkey_sentinel_password }}

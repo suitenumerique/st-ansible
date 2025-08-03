@@ -1,0 +1,17 @@
+## REPLICATION
+
+masterauth "{{ st_valkey_instance_replication_password }}"
+masteruser "replica"
+
+# Diskless sync is useful for slow disks, we shouldn't need that.
+repl-diskless-sync no
+repl-diskless-load disabled
+
+# Keep some backlog for the down slaves (useful for restarts)
+repl-backlog-size 40mb
+repl-backlog-ttl 1800
+
+# By default the master stops writing if we have lags on the replicas.
+# This disables the feature.
+min-replicas-to-write 0
+min-replicas-max-lag 0

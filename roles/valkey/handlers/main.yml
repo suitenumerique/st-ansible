@@ -1,0 +1,19 @@
+---
+- name: "systemctl daemon-reload"
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: "systemctl start disable_thp"
+  ansible.builtin.service:
+    name: "disable_thp"
+    state: started
+
+- name: "systemctl restart valkey"
+  ansible.builtin.service:
+    name: "valkey-server"
+    state: restarted
+
+- name: "systemctl restart valkey-sentinel"
+  ansible.builtin.service:
+    name: "valkey-sentinel"
+    state: restarted

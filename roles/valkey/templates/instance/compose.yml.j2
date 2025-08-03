@@ -1,0 +1,20 @@
+---
+services:
+  valkey_{{ st_valkey_instance_name }}:
+    image: docker.io/valkey/valkey:{{ st_valkey_instance_version }}
+    container_name: valkey_{{ st_valkey_instance_name }}
+    network_mode: host
+    volumes:
+      - ./data:/data
+      - ./config:/etc/valkey
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+          umask 0077
+          valkey-server /etc/valkey/valkey.conf
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -p {{ st_valkey_instance_port }} --user ping --pass '' ping | grep PONG"]
+      interval: 1s
+      timeout: 3s
+      retries: 5

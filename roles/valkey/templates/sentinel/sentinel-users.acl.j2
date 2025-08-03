@@ -1,0 +1,10 @@
+user default off
+user sentinel on allchannels +@all #{{ st_valkey_sentinel_password | ansible.builtin.hash('sha256') }}
+{% if st_valkey_sentinel_monitoring_password is defined %}
+user monitoring on -@all +auth +info +sentinel|masters +sentinel|sentinels +sentinel|replicas #{{ st_valkey_sentinel_monitoring_password | ansible.builtin.hash('sha256') }}
+{% endif %}
+{% if st_valkey_application_users is defined and st_valkey_application_users | length > 0 %}
+{% for usr in st_valkey_application_users %}
+user {{ usr.name }} on -@all +auth +client|getname +client|id +client|setname +command +hello +ping +role +sentinel|get-master-addr-by-name +sentinel|master +sentinel|myid +sentinel|replicas +sentinel|sentinels #{{ usr.password | ansible.builtin.hash('sha256') }}
+{% endfor %}
+{% endif %}

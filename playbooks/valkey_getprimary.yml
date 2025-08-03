@@ -1,0 +1,15 @@
+---
+- name: "Valkey Get Primary playbook."
+  hosts: "{{ targets | default('valkey') }}"
+  run_once: true
+  tasks:
+    - name: "Get current primary."
+      changed_when: true
+      register: getprimary
+      ansible.builtin.shell: |
+        set -eu
+        valkey-cli -p {{ st_valkey_sentinel_port | default('26379') }} -e sentinel get-primary-addr-by-name {{ primary_name }}
+
+    - name: "Print current primary."
+      ansible.builtin.debug:
+        var: getprimary.stdout

@@ -1,0 +1,19 @@
+---
+dependencies: []
+galaxy_info:
+  role_name: valkey
+  author: La Suite territoriale
+  company: Agence Nationale de la Cohésion des Territoires
+  description: This role installs, configure and manage a valkey instance.
+  license: MIT
+  min_ansible_version: 2.18.0
+  issue_tracker_url: https://github.com/suitenumerique/st-ansible/issues
+  platforms:
+    - name: Debian
+      versions:
+        - trixie
+  galaxy_tags:
+    - suiteterritoriale
+    - system
+    - podman
+    - rootless
