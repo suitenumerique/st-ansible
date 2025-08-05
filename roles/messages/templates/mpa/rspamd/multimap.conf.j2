@@ -1,0 +1,42 @@
+{{ ansible_managed | comment }}
+BLACKLIST_FROM_DOMAIN {
+  type = "from";
+  filter = "email:domain";
+  map = "file:///var/lib/rspamd/blacklist_domains.map";
+  score = 15.0;
+}
+
+BLACKLIST_TO_DOMAIN {
+  type = "rcpt";
+  filter = "email:domain";
+  map = "file:///var/lib/rspamd/blacklist_domains.map";
+  score = 15.0;
+}
+
+BLACKLIST_IP {
+  type = "ip";
+  prefilter = true;
+  map = "file:///var/lib/rspamd/blacklist_ips.map";
+  action = "reject";
+}
+
+WHITELIST_FROM_DOMAIN {
+  type = "from";
+  filter = "email:domain";
+  map = "file:///var/lib/rspamd/whitelist_domains.map";
+  score = 15.0;
+}
+
+WHITELIST_TO_DOMAIN {
+  type = "to";
+  filter = "email:domain";
+  map = "file:///var/lib/rspamd/whitelist_domains.map";
+  score = 15.0;
+}
+
+WHITELIST_IP {
+  type = "ip";
+  prefilter = true;
+  map = "file:///var/lib/rspamd/whitelist_ips.map";
+  action = "accept";
+}

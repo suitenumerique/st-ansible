@@ -17,6 +17,11 @@
   when: st_messages_mta_out_enabled
   tags: ['messages_mta_out']
 
+- name: "Deploy mpa."
+  ansible.builtin.import_tasks: mpa.yml
+  when: st_messages_mpa_enabled
+  tags: ['messages_mpa']
+
 - name: "Import Suite Territoriale alloy role."
   when: st_messages_monitoring_enabled
   tags: ['messages_monitoring']

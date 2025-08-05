@@ -1,0 +1,53 @@
+---
+name: messages
+services:
+  rspamd:
+    container_name: rspamd
+    image: docker.io/rspamd/rspamd:{{ st_messages_mpa_rspamd_tag }}
+    network_mode: host
+    depends_on:
+      - clamav
+      - unbound
+      {{ '- valkey' if st_messages_mpa_valkey_enabled }}
+    ports:
+      - "11333:11333"
+      - "11334:11334"
+    volumes:
+      - rspamd_data:/var/lib/rspamd
+      - {{ st_messages_mpa_dir }}/rspamd_config:/etc/rspamd
+
+  clamav:
+    container_name: clamav
+    image: docker.io/clamav/clamav:{{ st_messages_mpa_clamav_tag }}
+    network_mode: host
+    volumes:
+      - {{ st_messages_mpa_dir }}/clamav_config/clamd.conf:/etc/clamav/clamd.conf
+
+  unbound:
+    container_name: unbound
+    image: docker.io/alpinelinux/unbound:latest
+    network_mode: host
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+          unbound-anchor -a /etc/unbound/root.key
+          exec unbound -dp
+    volumes:
+      - {{ st_messages_mpa_dir }}/unbound_config/unbound.conf:/etc/unbound/unbound.conf
+
+{% if st_messages_mpa_valkey_enabled %}
+  valkey:
+    container_name: valkey
+    image: docker.io/valkey/valkey:{{ st_messages_mpa_valkey_tag }}
+    network_mode: host
+    command: "valkey-server --save 60 1 --loglevel warning"
+    volumes:
+      - valkey_data:/data
+{% endif %}
+
+volumes:
+  rspamd_data:
+{% if st_messages_mpa_valkey_enabled %}
+  valkey_data:
+{% endif %}

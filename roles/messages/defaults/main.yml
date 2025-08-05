@@ -20,5 +20,26 @@ st_messages_mta_out_tag: main
 st_messages_mta_out_dir: /opt/messages/mta-out
 # Local path to the custom template to use for mta-out env file.
 st_messages_mta_out_env_template: mta_out/env.j2
+# Triggers the installation of the mpa.
+st_messages_mpa_enabled: false
+# Remote path to the base directory for mpa app.
+st_messages_mpa_dir: /opt/messages/mpa
+# The tag of the rspamd docker image to use.
+# See https://hub.docker.com/r/rspamd/rspamd/tags.
+st_messages_mpa_rspamd_tag: '3'
+# List of rspamd configs to deploy, merged with the default configuration list.
+st_messages_mpa_rspamd_config_templates: []
+# Local path to the unbound.conf template.
+st_messages_mpa_unbound_config_template: mpa/unbound.conf.j2
+# The tag of the clamav docker image to use.
+# See https://hub.docker.com/r/clamav/clamav/tags.
+st_messages_mpa_clamav_tag: '1.4'
+# Local path to the clamd.conf template.
+st_messages_mpa_clamav_config_template: mpa/clamd.conf.j2
+# Triggers the installation of a local valkey instance, which also deploys a default redis.conf rspamd config.
+st_messages_mpa_valkey_enabled: true
+# The tag of the valkey docker image to use.
+# See https://hub.docker.com/r/valkey/valkey/tags.
+st_messages_mpa_valkey_tag: '8'
 # Triggers the installation of the alloy agent, used to send metrics to a Prometheus compatible server and logs to a Loki server.
 st_messages_monitoring_enabled: false

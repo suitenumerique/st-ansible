@@ -1,0 +1,8 @@
+{{ ansible_managed | comment }}
+
+bind_socket = "*:11334";
+count = 1;
+secure_ip = "127.0.0.1";
+secure_ip = "::1";
+password = "{{ st_messages_mpa_rspamd_controller_password }}";
+enable_password = "{{ st_messages_mpa_rspamd_controller_password }}";

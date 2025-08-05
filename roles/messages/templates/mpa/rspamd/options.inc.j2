@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+{% if st_messages_mpa_rspamd_neighbours is defined and st_messages_mpa_rspamd_neighbours | length>0 %}
+{% set ns = namespace(count = 0) %}
+neighbours {
+{% for srv in st_messages_mpa_rspamd_neighbours %}
+    {% set ns.count = ns.count + 1 %}
+    server{{ ns.count }} { host = "{{ srv }}"; }
+{% endfor %}
+}
+{% endif %}
+
+dns {
+  nameserver = "round-robin:127.0.0.1:5353";
+}

@@ -1,0 +1,10 @@
+{{ ansible_managed | comment }}
+clamav {
+  action = "reject";
+  message = '${SCANNER}: virus found: "${VIRUS}"';
+  symbol = "CLAM_VIRUS";
+  type = "clamav";
+  # If set true, log message is emitted for clean messages
+  log_clean = true;
+  servers = "127.0.0.1:3310";
+}

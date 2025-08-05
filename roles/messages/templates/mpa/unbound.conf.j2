@@ -1,0 +1,12 @@
+{{ ansible_managed | comment }}
+
+server:
+    access-control: 127.0.0.0/8 allow
+    interface: 127.0.0.1
+    port: 5353
+    do-ip6: no
+    use-syslog: no
+    logfile: ""
+    trust-anchor-file: "/etc/unbound/root.key"
+    # https://docs.spamhaus.com/datasets/docs/source/40-real-world-usage/Dns/040-Unbound.html
+    qname-minimisation: no

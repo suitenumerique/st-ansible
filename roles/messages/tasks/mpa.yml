@@ -1,0 +1,64 @@
+---
+- name: "Ensure mpa application directories."
+  ansible.builtin.file:
+    name: "{{ item }}"
+    owner: "messages"
+    group: "messages"
+    mode: "0755"
+    state: directory
+  loop:
+    - "{{ st_messages_mpa_dir }}/rspamd_config"
+    - "{{ st_messages_mpa_dir }}/rspamd_config/local.d"
+    - "{{ st_messages_mpa_dir }}/rspamd_config/override.d"
+    - "{{ st_messages_mpa_dir }}/unbound_config"
+    - "{{ st_messages_mpa_dir }}/clamav_config"
+
+- name: "Setup default rspamd configuration templates."
+  ansible.builtin.set_fact:
+    rspamd_default_templates:
+      - { src: mpa/rspamd/worker-controller.inc.j2, dest: override.d/worker-controller.inc }
+      - { src: mpa/rspamd/worker-proxy.inc.j2, dest: override.d/worker-proxy.inc }
+      - { src: mpa/rspamd/options.inc.j2, dest: local.d/options.inc }
+      - { src: mpa/rspamd/antivirus.conf.j2, dest: local.d/antivirus.conf }
+      - { src: mpa/rspamd/multimap.conf.j2, dest: local.d/multimap.conf }
+
+- name: "Deploy redis.conf rspamd configuration for local valkey."
+  when: st_messages_mpa_valkey_enabled
+  ansible.builtin.set_fact:
+    rspamd_default_templates: "{{ rspamd_default_templates + [{'src': 'mpa/rspamd/redis.conf.j2', 'dest': 'local.d/redis.conf'}] }}"
+
+- name: "Deploy rspamd configuration files."
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ st_messages_mpa_dir }}/rspamd_config/{{ item.dest }}"
+    owner: "messages"
+    group: "messages"
+    mode: "0644"
+  notify: "systemctl --user restart mpa"
+  loop: "{{ rspamd_default_templates | community.general.lists_mergeby(st_messages_mpa_rspamd_config_templates, 'dest') }}"
+
+# Don't specify permissions and owner here because it's get owned by the
+# unbound user subuid inside the container
+- name: "Deploy unbound configuration file." # noqa: risky-file-permissions
+  ansible.builtin.template:
+    src: "{{ st_messages_mpa_unbound_config_template }}"
+    dest: "{{ st_messages_mpa_dir }}/unbound_config/unbound.conf"
+  notify: "systemctl --user restart mpa"
+
+- name: "Deploy clamav configuration file."
+  ansible.builtin.template:
+    src: "{{ st_messages_mpa_clamav_config_template }}"
+    dest: "{{ st_messages_mpa_dir }}/clamav_config/clamd.conf"
+    owner: "messages"
+    group: "messages"
+    mode: "0644"
+  notify: "systemctl --user restart mpa"
+
+- name: "Create mpa app"
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "messages"
+    st_podman_application_name: "mpa"
+    st_podman_application_compose_template: mpa/compose.yaml.j2

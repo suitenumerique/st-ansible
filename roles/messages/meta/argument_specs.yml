@@ -49,6 +49,56 @@ argument_specs:
       st_messages_mta_out_env:
         type: "str"
         description: "Content of the default mta_out_env_template, not used if st_messages_mta_out_env_template is defined."
+      st_messages_mpa_enabled:
+        type: "bool"
+        description: "Triggers the installation of the mpa."
+        default: false
+      st_messages_mpa_dir:
+        type: "str"
+        description: "Remote path to the base directory for mpa app."
+        default: "/opt/messages/mpa"
+      st_messages_mpa_rspamd_tag:
+        type: "str"
+        description:
+          - "The tag of the rspamd docker image to use."
+          - "See https://hub.docker.com/r/rspamd/rspamd/tags."
+        default: "3"
+      st_messages_mpa_rspamd_controller_password:
+        type: "str"
+        description: "Password of the rspamd controller webui."
+      st_messages_mpa_rspamd_neighbours:
+        type: "list"
+        elements: "str"
+        description: "List of URLs to the rspamd neighbours controllers."
+      st_messages_mpa_rspamd_config_templates:
+        type: "list"
+        elements: "dict"
+        description: "List of rspamd configs to deploy, merged with the default configuration list."
+        default: []
+      st_messages_mpa_unbound_config_template:
+        type: "str"
+        description: "Local path to the unbound.conf template."
+        default: "mpa/unbound.conf.j2"
+      st_messages_mpa_clamav_tag:
+        type: "str"
+        description:
+          - "The tag of the clamav docker image to use."
+          - "See https://hub.docker.com/r/clamav/clamav/tags."
+        default: "1.4"
+      st_messages_mpa_clamav_config_template:
+        type: "str"
+        description: "Local path to the clamd.conf template."
+        default: "mpa/clamd.conf.j2"
+      st_messages_mpa_valkey_enabled:
+        type: "bool"
+        default: true
+        description: "Triggers the installation of a local valkey instance, which also deploys a default redis.conf rspamd config."
+      st_messages_mpa_valkey_tag:
+        type: "str"
+        description:
+          - "The tag of the valkey docker image to use."
+          - "See https://hub.docker.com/r/valkey/valkey/tags."
+        default: "8"
       st_messages_monitoring_enabled:
         type: "bool"
         description: "Triggers the installation of the alloy agent, used to send metrics to a Prometheus compatible server and logs to a Loki server."

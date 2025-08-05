@@ -16,6 +16,11 @@ prometheus.exporter.unix "default" {
 prometheus.scrape "default" {
   targets = array.concat(
     prometheus.exporter.unix.default.targets,
+{% if st_messages_mpa_enabled %}
+    [
+      { job = "rspamd", __address__ = "127.0.0.1:11334" },
+    ],
+{% endif %}
   )
   scrape_interval = "10s"
 
@@ -71,7 +76,7 @@ loki.relabel "journal_messages" {
 // Get logs from journald
 loki.source.journal "messages" {
   max_age       = "24h0m0s"
-  matches       = "_UID={{ st_messages_uid }} {{ '_SYSTEMD_USER_UNIT=mta-out.service' if st_messages_mta_out_enabled }} {{ '_SYSTEMD_USER_UNIT=mta-in.service' if st_messages_mta_in_enabled }}"
+  matches       = "_UID={{ st_messages_uid }} {{ '_SYSTEMD_USER_UNIT=mta-out.service' if st_messages_mta_out_enabled }} {{ '_SYSTEMD_USER_UNIT=mta-in.service' if st_messages_mta_in_enabled }} {{ '_SYSTEMD_USER_UNIT=mpa.service' if st_messages_mpa_enabled }}"
   relabel_rules = loki.relabel.journal_messages.rules
   forward_to    = [loki.process.default.receiver]
 }
