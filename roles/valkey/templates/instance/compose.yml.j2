@@ -12,7 +12,7 @@ services:
       - -c
       - |
           umask 0077
-          valkey-server /etc/valkey/valkey.conf
+          exec valkey-server /etc/valkey/valkey.conf
     healthcheck:
       test: ["CMD-SHELL", "valkey-cli -p {{ st_valkey_instance_port }} --user ping --pass '' ping | grep PONG"]
       interval: 1s

@@ -3,8 +3,9 @@
   ansible.posix.sysctl:
     name: vm.overcommit_memory
     value: "1"
+    sysctl_set: true
+    sysctl_file: "/etc/sysctl.d/99-valkey.conf"
     state: present
-    reload: true
 
 - name: "Deploy systemd unit to disable THP."
   ansible.builtin.template:

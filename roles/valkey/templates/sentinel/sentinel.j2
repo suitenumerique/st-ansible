@@ -4,7 +4,6 @@ port {{ st_valkey_sentinel_port }}
 supervised systemd
 pidfile "/run/sentinel/valkey-sentinel.pid"
 dir "/var/lib/valkey"
-
 {# For now rspamd does not support sentinel with ACL :(
 # aclfile "/etc/valkey/sentinel-users.acl"
 # sentinel sentinel-user sentinel

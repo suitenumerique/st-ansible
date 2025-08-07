@@ -20,7 +20,6 @@ proc-title-template "{title} {listen-addr} {server-mode}"
 dir "/data"
 port {{ st_valkey_instance_port }}
 loglevel notice
-
 {% if ansible_processor_nproc >= 4 %}
 io-threads {{ ansible_processor_nproc - 2 }}
 {% endif %}

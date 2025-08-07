@@ -1,5 +1,5 @@
 ---
-- name: "Ensure instance config directory."
+- name: "Ensure {{ st_valkey_instance_name }} instance config directory."
   ansible.builtin.file:
     name: "{{ st_valkey_instance_config_dir }}"
     owner: "stvalkey"
@@ -7,36 +7,36 @@
     mode: "0750"
     state: directory
 
-- name: "Check if valkey instance configuration needs init."
+- name: "Check if {{ st_valkey_instance_name }} valkey instance configuration needs init."
   ansible.builtin.stat:
     name: "{{ st_valkey_instance_config_dir }}/valkey.conf"
   register: instance_config
 
-- name: "Initialize valkey instance configuration."
+- name: "Initialize {{ st_valkey_instance_name }} valkey instance configuration."
   when: not instance_config.stat.exists
   ansible.builtin.template:
     src: instance/valkey.skel.j2
     dest: "{{ st_valkey_instance_config_dir }}/valkey.conf"
     owner: "stvalkey"
     group: "stvalkey"
-    mode: "0640"
+    mode: "0600"
 
-- name: "Deploy valkey instance configuration."
+- name: "Deploy {{ st_valkey_instance_name }} valkey instance configuration."
   ansible.builtin.blockinfile:
     path: "{{ st_valkey_instance_config_dir }}/valkey.conf"
     block: "{{ lookup('template', st_valkey_instance_config_template) }}"
     owner: "stvalkey"
     group: "stvalkey"
-    mode: "0640"
+    mode: "0600"
   notify: "systemctl --user restart {{ st_valkey_instance_name }}"
 
-- name: "Deploy valkey instance ACL file."
+- name: "Deploy {{ st_valkey_instance_name }} valkey instance ACL file."
   ansible.builtin.template:
     src: "{{ st_valkey_instance_users_template }}"
     dest: "{{ st_valkey_instance_config_dir }}/users.acl"
     owner: "stvalkey"
     group: "stvalkey"
-    mode: "0640"
+    mode: "0600"
   notify: "systemctl --user restart {{ st_valkey_instance_name }}"
 
 - name: "Create {{ st_valkey_instance_name }} valkey instance."

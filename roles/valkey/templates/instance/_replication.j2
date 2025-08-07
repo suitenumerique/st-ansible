@@ -1,7 +1,7 @@
 ## REPLICATION
 
-masterauth "{{ st_valkey_instance_replication_password }}"
-masteruser "replica"
+primaryauth "{{ st_valkey_instance_replication_password }}"
+primaryuser "replica"
 
 # Diskless sync is useful for slow disks, we shouldn't need that.
 repl-diskless-sync no
