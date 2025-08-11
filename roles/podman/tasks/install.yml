@@ -12,3 +12,5 @@
     name: "net.ipv4.ip_unprivileged_port_start"
     value: "{{ st_podman_unprivileged_port_start }}"
     sysctl_set: true
+    sysctl_file: "/etc/sysctl.d/99-podman.conf"
+    state: present
