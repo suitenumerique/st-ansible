@@ -3,7 +3,7 @@ user sentinel on allchannels +multi +slaveof +ping +exec +subscribe +config|rewr
 user admin on allkeys allchannels +@all #{{ st_valkey_admin_password | ansible.builtin.hash('sha256') }}
 user ping on nopass -@all +ping
 {% if st_valkey_instance_monitoring_password is defined %}
-user monitoring on allkeys +@read +info #{{ st_valkey_instance_monitoring_password | ansible.builtin.hash('sha256') }}
+user monitoring on allkeys -@all +@connection +memory -readonly +strlen +config|get +xinfo +pfcount -quit +zcard +type +xlen -readwrite -command +client -wait +scard +llen +hlen +get +eval +slowlog +cluster|info +cluster|slots +cluster|nodes -hello -echo +info +latency +scan -reset -auth -asking #{{ st_valkey_instance_monitoring_password | ansible.builtin.hash('sha256') }}
 {% endif %}
 {% if st_valkey_instance_replication_password is defined %}
 user replica on +psync +replconf +ping #{{ st_valkey_instance_replication_password | ansible.builtin.hash('sha256') }}
