@@ -20,6 +20,14 @@ st_messages_mta_out_tag: main
 st_messages_mta_out_dir: /opt/messages/mta-out
 # Local path to the custom template to use for mta-out env file.
 st_messages_mta_out_env_template: mta_out/env.j2
+# Triggers the installation of the socks-proxy.
+st_messages_socks_proxy_enabled: false
+# Tag of the socks-proxy docker image to deploy.
+st_messages_socks_proxy_tag: main
+# Remote path to the base directory for socks-proxy app.
+st_messages_socks_proxy_dir: /opt/messages/socks-proxy
+# Local path to the custom template to use for socks-proxy env file.
+st_messages_socks_proxy_env_template: socks_proxy/env.j2
 # Triggers the installation of the mpa.
 st_messages_mpa_enabled: false
 # Remote path to the base directory for mpa app.

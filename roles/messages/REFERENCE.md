@@ -34,6 +34,11 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mta_out_dir | Remote path to the base directory for mta-out app. | str | no | /opt/messages/mta-out |
 | st_messages_mta_out_env_template | Local path to the custom template to use for mta-out env file. | str | no | mta_out/env.j2 |
 | st_messages_mta_out_env | Content of the default mta_out_env_template, not used if st_messages_mta_out_env_template is defined. | str | no |  |
+| st_messages_socks_proxy_enabled | Triggers the installation of the socks-proxy. | bool | no | False |
+| st_messages_socks_proxy_tag | Tag of the socks-proxy docker image to deploy. | str | no | main |
+| st_messages_socks_proxy_dir | Remote path to the base directory for socks-proxy app. | str | no | /opt/messages/socks-proxy |
+| st_messages_socks_proxy_env_template | Local path to the custom template to use for socks-proxy env file. | str | no | socks_proxy/env.j2 |
+| st_messages_socks_proxy_env | Content of the default socks_proxy_env_template, not used if st_messages_socks_proxy_env_template is defined. | str | no |  |
 | st_messages_mpa_enabled | Triggers the installation of the mpa. | bool | no | False |
 | st_messages_mpa_dir | Remote path to the base directory for mpa app. | str | no | /opt/messages/mpa |
 | st_messages_mpa_rspamd_tag | The tag of the rspamd docker image to use. See https://hub.docker.com/r/rspamd/rspamd/tags. | str | no | 3 |

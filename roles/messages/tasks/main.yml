@@ -17,6 +17,11 @@
   when: st_messages_mta_out_enabled
   tags: ['messages_mta_out']
 
+- name: "Deploy socks-proxy."
+  ansible.builtin.import_tasks: socks_proxy.yml
+  when: st_messages_socks_proxy_enabled
+  tags: ['messages_socks_proxy']
+
 - name: "Deploy mpa."
   ansible.builtin.import_tasks: mpa.yml
   when: st_messages_mpa_enabled
