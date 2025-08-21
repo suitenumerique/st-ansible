@@ -32,6 +32,7 @@ Installs and configures the podman rootless base for La Suite Territoriale appli
 | st_podman_tz | Sets the default timezone for all containers, in the default containers.conf template. | str | no | Europe/Paris |
 | st_podman_application_name | The name of the application to deploy. This is used mainly for the systemd unit filename and the default application_dir. | str | no |  |
 | st_podman_application_dir | The base directory to deploy the application compose to. | str | no | {{ st_podman_home }}/{{ st_podman_application_name }} |
+| st_podman_application_dir_mode | The permissions to apply to the base directory to deploy the application compose to. | str | no | 0750 |
 | st_podman_application_compose_template | Local path to the docker compose template for the application. | str | no |  |
 
 

@@ -4,7 +4,7 @@
     name: "{{ st_podman_application_dir }}"
     owner: "{{ st_podman_user }}"
     group: "{{ st_podman_group }}"
-    mode: "0750"
+    mode: "{{ st_podman_application_dir_mode }}"
     state: directory
 
 - name: "Deploy {{ st_podman_application_name }} application docker-compose file."

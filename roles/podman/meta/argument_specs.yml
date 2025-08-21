@@ -44,6 +44,10 @@ argument_specs:
         type: "str"
         description: "The base directory to deploy the application compose to."
         default: "{{ st_podman_home }}/{{ st_podman_application_name }}"
+      st_podman_application_dir_mode:
+        type: "str"
+        description: "The permissions to apply to the base directory to deploy the application compose to."
+        default: "0750"
       st_podman_application_compose_template:
         type: "str"
         description: "Local path to the docker compose template for the application."

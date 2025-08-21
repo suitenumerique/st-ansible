@@ -14,3 +14,5 @@ st_podman_tz: Europe/Paris
 st_podman_application_name: ''
 # The base directory to deploy the application compose to.
 st_podman_application_dir: '{{ st_podman_home }}/{{ st_podman_application_name }}'
+# The permissions to apply to the base directory to deploy the application compose to.
+st_podman_application_dir_mode: '0750'

@@ -4,7 +4,7 @@
     name: "/opt/messages/mta-in"
     owner: "messages"
     group: "messages"
-    mode: "0700"
+    mode: "0750"
     state: directory
 
 - name: "Deploy mta-in env file."

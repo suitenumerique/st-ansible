@@ -4,7 +4,7 @@
     name: "/opt/messages/mta-out"
     owner: "messages"
     group: "messages"
-    mode: "0700"
+    mode: "0750"
     state: directory
 
 - name: "Deploy mta-out env file."
