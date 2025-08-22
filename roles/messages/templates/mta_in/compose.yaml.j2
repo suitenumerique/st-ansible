@@ -7,3 +7,9 @@ services:
     env_file: ./env
     ports:
       - "8025:25"
+{% if st_messages_mta_in_starttls_certificate_path is defined %}
+    environment:
+      STARTTLS_CHAIN_FILES: /etc/postfix/starttls_certificate.pem
+    volumes:
+      - {{ st_messages_mta_in_starttls_certificate_path }}:/etc/postfix/starttls_certificate.pem
+{% endif %}

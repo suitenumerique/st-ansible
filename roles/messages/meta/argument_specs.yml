@@ -30,6 +30,12 @@ argument_specs:
       st_messages_mta_in_env:
         type: "str"
         description: "Content of the default mta_in_env_template, not used if st_messages_mta_in_env_template is defined."
+      st_messages_mta_in_starttls_certificate_path:
+        type: "str"
+        description:
+          - "Path of the starttls certificate on the remote host."
+          - "The certificate must be in the smtpd_tls_chain_files format, see https://www.postfix.org/postconf.5.html#smtpd_tls_chain_files."
+          - "The file must be accessible by the `messages` user."
       st_messages_mta_out_enabled:
         type: "bool"
         description: "Triggers the installation of the mta-out."
