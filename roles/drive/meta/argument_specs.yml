@@ -1,0 +1,46 @@
+---
+argument_specs:
+  main:
+    short_description: "Installs and configures the Drive application from La Suite Territoriale on Debian systems."
+    options:
+      st_drive_uid:
+        type: "int"
+        description: "UID of the `drive` user, used for the podman role."
+        default: 1100
+      st_drive_gid:
+        type: "int"
+        description: "GID of the `drive` group, used for the podman role."
+        default: "{{ st_drive_uid }}"
+      st_drive_collabora_enabled:
+        type: "bool"
+        description: "Triggers the installation of collabora."
+        default: false
+      st_drive_collabora_tag:
+        type: "str"
+        description: "Tag of the collabora docker image to deploy."
+        default: "latest"
+      st_drive_collabora_dir:
+        type: "str"
+        description: "Remote path to the base directory for collabora app."
+        default: "/opt/drive/collabora"
+      st_drive_collabora_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for collabora env file."
+        default: "collabora/env.j2"
+      st_drive_collabora_env:
+        type: "str"
+        description: "Content of the default collabora_env_template, not used if st_drive_collabora_env_template is defined."
+      st_drive_collabora_port:
+        type: "str"
+        description: "The port to open on the host, redirecting to port 9980 in the container. It can also specify the ip address, something like 127.0.0.1:9980."
+        default: "9980"
+      st_drive_monitoring_enabled:
+        type: "bool"
+        description: "Triggers the installation of the alloy agent, used to send metrics to a Prometheus compatible server and logs to a Loki server."
+        default: false
+      st_drive_monitoring_prometheus_url:
+        type: "str"
+        description: "When monitoring deployment is enabled, specifies the Prometheus URL to send metrics to."
+      st_drive_monitoring_loki_url:
+        type: "str"
+        description: "When monitoring deployment is enabled, specifies the Loki URL to send logs to."

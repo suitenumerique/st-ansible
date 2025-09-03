@@ -1,0 +1,150 @@
+// {{ ansible_managed }}
+
+logging {
+  level = "info"
+}
+
+/**********
+* METRICS *
+**********/
+
+prometheus.exporter.unix "default" {
+  include_exporter_metrics = true
+  disable_collectors       = ["mdadm"]
+}
+
+prometheus.scrape "default" {
+  targets = array.concat(
+    prometheus.exporter.unix.default.targets,
+{% if st_drive_collabora_enabled %}
+    [
+      { job = "collabora", __address__ = "127.0.0.1:9980", __metrics_path__ = "/cool/getMetrics" },
+    ],
+{% endif %}
+  )
+  scrape_interval = "10s"
+
+  forward_to = [prometheus.relabel.default.receiver]
+}
+
+// Relabel the 'instance' label to hostname, needed for some exporters
+prometheus.relabel "default" {
+  forward_to = [prometheus.remote_write.default.receiver]
+  rule {
+    target_label = "instance"
+    replacement  = "{{ ansible_fqdn }}"
+  }
+}
+
+prometheus.remote_write "default" {
+  endpoint {
+    url = "{{ st_drive_monitoring_prometheus_url }}"
+  }
+
+  wal {
+    max_keepalive_time = "2h"
+  }
+}
+
+/*******
+* LOGS *
+*******/
+
+// Relabeling rules for journald logs
+loki.relabel "journal_drive" {
+  forward_to = []
+
+  rule {
+    // Extract systemd user unit information into a label
+    source_labels = ["__journal__systemd_user_unit"]
+    target_label  = "user_unit"
+  }
+
+  rule {
+    // Extract log priority into a level label
+    source_labels = ["__journal_priority_keyword"]
+    target_label  = "level"
+  }
+
+  rule {
+    // replace ugly default service_name
+    target_label = "service_name"
+    replacement = "drive"
+  }
+}
+
+// Get logs from journald
+loki.source.journal "drive" {
+  max_age       = "24h0m0s"
+  matches       = "_UID={{ st_drive_uid }} {{ '_SYSTEMD_USER_UNIT=collabora.service' if st_drive_collabora_enabled }}"
+  relabel_rules = loki.relabel.journal_drive.rules
+  forward_to    = [loki.process.default.receiver]
+}
+
+loki.relabel "journal_auth" {
+  forward_to = []
+
+  rule {
+    // Extract systemd unit information into a label
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+
+  rule {
+    // Extract log priority into a level label
+    source_labels = ["__journal_priority_keyword"]
+    target_label  = "level"
+  }
+
+  rule {
+    // Extract the _COMM field into a label
+    source_labels = ["__journal__comm"]
+    target_label  = "comm"
+  }
+
+  rule {
+    // replace ugly default service_name
+    target_label = "service_name"
+    replacement = "auth"
+  }
+}
+
+// Get ssh logs from journald
+loki.source.journal "ssh" {
+  max_age       = "24h0m0s"
+  matches       = "_SYSTEMD_UNIT=ssh.service"
+  relabel_rules = loki.relabel.journal_auth.rules
+  forward_to    = [loki.process.default.receiver]
+}
+
+// Get sudo logs from journald
+loki.source.journal "sudo" {
+  max_age       = "24h0m0s"
+  matches       = "_COMM=sudo"
+  relabel_rules = loki.relabel.journal_auth.rules
+  forward_to    = [loki.process.default.receiver]
+}
+
+loki.process "default" {
+  forward_to = [loki.write.default.receiver]
+
+  // Drop logs >24h ago
+  stage.drop {
+      older_than          = "24h"
+      drop_counter_reason = "too old"
+  }
+
+  // Add the 'instance' label to every log
+  stage.static_labels {
+    values = {
+      "instance" = "{{ ansible_fqdn }}",
+    }
+  }
+}
+
+// Write logs to loki
+loki.write "default" {
+  endpoint {
+    url = "{{ st_drive_monitoring_loki_url }}"
+  }
+}

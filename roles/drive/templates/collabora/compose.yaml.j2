@@ -1,0 +1,9 @@
+---
+name: drive
+services:
+  collabora:
+    container_name: collabora
+    image: docker.io/collabora/code:{{ st_drive_collabora_tag }}
+    env_file: ./env
+    ports:
+      - "{{ st_drive_collabora_port }}:9980"

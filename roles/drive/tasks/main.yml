@@ -1,0 +1,21 @@
+---
+- name: "Import Suite Territoriale podman role."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+  vars:
+    st_podman_user: "drive"
+    st_podman_uid: "{{ st_drive_uid }}"
+    st_podman_gid: "{{ st_drive_gid }}"
+
+- name: "Deploy collabora."
+  ansible.builtin.import_tasks: collabora.yml
+  when: st_drive_collabora_enabled
+  tags: ['drive_collabora']
+
+- name: "Import Suite Territoriale alloy role."
+  when: st_drive_monitoring_enabled
+  tags: ['drive_monitoring']
+  ansible.builtin.import_role:
+    name: suitenumerique.st.alloy
+  vars:
+    st_alloy_config_template: "config.alloy.j2"
