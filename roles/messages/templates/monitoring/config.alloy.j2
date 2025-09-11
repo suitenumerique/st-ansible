@@ -16,11 +16,12 @@ prometheus.exporter.unix "default" {
 prometheus.scrape "default" {
   targets = array.concat(
     prometheus.exporter.unix.default.targets,
-{% if st_messages_mpa_enabled %}
     [
+      { job = "cadvisor", __address__ = "127.0.0.1:58080" },
+{% if st_messages_mpa_enabled %}
       { job = "rspamd", __address__ = "127.0.0.1:11334" },
-    ],
 {% endif %}
+    ],
   )
   scrape_interval = "10s"
 

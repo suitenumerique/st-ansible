@@ -16,11 +16,12 @@ prometheus.exporter.unix "default" {
 prometheus.scrape "default" {
   targets = array.concat(
     prometheus.exporter.unix.default.targets,
-{% if st_drive_collabora_enabled %}
     [
+      { job = "cadvisor", __address__ = "127.0.0.1:58080" },
+{% if st_drive_collabora_enabled %}
       { job = "collabora", __address__ = "127.0.0.1:9980", __metrics_path__ = "/cool/getMetrics" },
-    ],
 {% endif %}
+    ],
   )
   scrape_interval = "10s"
 

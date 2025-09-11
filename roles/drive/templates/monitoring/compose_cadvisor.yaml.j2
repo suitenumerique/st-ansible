@@ -1,0 +1,20 @@
+---
+name: cadvisor
+services:
+  cadvisor:
+    container_name: cadvisor
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    command:
+      - '--podman=unix:///run/podman/podman.sock'
+      - --housekeeping_interval=10s
+      - --docker_only=true
+    privileged: true
+    ports:
+      - "58080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - ${XDG_RUNTIME_DIR}/podman:/run/podman:ro
+      - /dev/disk/:/dev/disk:ro
+      - ${HOME}/.local/share/containers:/var/lib/containers:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /etc/machine-id:/etc/machine-id:ro
