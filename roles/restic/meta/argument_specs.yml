@@ -95,3 +95,11 @@ argument_specs:
         type: "str"
         description: "Path to the home directory of the restic_user."
         default: "/var/lib/restic"
+      restic_alert_enabled:
+        type: "bool"
+        description:
+          - "Triggers the alerting configuration tasks. Alerts will happen if restic-backup systemd unit fails."
+        default: false
+      restic_alert_mattermost_webhook:
+        type: "str"
+        description: "The mattermost webhook URL to send alerts to."

@@ -44,6 +44,8 @@ Install and configure a restic instance on Debian systems.
 | restic_user | The unix user to create and start the backups with. | str | no | restic |
 | restic_group | The unix group to create associated to restic_user. | str | no | {{ restic_user }} |
 | restic_home | Path to the home directory of the restic_user. | str | no | /var/lib/restic |
+| restic_alert_enabled | Triggers the alerting configuration tasks. Alerts will happen if restic-backup systemd unit fails. | bool | no | False |
+| restic_alert_mattermost_webhook | The mattermost webhook URL to send alerts to. | str | no |  |
 
 
 

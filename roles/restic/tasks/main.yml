@@ -20,3 +20,10 @@
 - name: "Import services.yml."
   ansible.builtin.import_tasks: "services.yml"
   tags: ["restic_services"]
+
+- name: "Import alert.yml."
+  when: >
+    restic_alert_enabled
+    and (restic_alert_mattermost_webhook is defined and restic_alert_mattermost_webhook | length > 0)
+  ansible.builtin.import_tasks: "alert.yml"
+  tags: ["restic_alert"]

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+{{ ansible_managed | comment }}
+
+HOSTNAME=$(hostname -f)
+error_detail=$(cat <<EOF
+\`\`\`
+$(journalctl -u restic-backup.service --since '5 min ago' -n 10)
+\`\`\`
+EOF
+)
+
+{% if restic_alert_mattermost_webhook is defined and restic_alert_mattermost_webhook | length > 0 %}
+mattermost_json=$(cat <<EOF
+{
+  "priority": {
+    "priority": "important"
+  },
+  "attachments": [
+    {
+      "color": "#FFDE21",
+      "title": "⚠️ Backup error on ${HOSTNAME}.",
+      "text": "The last restic-backup on ${HOSTNAME} exited abnormaly with status code $(systemctl show restic-backup.service --property ExecMainStatus --value).",
+      "fields": [
+        {
+          "short": true,
+          "title": "Error detail",
+          "value": "${error_detail}"
+        }
+      ]
+    }
+  ]
+}
+EOF
+)
+
+curl -i -X POST -H 'Content-Type: application/json' {{ restic_alert_mattermost_webhook }} -d "${mattermost_json}"
+{% endif %}

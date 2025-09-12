@@ -33,3 +33,5 @@ restic_user: restic
 restic_group: '{{ restic_user }}'
 # Path to the home directory of the restic_user.
 restic_home: /var/lib/restic
+# Triggers the alerting configuration tasks. Alerts will happen if restic-backup systemd unit fails.
+restic_alert_enabled: false

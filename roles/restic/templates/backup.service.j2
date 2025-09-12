@@ -3,6 +3,7 @@
 Description=Restic backup
 After=syslog.target
 After=network-online.target
+{{ 'OnFailure=restic-alert.service' if restic_alert_enabled else '' }}
 
 [Service]
 Type=oneshot
