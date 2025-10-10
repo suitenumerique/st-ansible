@@ -33,7 +33,7 @@ argument_specs:
       st_podman_tz:
         type: "str"
         description: "Sets the default timezone for all containers, in the default containers.conf template."
-        default: "Europe/Paris"
+        default: "UTC"
       st_podman_application_name:
         type: "str"
         description:
