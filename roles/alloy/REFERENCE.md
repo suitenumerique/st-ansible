@@ -15,7 +15,6 @@ Tags: suiteterritoriale, system
 ## Role Arguments
 
 
-
 ### Entrypoint: main
 
 Install and configure a alloy instance on Debian systems.

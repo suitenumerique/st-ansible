@@ -51,3 +51,5 @@ st_messages_mpa_valkey_enabled: true
 st_messages_mpa_valkey_tag: '8'
 # Triggers the installation of the alloy agent, used to send metrics to a Prometheus compatible server and logs to a Loki server.
 st_messages_monitoring_enabled: false
+# The host published port of the cadvisor container.
+st_messages_monitoring_cadvisor_port: '127.0.0.1:58080'

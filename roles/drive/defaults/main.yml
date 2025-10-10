@@ -16,3 +16,5 @@ st_drive_collabora_env_template: collabora/env.j2
 st_drive_collabora_port: '9980'
 # Triggers the installation of the alloy agent, used to send metrics to a Prometheus compatible server and logs to a Loki server.
 st_drive_monitoring_enabled: false
+# The host published port of the cadvisor container.
+st_drive_monitoring_cadvisor_port: '127.0.0.1:58080'

@@ -15,7 +15,6 @@ Tags: suiteterritoriale, system
 ## Role Arguments
 
 
-
 ### Entrypoint: main
 
 Installs and configures the Drive application from La Suite Territoriale on Debian systems.
@@ -33,6 +32,7 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 | st_drive_monitoring_enabled | Triggers the installation of the alloy agent, used to send metrics to a Prometheus compatible server and logs to a Loki server. | bool | no | False |
 | st_drive_monitoring_prometheus_url | When monitoring deployment is enabled, specifies the Prometheus URL to send metrics to. | str | no |  |
 | st_drive_monitoring_loki_url | When monitoring deployment is enabled, specifies the Loki URL to send logs to. | str | no |  |
+| st_drive_monitoring_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:58080 |
 
 
 

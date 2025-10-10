@@ -15,7 +15,6 @@ Tags: restic, backup, suiteterritoriale, system, linux
 ## Role Arguments
 
 
-
 ### Entrypoint: main
 
 Install and configure a restic instance on Debian systems.

@@ -15,7 +15,6 @@ Tags: suiteterritoriale, system, podman, rootless
 ## Role Arguments
 
 
-
 ### Entrypoint: main
 
 Installs and configures the podman rootless base for La Suite Territoriale applications on Debian systems.

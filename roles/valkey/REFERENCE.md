@@ -15,7 +15,6 @@ Tags: suiteterritoriale, system, podman, rootless
 ## Role Arguments
 
 
-
 ### Entrypoint: main
 
 Installs, configures and manages a Valkey instance. The role also handles valkey-sentinel configurations.

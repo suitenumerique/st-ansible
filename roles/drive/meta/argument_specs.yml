@@ -44,3 +44,7 @@ argument_specs:
       st_drive_monitoring_loki_url:
         type: "str"
         description: "When monitoring deployment is enabled, specifies the Loki URL to send logs to."
+      st_drive_monitoring_cadvisor_port:
+        type: "str"
+        description: "The host published port of the cadvisor container."
+        default: "127.0.0.1:58080"
