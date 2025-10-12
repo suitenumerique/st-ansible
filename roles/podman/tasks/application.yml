@@ -16,6 +16,7 @@
     mode: "0600"
   notify:
     - "systemctl --user restart {{ st_podman_application_name }}"
+    - "sleep 10"
     - "systemctl --user is-active {{ st_podman_application_name }}"
 
 - name: "Deploy {{ st_podman_application_name }} application systemd unit."
@@ -40,4 +41,6 @@
     state: started
     enabled: true
     scope: user
-  notify: "systemctl --user is-active {{ st_podman_application_name }}"
+  notify:
+    - "sleep 10"
+    - "systemctl --user is-active {{ st_podman_application_name }}"

@@ -18,6 +18,12 @@
     state: restarted
     scope: user
 
+- name: "sleep 10"
+  become: false
+  ansible.builtin.wait_for:
+    timeout: 10
+  delegate_to: localhost
+
 - name: "systemctl --user is-active {{ st_podman_application_name }}"
   become: true
   become_user: "{{ st_podman_user }}"
