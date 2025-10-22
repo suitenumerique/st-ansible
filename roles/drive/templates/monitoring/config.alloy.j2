@@ -126,6 +126,18 @@ loki.source.journal "sudo" {
   forward_to    = [loki.process.default.receiver]
 }
 
+// Get logs from AUDITD
+local.file_match "auditd" {
+  path_targets = [
+    {__path__ = "/var/log/audit/audit.log", service_name = "auditd", ignore_older_than = "24h"},
+  ]
+}
+
+loki.source.file "auditd" {
+  targets = local.file_match.auditd.targets
+  forward_to = [loki.process.default.receiver]
+}
+
 loki.process "default" {
   forward_to = [loki.write.default.receiver]
 
