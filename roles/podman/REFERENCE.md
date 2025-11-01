@@ -33,6 +33,7 @@ Installs and configures the podman rootless base for La Suite Territoriale appli
 | st_podman_application_dir | The base directory to deploy the application compose to. | str | no | {{ st_podman_home }}/{{ st_podman_application_name }} |
 | st_podman_application_dir_mode | The permissions to apply to the base directory to deploy the application compose to. | str | no | 0750 |
 | st_podman_application_compose_template | Local path to the docker compose template for the application. | str | no |  |
+| st_podman_application_sdnotify | Configures podman to send a systemd-notify to the systemd unit either when the container is started or when the container is healthy. Our default is `healthy`, which means we have to configure a healthcheck for every service of every compose file. See https://docs.podman.io/en/stable/markdown/podman-run.1.html#sdnotify-container-conmon-healthy-ignore | str | no | healthy |
 
 
 

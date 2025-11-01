@@ -1,16 +1,17 @@
 {{ ansible_managed | comment }}
 [Unit]
 Description={{ st_podman_application_name }} on rootless podman with compose file.
-After=network.target
+After=podman.socket
 
 [Service]
-Restart=on-failure
+Type=notify
+NotifyAccess=all
+Restart=on-abnormal
 
 WorkingDirectory={{ st_podman_application_dir }}
 
-Environment="DOCKER_HOST=unix:///run/user/%U/podman/podman.sock"
-ExecStart=docker compose --ansi=never up
-ExecStop=docker compose --ansi=never down
+ExecStart=podman-compose --podman-run-args="--sdnotify={{ st_podman_application_sdnotify }}" --no-ansi up --abort-on-container-exit
+ExecStop=podman-compose --no-ansi down
 
 [Install]
 WantedBy=default.target

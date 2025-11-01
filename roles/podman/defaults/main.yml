@@ -16,3 +16,7 @@ st_podman_application_name: ''
 st_podman_application_dir: '{{ st_podman_home }}/{{ st_podman_application_name }}'
 # The permissions to apply to the base directory to deploy the application compose to.
 st_podman_application_dir_mode: '0750'
+# Configures podman to send a systemd-notify to the systemd unit either when the container is started or when the container is healthy.
+# Our default is `healthy`, which means we have to configure a healthcheck for every service of every compose file.
+# See https://docs.podman.io/en/stable/markdown/podman-run.1.html#sdnotify-container-conmon-healthy-ignore
+st_podman_application_sdnotify: healthy

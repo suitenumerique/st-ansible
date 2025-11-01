@@ -1,9 +1,10 @@
 ---
-- name: "Install podman and docker-compose."
+- name: "Install podman, docker-cli and podman-compose."
   ansible.builtin.apt:
     name:
-      - "podman"
-      - "docker-compose"
+      - podman
+      - podman-compose
+      - docker-cli
     update_cache: true
 
 - name: "Allow unprivileged ports binding."

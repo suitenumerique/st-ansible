@@ -51,3 +51,10 @@ argument_specs:
       st_podman_application_compose_template:
         type: "str"
         description: "Local path to the docker compose template for the application."
+      st_podman_application_sdnotify:
+        type: "str"
+        description:
+          - "Configures podman to send a systemd-notify to the systemd unit either when the container is started or when the container is healthy."
+          - "Our default is `healthy`, which means we have to configure a healthcheck for every service of every compose file."
+          - "See https://docs.podman.io/en/stable/markdown/podman-run.1.html#sdnotify-container-conmon-healthy-ignore"
+        default: "healthy"
