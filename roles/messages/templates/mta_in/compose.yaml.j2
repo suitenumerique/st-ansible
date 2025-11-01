@@ -1,4 +1,6 @@
 ---
+{{ ansible_managed | comment }}
+
 name: messages
 services:
   mta-in:
@@ -13,3 +15,8 @@ services:
     volumes:
       - {{ st_messages_mta_in_starttls_certificate_path }}:/etc/postfix/starttls_certificate.pem
 {% endif %}
+    healthcheck:
+      test: ["CMD-SHELL", "/usr/lib/postfix/sbin/master -t || exit 0"]
+      interval: 1m
+      timeout: 3s
+      start_interval: 5s

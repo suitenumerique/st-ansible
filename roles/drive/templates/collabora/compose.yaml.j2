@@ -7,3 +7,8 @@ services:
     env_file: ./env
     ports:
       - "{{ st_drive_collabora_port }}:9980"
+    healthcheck:
+      test: curl -fsS -o /dev/null http://localhost:9980/hosting/discovery
+      interval: 1m
+      timeout: 3s
+      start_period: 10s

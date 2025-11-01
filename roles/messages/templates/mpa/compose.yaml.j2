@@ -15,6 +15,11 @@ services:
     volumes:
       - rspamd_data:/var/lib/rspamd
       - {{ st_messages_mpa_dir }}/rspamd_config:/etc/rspamd
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/11334; printf \"GET /ping HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n\" >&3; grep \"pong\" <&3'"]
+      interval: 1m
+      timeout: 3s
+      start_period: 10s
 
   clamav:
     container_name: clamav
@@ -22,6 +27,11 @@ services:
     network_mode: host
     volumes:
       - {{ st_messages_mpa_dir }}/clamav_config/clamd.conf:/etc/clamav/clamd.conf
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "1"]
+      interval: 1m
+      timeout: 3s
+      start_period: 10s
 
   unbound:
     container_name: unbound
@@ -35,6 +45,10 @@ services:
           exec unbound -dp
     volumes:
       - {{ st_messages_mpa_dir }}/unbound_config/unbound.conf:/etc/unbound/unbound.conf
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "5353"]
+      interval: 10s
+      timeout: 3s
 
 {% if st_messages_mpa_valkey_enabled %}
   valkey:
