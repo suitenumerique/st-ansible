@@ -12,6 +12,8 @@ st_messages_mta_in_tag: main
 st_messages_mta_in_dir: /opt/messages/mta-in
 # Local path to the custom template to use for mta-in env file.
 st_messages_mta_in_env_template: mta_in/env.j2
+# Local path to the custom template to use for mta-in compose file.
+st_messages_mta_in_compose_template: mta_in/compose.yaml.j2
 # Triggers the installation of the socks-proxy.
 st_messages_socks_proxy_enabled: false
 # Tag of the socks-proxy docker image to deploy.
@@ -20,6 +22,8 @@ st_messages_socks_proxy_tag: main
 st_messages_socks_proxy_dir: /opt/messages/socks-proxy
 # Local path to the custom template to use for socks-proxy env file.
 st_messages_socks_proxy_env_template: socks_proxy/env.j2
+# Local path to the custom template to use for socks-proxy compose file.
+st_messages_socks_proxy_compose_template: socks_proxy/compose.yaml.j2
 # Triggers the installation of the mpa.
 st_messages_mpa_enabled: false
 # Remote path to the base directory for mpa app.
@@ -41,7 +45,7 @@ st_messages_mpa_valkey_enabled: true
 # The tag of the valkey docker image to use.
 # See https://hub.docker.com/r/valkey/valkey/tags.
 st_messages_mpa_valkey_tag: '8'
-# Triggers the installation of the alloy agent, used to send metrics to a Prometheus compatible server and logs to a Loki server.
-st_messages_monitoring_enabled: false
+# Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool.
+st_messages_cadvisor_enabled: false
 # The host published port of the cadvisor container.
-st_messages_monitoring_cadvisor_port: '127.0.0.1:58080'
+st_messages_cadvisor_port: '127.0.0.1:58080'

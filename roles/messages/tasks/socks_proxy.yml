@@ -23,4 +23,4 @@
   vars:
     st_podman_user: "messages"
     st_podman_application_name: "socks-proxy"
-    st_podman_application_compose_template: socks_proxy/compose.yaml.j2
+    st_podman_application_compose_template: "{{ st_messages_socks_proxy_compose_template }}"

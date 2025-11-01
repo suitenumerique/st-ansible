@@ -23,4 +23,4 @@
   vars:
     st_podman_user: "messages"
     st_podman_application_name: "mta-in"
-    st_podman_application_compose_template: mta_in/compose.yaml.j2
+    st_podman_application_compose_template: "{{ st_messages_mta_in_compose_template }}"

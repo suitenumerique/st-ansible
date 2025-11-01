@@ -22,7 +22,13 @@
   when: st_messages_mpa_enabled
   tags: ['messages_mpa']
 
-- name: "Import monitoring.yml"
-  ansible.builtin.import_tasks: monitoring.yml
-  when: st_messages_monitoring_enabled
-  tags: ['messages_monitoring']
+- name: "Create cadvisor application."
+  tags: ['messages_cadvisor']
+  when: st_messages_cadvisor_enabled
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "messages"
+    st_podman_application_name: "cadvisor"
+    st_podman_application_compose_template: monitoring/compose_cadvisor.yaml.j2

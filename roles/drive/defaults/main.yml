@@ -12,9 +12,11 @@ st_drive_collabora_tag: latest
 st_drive_collabora_dir: /opt/drive/collabora
 # Local path to the custom template to use for collabora env file.
 st_drive_collabora_env_template: collabora/env.j2
+# Local path to the custom template to use for collabora compose file.
+st_drive_collabora_compose_template: collabora/compose.yaml.j2
 # The port to open on the host, redirecting to port 9980 in the container. It can also specify the ip address, something like 127.0.0.1:9980.
 st_drive_collabora_port: '9980'
 # Triggers the installation of the alloy agent, used to send metrics to a Prometheus compatible server and logs to a Loki server.
-st_drive_monitoring_enabled: false
+st_drive_cadvisor_enabled: false
 # The host published port of the cadvisor container.
-st_drive_monitoring_cadvisor_port: '127.0.0.1:58080'
+st_drive_cadvisor_port: '127.0.0.1:58080'

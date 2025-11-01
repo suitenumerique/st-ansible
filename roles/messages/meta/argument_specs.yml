@@ -36,7 +36,10 @@ argument_specs:
           - "Path of the starttls certificate on the remote host."
           - "The certificate must be in the smtpd_tls_chain_files format, see https://www.postfix.org/postconf.5.html#smtpd_tls_chain_files."
           - "The file must be accessible by the `messages` user."
+      st_messages_mta_in_compose_template:
         type: "str"
+        description: "Local path to the custom template to use for mta-in compose file."
+        default: "mta_in/compose.yaml.j2"
       st_messages_socks_proxy_enabled:
         type: "bool"
         description: "Triggers the installation of the socks-proxy."
@@ -56,6 +59,10 @@ argument_specs:
       st_messages_socks_proxy_env:
         type: "str"
         description: "Content of the default socks_proxy_env_template, not used if st_messages_socks_proxy_env_template is defined."
+      st_messages_socks_proxy_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for socks-proxy compose file."
+        default: "socks_proxy/compose.yaml.j2"
       st_messages_mpa_enabled:
         type: "bool"
         description: "Triggers the installation of the mpa."
@@ -106,17 +113,11 @@ argument_specs:
           - "The tag of the valkey docker image to use."
           - "See https://hub.docker.com/r/valkey/valkey/tags."
         default: "8"
-      st_messages_monitoring_enabled:
+      st_messages_cadvisor_enabled:
         type: "bool"
-        description: "Triggers the installation of the alloy agent, used to send metrics to a Prometheus compatible server and logs to a Loki server."
+        description: "Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool."
         default: false
-      st_messages_monitoring_prometheus_url:
-        type: "str"
-        description: "When monitoring deployment is enabled, specifies the Prometheus URL to send metrics to."
-      st_messages_monitoring_loki_url:
-        type: "str"
-        description: "When monitoring deployment is enabled, specifies the Loki URL to send logs to."
-      st_messages_monitoring_cadvisor_port:
+      st_messages_cadvisor_port:
         type: "str"
         description: "The host published port of the cadvisor container."
         default: "127.0.0.1:58080"
