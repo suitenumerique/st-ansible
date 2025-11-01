@@ -29,11 +29,6 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mta_in_env_template | Local path to the custom template to use for mta-in env file. | str | no | mta_in/env.j2 |
 | st_messages_mta_in_env | Content of the default mta_in_env_template, not used if st_messages_mta_in_env_template is defined. | str | no |  |
 | st_messages_mta_in_starttls_certificate_path | Path of the starttls certificate on the remote host. The certificate must be in the smtpd_tls_chain_files format, see https://www.postfix.org/postconf.5.html#smtpd_tls_chain_files. The file must be accessible by the `messages` user. | str | no |  |
-| st_messages_mta_out_enabled | Triggers the installation of the mta-out. | bool | no | False |
-| st_messages_mta_out_tag | Tag of the mta-out docker image to deploy. | str | no | main |
-| st_messages_mta_out_dir | Remote path to the base directory for mta-out app. | str | no | /opt/messages/mta-out |
-| st_messages_mta_out_env_template | Local path to the custom template to use for mta-out env file. | str | no | mta_out/env.j2 |
-| st_messages_mta_out_env | Content of the default mta_out_env_template, not used if st_messages_mta_out_env_template is defined. | str | no |  |
 | st_messages_socks_proxy_enabled | Triggers the installation of the socks-proxy. | bool | no | False |
 | st_messages_socks_proxy_tag | Tag of the socks-proxy docker image to deploy. | str | no | main |
 | st_messages_socks_proxy_dir | Remote path to the base directory for socks-proxy app. | str | no | /opt/messages/socks-proxy |
