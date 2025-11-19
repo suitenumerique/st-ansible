@@ -24,6 +24,51 @@ The collection contains the following roles:
 - [suitenumerique.st.restic](https://github.com/suitenumerique/st-ansible/-/tree/main/roles/restic/REFERENCE.md)
 - [suitenumerique.st.valkey](https://github.com/suitenumerique/st-ansible/-/tree/main/roles/valkey/REFERENCE.md)
 
+## Development
+
+### Dependencies
+Create a virtualenv using:
+```
+python3 -m virtualenv ./venv
+```
+And activate it:
+```
+source ./venv/bin/activate
+```
+
+Install dependencies:
+```
+pip install -r requirements.txt
+```
+
+### Building locally
+
+Before building, run:
+```
+make docs
+```
+to update the documentations and propagate the default values to roles/<role>/defaults from the argument_specs.yml files
+
+Then build:
+```
+make build
+```
+This will output a line with the location of the built file: `Created collection for suitenumerique.st at <path>/suitenumerique-st-<version>.tar.gz`
+
+### Using the locally built collection
+In your consumer repository's `galaxy_requirements.yml`, overwrite the `collections` key:
+```yaml
+collections:
+  - name: <path>/suitenumerique-st-<version>.tar.gz
+    version: <version>
+    type: file
+```
+and run
+```
+ansible-galaxy install -r galaxy_requirements.yml --force
+```
+to forcefully update the dependency. You can then repeat the `make docs`, `make build` and the previous update command to update the galaxy collection.
+
 ## Licensing
 
 This codebase is under MIT License.
