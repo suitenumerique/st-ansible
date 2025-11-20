@@ -47,6 +47,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mpa_clamav_config_template | Local path to the clamd.conf template. | str | no | mpa/clamd.conf.j2 |
 | st_messages_mpa_valkey_enabled | Triggers the installation of a local valkey instance, which also deploys a default redis.conf rspamd config. | bool | no | True |
 | st_messages_mpa_valkey_tag | The tag of the valkey docker image to use. See https://hub.docker.com/r/valkey/valkey/tags. | str | no | 8 |
+| st_messages_mpa_compose_template | Local path to the custom template to use for mpa compose file. | str | no | mpa/compose.yaml.j2 |
 | st_messages_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
 | st_messages_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:58080 |
 

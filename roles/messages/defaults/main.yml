@@ -45,6 +45,8 @@ st_messages_mpa_valkey_enabled: true
 # The tag of the valkey docker image to use.
 # See https://hub.docker.com/r/valkey/valkey/tags.
 st_messages_mpa_valkey_tag: '8'
+# Local path to the custom template to use for mpa compose file.
+st_messages_mpa_compose_template: mpa/compose.yaml.j2
 # Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool.
 st_messages_cadvisor_enabled: false
 # The host published port of the cadvisor container.

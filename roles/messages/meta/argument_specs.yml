@@ -113,6 +113,10 @@ argument_specs:
           - "The tag of the valkey docker image to use."
           - "See https://hub.docker.com/r/valkey/valkey/tags."
         default: "8"
+      st_messages_mpa_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for mpa compose file."
+        default: "mpa/compose.yaml.j2"
       st_messages_cadvisor_enabled:
         type: "bool"
         description: "Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool."

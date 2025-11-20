@@ -61,4 +61,4 @@
   vars:
     st_podman_user: "messages"
     st_podman_application_name: "mpa"
-    st_podman_application_compose_template: mpa/compose.yaml.j2
+    st_podman_application_compose_template: "{{ st_messages_mpa_compose_template }}"
