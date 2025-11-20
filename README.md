@@ -28,29 +28,29 @@ The collection contains the following roles:
 
 ### Dependencies
 Create a virtualenv using:
-```
+```bash
 python3 -m virtualenv ./venv
 ```
 And activate it:
-```
+```bash
 source ./venv/bin/activate
 ```
 
 Install dependencies:
-```
+```bash
 pip install -r requirements.txt
 ```
 
 ### Building locally
 
 Before building, run:
-```
+```bash
 make docs
 ```
 to update the documentations and propagate the default values to roles/<role>/defaults from the argument_specs.yml files
 
 Then build:
-```
+```bash
 make build
 ```
 This will output a line with the location of the built file: `Created collection for suitenumerique.st at <path>/suitenumerique-st-<version>.tar.gz`
@@ -64,7 +64,7 @@ collections:
     type: file
 ```
 and run
-```
+```bash
 ansible-galaxy install -r galaxy_requirements.yml --force
 ```
 to forcefully update the dependency. You can then repeat the `make docs`, `make build` and the previous update command to update the galaxy collection.
