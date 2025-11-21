@@ -23,6 +23,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 |---|---|---|---|---|
 | st_messages_uid | UID of the `messages` user, used for the podman role. | int | no | 1100 |
 | st_messages_gid | GID of the `messages` group, used for the podman role. | int | no | {{ st_messages_uid }} |
+| st_messages_registries | Optional private container registries to login the `messages` user onto. | list of 'dict' | no |  |
 | st_messages_mta_in_enabled | Triggers the installation of the mta-in. | bool | no | False |
 | st_messages_mta_in_tag | Tag of the mta-in docker image to deploy. | str | no | main |
 | st_messages_mta_in_dir | Remote path to the base directory for mta-in app. | str | no | /opt/messages/mta-in |

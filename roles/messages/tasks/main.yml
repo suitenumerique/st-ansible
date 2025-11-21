@@ -6,6 +6,7 @@
     st_podman_user: "messages"
     st_podman_uid: "{{ st_messages_uid }}"
     st_podman_gid: "{{ st_messages_gid }}"
+    st_podman_registries: "{{ st_messages_registries | default([]) }}"
 
 - name: "Deploy mta-in."
   ansible.builtin.import_tasks: mta_in.yml

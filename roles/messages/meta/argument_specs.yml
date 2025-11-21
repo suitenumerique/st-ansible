@@ -11,6 +11,10 @@ argument_specs:
         type: "int"
         description: "GID of the `messages` group, used for the podman role."
         default: "{{ st_messages_uid }}"
+      st_messages_registries:
+        type: "list"
+        elements: "dict"
+        description: "Optional private container registries to login the `messages` user onto."
       st_messages_mta_in_enabled:
         type: "bool"
         description: "Triggers the installation of the mta-in."

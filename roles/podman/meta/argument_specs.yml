@@ -34,6 +34,10 @@ argument_specs:
         type: "str"
         description: "Sets the default timezone for all containers, in the default containers.conf template."
         default: "UTC"
+      st_podman_registries:
+        type: "list"
+        elements: "dict"
+        description: "List of container registries to connect to podman user onto."
       st_podman_application_name:
         type: "str"
         description:
