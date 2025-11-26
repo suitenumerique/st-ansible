@@ -39,6 +39,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_socks_proxy_compose_template | Local path to the custom template to use for socks-proxy compose file. | str | no | socks_proxy/compose.yaml.j2 |
 | st_messages_mpa_enabled | Triggers the installation of the mpa. | bool | no | False |
 | st_messages_mpa_dir | Remote path to the base directory for mpa app. | str | no | /opt/messages/mpa |
+| st_messages_mpa_auth_bearer | Add an optional nginx container in front of the rspamd worker with a simple authorization check. The value of this variable should then be used as a Bearer token when calling the /checkv2 rspamd endpoint. | str | no |  |
 | st_messages_mpa_rspamd_tag | The tag of the rspamd docker image to use. See https://hub.docker.com/r/rspamd/rspamd/tags. | str | no | 3 |
 | st_messages_mpa_rspamd_controller_password | Password of the rspamd controller webui. | str | no |  |
 | st_messages_mpa_rspamd_neighbours | List of URLs to the rspamd neighbours controllers. | list of 'str' | no |  |

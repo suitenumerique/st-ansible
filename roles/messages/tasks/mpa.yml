@@ -12,6 +12,7 @@
     - "{{ st_messages_mpa_dir }}/rspamd_config/override.d"
     - "{{ st_messages_mpa_dir }}/unbound_config"
     - "{{ st_messages_mpa_dir }}/clamav_config"
+    - "{{ st_messages_mpa_dir }}/nginx_config"
 
 - name: "Setup default rspamd configuration templates."
   ansible.builtin.set_fact:
@@ -52,6 +53,16 @@
     owner: "messages"
     group: "messages"
     mode: "0644"
+  notify: "systemctl --user restart mpa"
+
+- name: "Deploy nginx configuration file."
+  when: st_messages_mpa_auth_bearer is defined and st_messages_mpa_auth_bearer | length > 0
+  ansible.builtin.template:
+    src: "mpa/nginx.conf.j2"
+    dest: "{{ st_messages_mpa_dir }}/nginx_config/nginx.conf"
+    owner: "messages"
+    group: "messages"
+    mode: "0600"
   notify: "systemctl --user restart mpa"
 
 - name: "Create mpa app"

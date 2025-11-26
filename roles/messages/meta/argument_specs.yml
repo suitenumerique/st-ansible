@@ -75,6 +75,11 @@ argument_specs:
         type: "str"
         description: "Remote path to the base directory for mpa app."
         default: "/opt/messages/mpa"
+      st_messages_mpa_auth_bearer:
+        type: "str"
+        description:
+          - "Add an optional nginx container in front of the rspamd worker with a simple authorization check."
+          - "The value of this variable should then be used as a Bearer token when calling the /checkv2 rspamd endpoint."
       st_messages_mpa_rspamd_tag:
         type: "str"
         description:
