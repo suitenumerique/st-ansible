@@ -1,5 +1,0 @@
----
-- name: "Install valkey-sentinel."
-  ansible.builtin.apt:
-    name: "valkey-sentinel"
-    update_cache: true
