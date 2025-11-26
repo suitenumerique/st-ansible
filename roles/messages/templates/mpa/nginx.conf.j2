@@ -13,7 +13,7 @@ server {
         root   /usr/share/nginx/html;
     }
 
-    location ~ ^/checkv2$ {
+    location /checkv2 {
         if ($http_authorization != "Bearer {{ st_messages_mpa_auth_bearer }}") {
            return 401;
         }
@@ -30,5 +30,6 @@ server {
     location /healthcheck {
         return 200 "ok\n";
         add_header Content-Type text/plain;
+        access_log off;
     }
 }

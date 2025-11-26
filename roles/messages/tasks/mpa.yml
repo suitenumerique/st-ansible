@@ -20,6 +20,7 @@
       - { src: mpa/rspamd/worker-controller.inc.j2, dest: override.d/worker-controller.inc }
       - { src: mpa/rspamd/worker-proxy.inc.j2, dest: override.d/worker-proxy.inc }
       - { src: mpa/rspamd/options.inc.j2, dest: local.d/options.inc }
+      - { src: mpa/rspamd/logging.inc.j2, dest: local.d/logging.inc }
       - { src: mpa/rspamd/antivirus.conf.j2, dest: local.d/antivirus.conf }
       - { src: mpa/rspamd/multimap.conf.j2, dest: local.d/multimap.conf }
 
