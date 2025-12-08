@@ -20,6 +20,7 @@ server {
 
         proxy_pass   http://rspamd;
         proxy_set_header Host $host;
+        client_max_body_size 0;
     }
 }
 

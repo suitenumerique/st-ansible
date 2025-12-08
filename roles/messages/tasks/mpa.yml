@@ -23,6 +23,7 @@
       - { src: mpa/rspamd/logging.inc.j2, dest: local.d/logging.inc }
       - { src: mpa/rspamd/antivirus.conf.j2, dest: local.d/antivirus.conf }
       - { src: mpa/rspamd/multimap.conf.j2, dest: local.d/multimap.conf }
+      - { src: mpa/rspamd/history_redis.conf.j2, dest: local.d/history_redis.conf }
 
 - name: "Deploy redis.conf rspamd configuration for local valkey."
   when: st_messages_mpa_valkey_enabled
