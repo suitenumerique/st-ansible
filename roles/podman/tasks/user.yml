@@ -43,6 +43,10 @@
     creates: "/var/lib/systemd/linger/{{ st_podman_user }}"
 
 - name: "Login user {{ st_podman_user }} to container registries"
+  become: true
+  become_user: "{{ st_podman_user }}"
+  become_method: ansible.builtin.sudo
+  become_flags: "-i"
   when: st_podman_registries is defined and st_podman_registries | length > 0
   no_log: true
   containers.podman.podman_login:
