@@ -4,6 +4,28 @@
 st_messages_uid: 1100
 # GID of the `messages` group, used for the podman role.
 st_messages_gid: '{{ st_messages_uid }}'
+# Tag of the messages docker images to deploy.
+st_messages_tag: main
+# Triggers the installation of the messages application.
+st_messages_enabled: false
+# Remote path to the base directory for messages app.
+st_messages_dir: /opt/messages/messages
+# Local path to the custom template to use for messages compose file.
+st_messages_compose_template: messages/compose.yaml.j2
+# Local path to the custom template to use for messages env file.
+st_messages_backend_env_template: messages/backend_env.j2
+# Local path to the custom template to use for messages env file.
+st_messages_frontend_env_template: messages/frontend_env.j2
+# Triggers the installation of the messages workers
+st_messages_workers_enabled: false
+# Remote path to the base directory for messages workers.
+st_messages_workers_dir: /opt/messages/workers
+# Local path to the custom template to use for messages workers env file.
+st_messages_workers_env_template: workers/env.j2
+# Content of the default workers_env_template, not used if st_messages_workers_env_template is defined.
+st_messages_workers_env: '{{ st_messages_backend_env }}'
+# Local path to the custom template to use for messages workers compose file.
+st_messages_workers_compose_template: workers/compose.yaml.j2
 # Triggers the installation of the mta-in.
 st_messages_mta_in_enabled: false
 # Tag of the mta-in docker image to deploy.

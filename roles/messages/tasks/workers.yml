@@ -1,0 +1,26 @@
+---
+- name: "Ensure messages workers application directory."
+  ansible.builtin.file:
+    name: "/opt/messages/workers"
+    owner: "messages"
+    group: "messages"
+    mode: "0750"
+    state: directory
+
+- name: "Deploy messages workers env file."
+  ansible.builtin.template:
+    src: "{{ st_messages_workers_env_template }}"
+    dest: "/opt/messages/workers/env"
+    owner: "messages"
+    group: "messages"
+    mode: "0600"
+  notify: "systemctl --user restart workers"
+
+- name: "Create messages application."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "messages"
+    st_podman_application_name: "workers"
+    st_podman_application_compose_template: "{{ st_messages_workers_compose_template }}"

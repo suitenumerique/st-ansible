@@ -15,6 +15,56 @@ argument_specs:
         type: "list"
         elements: "dict"
         description: "Optional private container registries to login the `messages` user onto."
+      st_messages_tag:
+        type: "str"
+        description: "Tag of the messages docker images to deploy."
+        default: "main"
+      st_messages_enabled:
+        type: "bool"
+        description: "Triggers the installation of the messages application."
+        default: false
+      st_messages_dir:
+        type: "str"
+        description: "Remote path to the base directory for messages app."
+        default: "/opt/messages/messages"
+      st_messages_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for messages compose file."
+        default: "messages/compose.yaml.j2"
+      st_messages_backend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for messages env file."
+        default: "messages/backend_env.j2"
+      st_messages_backend_env:
+        type: "str"
+        description: "Content of the default backend_env_template, not used if st_messages_backend_env_template is defined."
+      st_messages_frontend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for messages env file."
+        default: "messages/frontend_env.j2"
+      st_messages_frontend_env:
+        type: "str"
+        description: "Content of the default frontend_env_template, not used if st_messages_frontend_env_template is defined."
+      st_messages_workers_enabled:
+        type: "bool"
+        description: "Triggers the installation of the messages workers"
+        default: false
+      st_messages_workers_dir:
+        type: "str"
+        description: "Remote path to the base directory for messages workers."
+        default: "/opt/messages/workers"
+      st_messages_workers_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for messages workers env file."
+        default: "workers/env.j2"
+      st_messages_workers_env:
+        type: "str"
+        description: "Content of the default workers_env_template, not used if st_messages_workers_env_template is defined."
+        default: "{{ st_messages_backend_env }}"
+      st_messages_workers_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for messages workers compose file."
+        default: "workers/compose.yaml.j2"
       st_messages_mta_in_enabled:
         type: "bool"
         description: "Triggers the installation of the mta-in."

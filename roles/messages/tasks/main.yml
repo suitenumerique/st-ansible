@@ -8,6 +8,16 @@
     st_podman_gid: "{{ st_messages_gid }}"
     st_podman_registries: "{{ st_messages_registries | default([]) }}"
 
+- name: "Deploy messages."
+  ansible.builtin.import_tasks: messages.yml
+  when: st_messages_enabled
+  tags: ['messages_messages']
+
+- name: "Deploy messages workers."
+  ansible.builtin.import_tasks: workers.yml
+  when: st_messages_workers_enabled
+  tags: ['messages_workers']
+
 - name: "Deploy mta-in."
   ansible.builtin.import_tasks: mta_in.yml
   when: st_messages_mta_in_enabled

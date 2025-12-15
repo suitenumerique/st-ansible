@@ -1,0 +1,29 @@
+---
+- name: "Ensure messages application directory."
+  ansible.builtin.file:
+    name: "/opt/messages/messages"
+    owner: "messages"
+    group: "messages"
+    mode: "0750"
+    state: directory
+
+- name: "Deploy messages env file."
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "/opt/messages/messages/{{ item.dest }}"
+    owner: "messages"
+    group: "messages"
+    mode: "0600"
+  notify: "systemctl --user restart messages"
+  loop:
+    - { src: "{{ st_messages_backend_env_template }}", dest: "backend_env" }
+    - { src: "{{ st_messages_frontend_env_template }}", dest: "frontend_env" }
+
+- name: "Create messages application."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "messages"
+    st_podman_application_name: "messages"
+    st_podman_application_compose_template: "{{ st_messages_compose_template }}"

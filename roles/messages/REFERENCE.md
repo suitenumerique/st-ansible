@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.messages
-Version: 0.0.1
+Version: 0.0.4
 
 This role deploys the Messages applications from La Suite Territoriale on a rootless podman base on Debian systems.
 
@@ -24,6 +24,19 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_uid | UID of the `messages` user, used for the podman role. | int | no | 1100 |
 | st_messages_gid | GID of the `messages` group, used for the podman role. | int | no | {{ st_messages_uid }} |
 | st_messages_registries | Optional private container registries to login the `messages` user onto. | list of 'dict' | no |  |
+| st_messages_tag | Tag of the messages docker images to deploy. | str | no | main |
+| st_messages_enabled | Triggers the installation of the messages application. | bool | no | False |
+| st_messages_dir | Remote path to the base directory for messages app. | str | no | /opt/messages/messages |
+| st_messages_compose_template | Local path to the custom template to use for messages compose file. | str | no | messages/compose.yaml.j2 |
+| st_messages_backend_env_template | Local path to the custom template to use for messages env file. | str | no | messages/backend_env.j2 |
+| st_messages_backend_env | Content of the default backend_env_template, not used if st_messages_backend_env_template is defined. | str | no |  |
+| st_messages_frontend_env_template | Local path to the custom template to use for messages env file. | str | no | messages/frontend_env.j2 |
+| st_messages_frontend_env | Content of the default frontend_env_template, not used if st_messages_frontend_env_template is defined. | str | no |  |
+| st_messages_workers_enabled | Triggers the installation of the messages workers | bool | no | False |
+| st_messages_workers_dir | Remote path to the base directory for messages workers. | str | no | /opt/messages/workers |
+| st_messages_workers_env_template | Local path to the custom template to use for messages workers env file. | str | no | workers/env.j2 |
+| st_messages_workers_env | Content of the default workers_env_template, not used if st_messages_workers_env_template is defined. | str | no | {{ st_messages_backend_env }} |
+| st_messages_workers_compose_template | Local path to the custom template to use for messages workers compose file. | str | no | workers/compose.yaml.j2 |
 | st_messages_mta_in_enabled | Triggers the installation of the mta-in. | bool | no | False |
 | st_messages_mta_in_tag | Tag of the mta-in docker image to deploy. | str | no | main |
 | st_messages_mta_in_dir | Remote path to the base directory for mta-in app. | str | no | /opt/messages/mta-in |
