@@ -1,0 +1,29 @@
+---
+{{ ansible_managed | comment }}
+
+name: drive
+services:
+  frontend:
+    container_name: drive-frontend
+    image: docker.io/lasuite/drive-frontend:{{ st_drive_tag }}
+    env_file: ./frontend_env
+    user: 1001:127 # wait for https://github.com/suitenumerique/drive/issues/472 to be fixed
+    volumes:
+    - {{ st_drive_dir }}/nginx.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - "50080:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/healthcheck"]
+      interval: 1s
+      timeout: 5s
+      retries: 3
+  backend:
+    container_name: drive-backend
+    image: docker.io/lasuite/drive-backend:{{ st_drive_tag }}
+    env_file: ./backend_env
+    user: 1001:127 # wait for https://github.com/suitenumerique/drive/issues/472 to be fixed
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "--header", "'Host: {{ st_drive_public_host }}'", "http://127.0.0.1:8000/__heartbeat__"]
+      interval: 1s
+      timeout: 5s
+      retries: 3

@@ -3,6 +3,9 @@ argument_specs:
   main:
     short_description: "Installs and configures the Drive application from La Suite Territoriale on Debian systems."
     options:
+      st_drive_public_host:
+        type: "str"
+        description: "The public hostname used to access the drive application."
       st_drive_uid:
         type: "int"
         description: "UID of the `drive` user, used for the podman role."
@@ -11,6 +14,74 @@ argument_specs:
         type: "int"
         description: "GID of the `drive` group, used for the podman role."
         default: "{{ st_drive_uid }}"
+      st_drive_registries:
+        type: "list"
+        elements: "dict"
+        description: "Optional private container registries to login the `drive` user onto."
+      st_drive_tag:
+        type: "str"
+        description: "Tag of the drive docker images to deploy."
+        default: "main"
+      st_drive_enabled:
+        type: "bool"
+        description: "Triggers the installation of the drive application."
+        default: false
+      st_drive_dir:
+        type: "str"
+        description: "Remote path to the base directory for drive app."
+        default: "/opt/drive/drive"
+      st_drive_nginx_template:
+        type: "str"
+        description: "Local path to the custom template to use for drive nginx configuration file."
+        default: "drive/nginx.conf.j2"
+      st_drive_s3_protocol:
+        type: "str"
+        description: "The S3 compatible storage protocol used for media storage."
+        default: "https"
+      st_drive_s3_host:
+        type: "str"
+        description: "The S3 compatible storage host used for media storage."
+        default: "s3.amazonaws.com"
+      st_drive_s3_bucket:
+        type: "str"
+        description: "The S3 compatible storage bucket used for media storage."
+        default: "drive-media"
+      st_drive_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for drive compose file."
+        default: "drive/compose.yaml.j2"
+      st_drive_backend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for drive backend env file."
+        default: "drive/backend_env.j2"
+      st_drive_backend_env:
+        type: "str"
+        description: "Content of the default backend_env_template, not used if st_drive_backend_env_template is defined."
+        default: ''
+      st_drive_backend_run_migrations:
+        type: "bool"
+        description: "Whether to run database migrations on drive backend startup."
+        default: true
+      st_drive_frontend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for drive frontend env file."
+        default: "drive/frontend_env.j2"
+      st_drive_workers_enabled:
+        type: "bool"
+        description: "Triggers the installation of the drive workers"
+        default: false
+      st_drive_workers_dir:
+        type: "str"
+        description: "Remote path to the base directory for drive workers."
+        default: "/opt/drive/workers"
+      st_drive_workers_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for drive workers env file."
+        default: "workers/env.j2"
+      st_drive_workers_env:
+        type: "str"
+        description: "Content of the default workers_env_template, not used if st_drive_workers_env_template is defined."
+        default: '{{ st_drive_backend_env }}'
       st_drive_collabora_enabled:
         type: "bool"
         description: "Triggers the installation of collabora."
@@ -40,7 +111,7 @@ argument_specs:
         default: "9980"
       st_drive_cadvisor_enabled:
         type: "bool"
-        description: "Triggers the installation of the alloy agent, used to send metrics to a Prometheus compatible server and logs to a Loki server."
+        description: "Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool."
         default: false
       st_drive_cadvisor_port:
         type: "str"

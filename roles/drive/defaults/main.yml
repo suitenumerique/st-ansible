@@ -4,6 +4,38 @@
 st_drive_uid: 1100
 # GID of the `drive` group, used for the podman role.
 st_drive_gid: '{{ st_drive_uid }}'
+# Tag of the drive docker images to deploy.
+st_drive_tag: main
+# Triggers the installation of the drive application.
+st_drive_enabled: false
+# Remote path to the base directory for drive app.
+st_drive_dir: /opt/drive/drive
+# Local path to the custom template to use for drive nginx configuration file.
+st_drive_nginx_template: drive/nginx.conf.j2
+# The S3 compatible storage protocol used for media storage.
+st_drive_s3_protocol: https
+# The S3 compatible storage host used for media storage.
+st_drive_s3_host: s3.amazonaws.com
+# The S3 compatible storage bucket used for media storage.
+st_drive_s3_bucket: drive-media
+# Local path to the custom template to use for drive compose file.
+st_drive_compose_template: drive/compose.yaml.j2
+# Local path to the custom template to use for drive backend env file.
+st_drive_backend_env_template: drive/backend_env.j2
+# Content of the default backend_env_template, not used if st_drive_backend_env_template is defined.
+st_drive_backend_env: ''
+# Whether to run database migrations on drive backend startup.
+st_drive_backend_run_migrations: true
+# Local path to the custom template to use for drive frontend env file.
+st_drive_frontend_env_template: drive/frontend_env.j2
+# Triggers the installation of the drive workers
+st_drive_workers_enabled: false
+# Remote path to the base directory for drive workers.
+st_drive_workers_dir: /opt/drive/workers
+# Local path to the custom template to use for drive workers env file.
+st_drive_workers_env_template: workers/env.j2
+# Content of the default workers_env_template, not used if st_drive_workers_env_template is defined.
+st_drive_workers_env: '{{ st_drive_backend_env }}'
 # Triggers the installation of collabora.
 st_drive_collabora_enabled: false
 # Tag of the collabora docker image to deploy.
@@ -16,7 +48,7 @@ st_drive_collabora_env_template: collabora/env.j2
 st_drive_collabora_compose_template: collabora/compose.yaml.j2
 # The port to open on the host, redirecting to port 9980 in the container. It can also specify the ip address, something like 127.0.0.1:9980.
 st_drive_collabora_port: '9980'
-# Triggers the installation of the alloy agent, used to send metrics to a Prometheus compatible server and logs to a Loki server.
+# Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool.
 st_drive_cadvisor_enabled: false
 # The host published port of the cadvisor container.
 st_drive_cadvisor_port: '127.0.0.1:58080'

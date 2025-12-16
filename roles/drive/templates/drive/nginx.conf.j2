@@ -1,0 +1,133 @@
+{{ ansible_managed | comment }}
+
+upstream backend {
+    server drive-backend:8000 fail_timeout=0;
+}
+
+server {
+    listen       3000;
+    server_name  _;
+
+    root /usr/share/nginx/html;
+
+    error_page 404 /404.html;
+
+    location ~ ^/(api|external_api)/ {
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_redirect off;
+        proxy_pass http://backend;
+    }
+
+    location ^~ /admin/ {
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_redirect off;
+		proxy_pass http://backend;
+	}
+
+    location /media-auth {
+        proxy_pass http://backend/api/v1.0/items/media-auth/;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Original-URL $request_uri;
+
+        # Prevent the body from being passed
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Original-Method $request_method;
+    }
+
+    location /media/ {
+        # Auth request configuration
+        auth_request /media-auth;
+        auth_request_set $authHeader $upstream_http_authorization;
+        auth_request_set $authDate $upstream_http_x_amz_date;
+        auth_request_set $authContentSha256 $upstream_http_x_amz_content_sha256;
+
+        # Pass specific headers from the auth response
+        proxy_set_header Authorization $authHeader;
+        proxy_set_header X-Amz-Date $authDate;
+        proxy_set_header X-Amz-Content-SHA256 $authContentSha256;
+
+        # Get resource from Object storage
+        proxy_pass {{ st_drive_s3_protocol }}://{{ st_drive_s3_host }}/{{ st_drive_s3_bucket }}/;
+        proxy_set_header Host {{ st_drive_s3_host }};
+        add_header Content-Security-Policy "default-src 'none'" always;
+        add_header Content-Disposition "attachment";
+    }
+
+
+    location /media/preview/ {
+        # Auth request configuration
+        auth_request /media-auth;
+        auth_request_set $authHeader $upstream_http_authorization;
+        auth_request_set $authDate $upstream_http_x_amz_date;
+        auth_request_set $authContentSha256 $upstream_http_x_amz_content_sha256;
+
+        # Pass specific headers from the auth response
+        proxy_set_header Authorization $authHeader;
+        proxy_set_header X-Amz-Date $authDate;
+        proxy_set_header X-Amz-Content-SHA256 $authContentSha256;
+
+        # Get resource from Object storage
+        proxy_pass {{ st_drive_s3_protocol }}://{{ st_drive_s3_host }}/{{ st_drive_s3_bucket }}/;
+        proxy_set_header Host {{ st_drive_s3_host }};
+        add_header Content-Security-Policy "default-src 'none'" always;
+    }
+
+
+    location ~ "^/explorer/items/files/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/?$" {
+        try_files $uri /explorer/items/files/[id].html;
+    }
+
+    location ~ "^/explorer/items/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/?$" {
+        try_files $uri /explorer/items/[id].html;
+    }
+
+    location ~ "^/sdk/explorer/?$" {
+        try_files $uri /sdk/explorer.html;
+    }
+
+    location ~ "^/sdk/?$" {
+        try_files $uri /sdk.html;
+    }
+
+    location ~ "^/explorer/trash/?$" {
+        try_files $uri /explorer/trash.html;
+    }
+
+    location ~ "^/401/?$" {
+        try_files $uri /401.html;
+    }
+
+    location ~ "^/403/?$" {
+        try_files $uri /403.html;
+    }
+
+    location = /404.html {
+        internal;
+    }
+
+    # Frontend export
+    location / {
+        try_files $uri $uri/ /index.html =404;
+    }
+}
+
+server {
+    listen       127.0.0.1:3000;
+    server_name  _;
+
+    location /healthcheck {
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+        access_log off;
+    }
+}

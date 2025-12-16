@@ -1,0 +1,48 @@
+---
+- name: "Deploy drive env file."
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ st_drive_dir }}/{{ item.dest }}"
+    owner: "drive"
+    group: "drive"
+    mode: "0600"
+  notify: "systemctl --user restart drive"
+  loop:
+    - { src: "{{ st_drive_backend_env_template }}", dest: "backend_env" }
+    - { src: "{{ st_drive_frontend_env_template }}", dest: "frontend_env" }
+
+- name: "Deploy nginx configuration file."
+  ansible.builtin.template:
+    src: "{{ st_drive_nginx_template }}"
+    dest: "{{ st_drive_dir }}/nginx.conf"
+    owner: "drive"
+    group: "drive"
+    mode: "0604"
+  notify: "systemctl --user restart drive"
+
+- name: "Create drive application."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "drive"
+    st_podman_application_name: "drive"
+    st_podman_application_compose_template: "{{ st_drive_compose_template }}"
+
+- name: "Play drive migrations."
+  become: true
+  become_user: "drive"
+  become_method: ansible.builtin.sudo
+  become_flags: "-i"
+  run_once: true
+  register: migration_result
+  changed_when: "'No migrations to apply.' not in migration_result.stdout"
+  when: st_drive_backend_run_migrations
+  retries: 3
+  delay: 10
+  until: migration_result.rc == 0
+  ansible.builtin.shell: |
+    set -eu
+    podman-compose run --rm --name drive_backend_migrations backend python manage.py migrate --noinput
+  args:
+    chdir: "{{ st_drive_dir }}"

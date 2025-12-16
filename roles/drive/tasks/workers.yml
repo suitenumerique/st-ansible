@@ -1,0 +1,26 @@
+---
+- name: "Ensure drive workers application directory."
+  ansible.builtin.file:
+    name: "/opt/drive/workers"
+    owner: "drive"
+    group: "drive"
+    mode: "0750"
+    state: directory
+
+- name: "Deploy drive workers env file."
+  ansible.builtin.template:
+    src: "{{ st_drive_workers_env_template }}"
+    dest: "/opt/drive/workers/env"
+    owner: "drive"
+    group: "drive"
+    mode: "0600"
+  notify: "systemctl --user restart workers"
+
+- name: "Create drive workers application."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "drive"
+    st_podman_application_name: "workers"
+    st_podman_application_compose_template: "{{ st_drive_workers_compose_template }}"

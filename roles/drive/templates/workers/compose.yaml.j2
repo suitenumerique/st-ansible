@@ -1,0 +1,16 @@
+---
+{{ ansible_managed | comment }}
+
+name: drive
+services:
+  worker:
+    container_name: drive-worker
+    image: docker.io/lasuite/drive-backend:{{ st_drive_tag }}
+    env_file: ./env
+    user: 1001:127 # wait for https://github.com/suitenumerique/drive/issues/472 to be fixed
+    command: celery -A drive.celery_app worker --task-events --beat -l INFO -c {{ ansible_processor_nproc }} -Q celery,default
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A drive.celery_app inspect ping"]
+      interval: 1m
+      timeout: 10s
+      start_interval: 5s
