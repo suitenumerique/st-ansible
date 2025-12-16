@@ -7,6 +7,16 @@
     st_podman_uid: "{{ st_drive_uid }}"
     st_podman_gid: "{{ st_drive_gid }}"
 
+- name: "Deploy drive."
+  ansible.builtin.import_tasks: drive.yml
+  when: st_drive_enabled
+  tags: ['drive_drive']
+
+- name: "Deploy drive workers."
+  ansible.builtin.import_tasks: workers.yml
+  when: st_drive_workers_enabled
+  tags: ['drive_workers']
+
 - name: "Deploy collabora."
   ansible.builtin.import_tasks: collabora.yml
   when: st_drive_collabora_enabled

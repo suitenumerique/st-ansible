@@ -11,6 +11,50 @@ argument_specs:
         type: "int"
         description: "GID of the `drive` group, used for the podman role."
         default: "{{ st_drive_uid }}"
+      st_drive_tag:
+        type: "str"
+        description: "Tag of the drive docker images to deploy."
+        default: "main"
+      st_drive_enabled:
+        type: "bool"
+        description: "Triggers the installation of the drive application."
+        default: false
+      st_drive_dir:
+        type: "str"
+        description: "Remote path to the base directory for drive app."
+        default: "/opt/drive/drive"
+      st_drive_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for drive compose file."
+        default: "drive/compose.yaml.j2"
+      st_drive_backend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for drive backend env file."
+        default: "drive/backend_env.j2"
+      st_drive_backend_env:
+        type: "str"
+        description: "Content of the default backend_env_template, not used if st_drive_backend_env_template is defined."
+        default: ''
+      st_drive_frontend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for drive frontend env file."
+        default: "drive/frontend_env.j2"
+      st_drive_workers_enabled:
+        type: "bool"
+        description: "Triggers the installation of the drive workers"
+        default: false
+      st_drive_workers_dir:
+        type: "str"
+        description: "Remote path to the base directory for drive workers."
+        default: "/opt/drive/workers"
+      st_drive_workers_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for drive workers env file."
+        default: "workers/env.j2"
+      st_drive_workers_env:
+        type: "str"
+        description: "Content of the default workers_env_template, not used if st_drive_workers_env template is defined."
+        default: '{{ st_drive_backend_env }}'
       st_drive_collabora_enabled:
         type: "bool"
         description: "Triggers the installation of collabora."

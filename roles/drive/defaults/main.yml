@@ -4,6 +4,28 @@
 st_drive_uid: 1100
 # GID of the `drive` group, used for the podman role.
 st_drive_gid: '{{ st_drive_uid }}'
+# Tag of the drive docker images to deploy.
+st_drive_tag: main
+# Triggers the installation of the drive application.
+st_drive_enabled: false
+# Remote path to the base directory for drive app.
+st_drive_dir: /opt/drive/drive
+# Local path to the custom template to use for drive compose file.
+st_drive_compose_template: drive/compose.yaml.j2
+# Local path to the custom template to use for drive backend env file.
+st_drive_backend_env_template: drive/backend_env.j2
+# Content of the default backend_env_template, not used if st_drive_backend_env_template is defined.
+st_drive_backend_env: ''
+# Local path to the custom template to use for drive frontend env file.
+st_drive_frontend_env_template: drive/frontend_env.j2
+# Triggers the installation of the drive workers
+st_drive_workers_enabled: false
+# Remote path to the base directory for drive workers.
+st_drive_workers_dir: /opt/drive/workers
+# Local path to the custom template to use for drive workers env file.
+st_drive_workers_env_template: workers/env.j2
+# Content of the default workers_env_template, not used if st_drive_workers_env template is defined.
+st_drive_workers_env: '{{ st_drive_backend_env }}'
 # Triggers the installation of collabora.
 st_drive_collabora_enabled: false
 # Tag of the collabora docker image to deploy.
