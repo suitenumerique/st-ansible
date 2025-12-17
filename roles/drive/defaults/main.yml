@@ -10,6 +10,14 @@ st_drive_tag: main
 st_drive_enabled: false
 # Remote path to the base directory for drive app.
 st_drive_dir: /opt/drive/drive
+# The port to expose the drive application on the host.
+st_drive_nginx_port: 8080
+# The S3 compatible storage protocol used for media storage.
+st_drive_s3_protocol: https
+# The S3 compatible storage host used for media storage.
+st_drive_s3_host: s3.amazonaws.com
+# The S3 compatible storage bucket used for media storage.
+st_drive_s3_bucket: drive-media
 # Local path to the custom template to use for drive compose file.
 st_drive_compose_template: drive/compose.yaml.j2
 # Local path to the custom template to use for drive backend env file.

@@ -23,6 +23,22 @@ argument_specs:
         type: "str"
         description: "Remote path to the base directory for drive app."
         default: "/opt/drive/drive"
+      st_drive_nginx_port:
+        type: "int"
+        description: "The port to expose the drive application on the host."
+        default: 8080
+      st_drive_s3_protocol:
+        type: "str"
+        description: "The S3 compatible storage protocol used for media storage."
+        default: "https"
+      st_drive_s3_host:
+        type: "str"
+        description: "The S3 compatible storage host used for media storage."
+        default: "s3.amazonaws.com"
+      st_drive_s3_bucket:
+        type: "str"
+        description: "The S3 compatible storage bucket used for media storage."
+        default: "drive-media"
       st_drive_compose_template:
         type: "str"
         description: "Local path to the custom template to use for drive compose file."

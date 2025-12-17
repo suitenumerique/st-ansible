@@ -1,0 +1,90 @@
+{{ ansible_managed | comment }}
+
+upstream frontend {
+    server drive-frontend:3000 fail_timeout=0s;
+}
+
+upstream backend {
+    server drive-backend:8000 fail_timeout=0;
+}
+
+server {
+    listen       50090;
+    server_name  _;
+    location / {
+        proxy_pass         http://frontend;
+        proxy_set_header   Host $host;
+    }
+
+    location ~ ^/(api|external_api)/ {
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_redirect off;
+        proxy_pass         http://backend;
+    }
+
+    location /media-auth {
+        proxy_pass http://backend/api/v1.0/items/media-auth/;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Original-URL $request_uri;
+
+        # Prevent the body from being passed
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Original-Method $request_method;
+    }
+
+    location /media/ {
+        # Auth request configuration
+        auth_request /media-auth;
+        auth_request_set $authHeader $upstream_http_authorization;
+        auth_request_set $authDate $upstream_http_x_amz_date;
+        auth_request_set $authContentSha256 $upstream_http_x_amz_content_sha256;
+
+        # Pass specific headers from the auth response
+        proxy_set_header Authorization $authHeader;
+        proxy_set_header X-Amz-Date $authDate;
+        proxy_set_header X-Amz-Content-SHA256 $authContentSha256;
+
+        # Get resource from Object storage
+        proxy_pass {{ st_drive_s3_protocol }}://{{ st_drive_s3_host }}/{{ st_drive_s3_bucket }};
+        proxy_set_header Host {{ st_drive_s3_host }};
+        add_header Content-Security-Policy "default-src 'none'" always;
+        add_header Content-Disposition "attachment";
+    }
+
+
+    location /media/preview/ {
+        # Auth request configuration
+        auth_request /media-auth;
+        auth_request_set $authHeader $upstream_http_authorization;
+        auth_request_set $authDate $upstream_http_x_amz_date;
+        auth_request_set $authContentSha256 $upstream_http_x_amz_content_sha256;
+
+        # Pass specific headers from the auth response
+        proxy_set_header Authorization $authHeader;
+        proxy_set_header X-Amz-Date $authDate;
+        proxy_set_header X-Amz-Content-SHA256 $authContentSha256;
+
+        # Get resource from Object storage
+        proxy_pass {{ st_drive_s3_protocol }}://{{ st_drive_s3_host }}/{{ st_drive_s3_bucket }};
+        proxy_set_header Host {{ st_drive_s3_host }};
+        add_header Content-Security-Policy "default-src 'none'" always;
+    }
+}
+
+server {
+    listen       127.0.0.1:50090;
+    server_name  _;
+
+    location /healthcheck {
+        return 200 "ok\n";
+        add_header Content-Type text/plain;
+        access_log off;
+    }
+}
