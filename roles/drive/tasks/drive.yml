@@ -1,7 +1,7 @@
 ---
-- name: "Ensure drive application directory."
+- name: "Ensure drive nginx application directory."
   ansible.builtin.file:
-    name: "/opt/drive/drive"
+    name: "/opt/drive/drive/nginx_config"
     owner: "drive"
     group: "drive"
     mode: "0750"
