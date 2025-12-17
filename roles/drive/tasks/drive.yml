@@ -19,6 +19,15 @@
     - { src: "{{ st_drive_backend_env_template }}", dest: "backend_env" }
     - { src: "{{ st_drive_frontend_env_template }}", dest: "frontend_env" }
 
+- name: "Deploy nginx configuration file."
+  ansible.builtin.template:
+    src: "drive/nginx.conf.j2"
+    dest: "{{ st_drive_dir }}/nginx_config/nginx.conf"
+    owner: "drive"
+    group: "drive"
+    mode: "0600"
+  notify: "systemctl --user restart drive"
+
 - name: "Create drive application."
   ansible.builtin.import_role:
     name: suitenumerique.st.podman
