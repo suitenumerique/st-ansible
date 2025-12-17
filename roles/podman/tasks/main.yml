@@ -6,3 +6,7 @@
 - name: "Import user.yml."
   ansible.builtin.import_tasks: "user.yml"
   tags: ["st_podman_user"]
+
+- name: "Import registries.yml."
+  ansible.builtin.import_tasks: "registries.yml"
+  tags: ["st_podman_registries"]
