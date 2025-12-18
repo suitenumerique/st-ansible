@@ -36,4 +36,4 @@
     st_podman_user: "drive"
     st_podman_application_name: "drive"
     st_podman_application_compose_template: "{{ st_drive_compose_template }}"
-    st_podman_unprivileged_port_start: "{{ st_drive_nginx_port }}"
+
