@@ -52,7 +52,7 @@ server {
         proxy_set_header X-Amz-Content-SHA256 $authContentSha256;
 
         # Get resource from Object storage
-        proxy_pass {{ st_drive_s3_protocol }}://{{ st_drive_s3_host }}/{{ st_drive_s3_bucket }};
+        proxy_pass {{ st_drive_s3_protocol }}://{{ st_drive_s3_host }}/{{ st_drive_s3_bucket }}/;
         proxy_set_header Host {{ st_drive_s3_host }};
         add_header Content-Security-Policy "default-src 'none'" always;
         add_header Content-Disposition "attachment";
@@ -72,7 +72,7 @@ server {
         proxy_set_header X-Amz-Content-SHA256 $authContentSha256;
 
         # Get resource from Object storage
-        proxy_pass {{ st_drive_s3_protocol }}://{{ st_drive_s3_host }}/{{ st_drive_s3_bucket }};
+        proxy_pass {{ st_drive_s3_protocol }}://{{ st_drive_s3_host }}/{{ st_drive_s3_bucket }}/;
         proxy_set_header Host {{ st_drive_s3_host }};
         add_header Content-Security-Policy "default-src 'none'" always;
     }
