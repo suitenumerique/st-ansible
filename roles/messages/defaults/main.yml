@@ -16,6 +16,8 @@ st_messages_compose_template: messages/compose.yaml.j2
 st_messages_backend_env_template: messages/backend_env.j2
 # Content of the default backend_env_template, not used if st_messages_backend_env_template is defined.
 st_messages_backend_env: ''
+# Triggers the migrations task on the host. By default this is true, but the task has `run_once:` set on it which will trigger the migrations once per play. This var is useful if your deployment workflow uses `serial:`, in this case the play is separated in X plays of 1 host each, and `run_once` will effectively run once per play, resulting running the migrations on all hosts. If you use `serial:`, set this var to false on every host except one.
+st_messages_backend_run_migrations: true
 # Local path to the custom template to use for messages env file.
 st_messages_frontend_env_template: messages/frontend_env.j2
 # Triggers the installation of the messages workers

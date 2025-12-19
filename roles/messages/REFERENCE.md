@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.messages
-Version: 0.0.6
+Version: 0.0.7
 
 This role deploys the Messages applications from La Suite Territoriale on a rootless podman base on Debian systems.
 
@@ -30,6 +30,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_compose_template | Local path to the custom template to use for messages compose file. | str | no | messages/compose.yaml.j2 |
 | st_messages_backend_env_template | Local path to the custom template to use for messages env file. | str | no | messages/backend_env.j2 |
 | st_messages_backend_env | Content of the default backend_env_template, not used if st_messages_backend_env_template is defined. | str | no |  |
+| st_messages_backend_run_migrations | Triggers the migrations task on the host. By default this is true, but the task has `run_once:` set on it which will trigger the migrations once per play. This var is useful if your deployment workflow uses `serial:`, in this case the play is separated in X plays of 1 host each, and `run_once` will effectively run once per play, resulting running the migrations on all hosts. If you use `serial:`, set this var to false on every host except one. | bool | no | True |
 | st_messages_frontend_env_template | Local path to the custom template to use for messages env file. | str | no | messages/frontend_env.j2 |
 | st_messages_frontend_env | Content of the default frontend_env_template, not used if st_messages_frontend_env_template is defined. | str | no |  |
 | st_messages_workers_enabled | Triggers the installation of the messages workers | bool | no | False |
