@@ -1,16 +1,8 @@
 ---
-- name: "Ensure drive nginx application directory."
-  ansible.builtin.file:
-    name: "/opt/drive/drive/nginx_config"
-    owner: "drive"
-    group: "drive"
-    mode: "0750"
-    state: directory
-
 - name: "Deploy drive env file."
   ansible.builtin.template:
     src: "{{ item.src }}"
-    dest: "/opt/drive/drive/{{ item.dest }}"
+    dest: "{{ st_drive_dir }}/{{ item.dest }}"
     owner: "drive"
     group: "drive"
     mode: "0600"
@@ -21,8 +13,8 @@
 
 - name: "Deploy nginx configuration file."
   ansible.builtin.template:
-    src: "drive/nginx.conf.j2"
-    dest: "{{ st_drive_dir }}/nginx_config/nginx.conf"
+    src: "{{ st_drive_nginx_template }}"
+    dest: "{{ st_drive_dir }}/nginx.conf"
     owner: "drive"
     group: "drive"
     mode: "0600"
@@ -36,4 +28,3 @@
     st_podman_user: "drive"
     st_podman_application_name: "drive"
     st_podman_application_compose_template: "{{ st_drive_compose_template }}"
-

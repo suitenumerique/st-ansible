@@ -1,20 +1,16 @@
 {{ ansible_managed | comment }}
 
-upstream frontend {
-    server drive-frontend:3000 fail_timeout=0s;
-}
-
 upstream backend {
-    server drive-backend:8000 fail_timeout=0;
+    server ${DRIVE_FRONTEND_BACKEND_SERVER} fail_timeout=0;
 }
 
 server {
-    listen       50090;
+    listen       ${PORT};
     server_name  _;
-    location / {
-        proxy_pass         http://frontend;
-        proxy_set_header   Host $host;
-    }
+
+    root ${DRIVE_FRONTEND_ROOT}
+
+    error_page 404 /404.html;
 
     location ~ ^/(api|external_api)/ {
         proxy_set_header X-Forwarded-Proto https;
@@ -22,8 +18,17 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 
         proxy_redirect off;
-        proxy_pass         http://backend;
+        proxy_pass http://backend;
     }
+
+    location ^~ /admin/ {
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_redirect off;
+		proxy_pass http://backend;
+	}
 
     location /media-auth {
         proxy_pass http://backend/api/v1.0/items/media-auth/;
@@ -76,10 +81,48 @@ server {
         proxy_set_header Host {{ st_drive_s3_host }};
         add_header Content-Security-Policy "default-src 'none'" always;
     }
+
+
+    location ~ "^/explorer/items/files/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/?$" {
+        try_files $uri /explorer/items/files/[id].html;
+    }
+
+    location ~ "^/explorer/items/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/?$" {
+        try_files $uri /explorer/items/[id].html;
+    }
+
+    location ~ "^/sdk/explorer/?$" {
+        try_files $uri /sdk/explorer.html;
+    }
+
+    location ~ "^/sdk/?$" {
+        try_files $uri /sdk.html;
+    }
+
+    location ~ "^/explorer/trash/?$" {
+        try_files $uri /explorer/trash.html;
+    }
+
+    location ~ "^/401/?$" {
+        try_files $uri /401.html;
+    }
+
+    location ~ "^/403/?$" {
+        try_files $uri /403.html;
+    }
+    
+    location = /404.html {
+        internal;
+    }
+
+    # Frontend export
+    location / {
+        try_files $uri index.html $uri/ =404;
+    }
 }
 
 server {
-    listen       127.0.0.1:50090;
+    listen       127.0.0.1:${PORT};
     server_name  _;
 
     location /healthcheck {
