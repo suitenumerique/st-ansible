@@ -14,7 +14,7 @@
 - name: "Deploy nginx configuration file."
   ansible.builtin.template:
     src: "{{ st_drive_nginx_template }}"
-    dest: "{{ st_drive_dir }}/nginx.conf.template"
+    dest: "{{ st_drive_dir }}/nginx.conf"
     owner: "drive"
     group: "drive"
     mode: "0604"

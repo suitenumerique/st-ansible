@@ -11,7 +11,7 @@ st_drive_enabled: false
 # Remote path to the base directory for drive app.
 st_drive_dir: /opt/drive/drive
 # Local path to the custom template to use for drive nginx configuration file.
-st_drive_nginx_template: drive/nginx.conf.template.j2
+st_drive_nginx_template: drive/nginx.conf.j2
 # The S3 compatible storage protocol used for media storage.
 st_drive_s3_protocol: https
 # The S3 compatible storage host used for media storage.
