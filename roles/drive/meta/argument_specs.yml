@@ -26,7 +26,7 @@ argument_specs:
       st_drive_nginx_template:
         type: "str"
         description: "Local path to the custom template to use for drive nginx configuration file."
-        default: "drive/nginx.conf.j2"
+        default: "drive/nginx.conf.template.j2"
       st_drive_s3_protocol:
         type: "str"
         description: "The S3 compatible storage protocol used for media storage."
