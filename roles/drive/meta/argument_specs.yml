@@ -11,6 +11,10 @@ argument_specs:
         type: "int"
         description: "GID of the `drive` group, used for the podman role."
         default: "{{ st_drive_uid }}"
+      st_drive_registries:
+        type: "list"
+        elements: "dict"
+        description: "Optional private container registries to login the `drive` user onto."
       st_drive_tag:
         type: "str"
         description: "Tag of the drive docker images to deploy."

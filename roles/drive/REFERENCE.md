@@ -23,6 +23,7 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 |---|---|---|---|---|
 | st_drive_uid | UID of the `drive` user, used for the podman role. | int | no | 1100 |
 | st_drive_gid | GID of the `drive` group, used for the podman role. | int | no | {{ st_drive_uid }} |
+| st_drive_registries | Optional private container registries to login the `drive` user onto. | list of 'dict' | no |  |
 | st_drive_tag | Tag of the drive docker images to deploy. | str | no | main |
 | st_drive_enabled | Triggers the installation of the drive application. | bool | no | False |
 | st_drive_dir | Remote path to the base directory for drive app. | str | no | /opt/drive/drive |
