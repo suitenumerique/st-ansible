@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.messages
-Version: 0.0.7
+Version: 0.0.8
 
 This role deploys the Messages applications from La Suite Territoriale on a rootless podman base on Debian systems.
 

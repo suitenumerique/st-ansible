@@ -10,7 +10,7 @@ issues: https://github.com/suitenumerique/st-ansible/issues
 documentation: https://github.com/suitenumerique/st-ansible
 homepage: https://suiteterritoriale.anct.gouv.fr/
 tags: ["suitenumerique", "suiteterritoriale", "linux"]
-version: 0.0.7
+version: 0.0.8
 description: Installe, configure et pilote les composants de La Suite Territoriale sur des systèmes Debian.
 dependencies: {}
 build_ignore:

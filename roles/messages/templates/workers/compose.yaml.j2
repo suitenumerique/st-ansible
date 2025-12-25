@@ -9,7 +9,7 @@ services:
     env_file: ./env
     command: celery -A messages.celery_app worker --task-events --beat -l INFO -c $CELERY_CONCURRENCY -Q celery,default
     healthcheck:
-      test: ["CMD-SHELL", "true"]
+      test: ["CMD-SHELL", "celery -A messages.celery_app inspect ping"]
       interval: 1m
       timeout: 3s
-      start_interval: 5s
+      start_period: 30s
