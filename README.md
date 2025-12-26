@@ -18,10 +18,12 @@ Then use `ansible-galaxy install -r galaxy_requirements.yml`.
 ### Roles
 
 The collection contains the following roles:
-- [suitenumerique.st.podman](https://github.com/suitenumerique/st-ansible/-/tree/main/roles/podman/REFERENCE.md)
-- [suitenumerique.st.messages](https://github.com/suitenumerique/st-ansible/-/tree/main/roles/messages/REFERENCE.md)
-- [suitenumerique.st.alloy](https://github.com/suitenumerique/st-ansible/-/tree/main/roles/alloy/REFERENCE.md)
-- [suitenumerique.st.restic](https://github.com/suitenumerique/st-ansible/-/tree/main/roles/restic/REFERENCE.md)
+- [suitenumerique.st.podman](https://github.com/suitenumerique/st-ansible/blob/main/roles/podman/REFERENCE.md)
+- [suitenumerique.st.messages](https://github.com/suitenumerique/st-ansible/blob/main/roles/messages/REFERENCE.md)
+- [suitenumerique.st.drive](https://github.com/suitenumerique/st-ansible/blob/main/roles/drive/REFERENCE.md)
+- [suitenumerique.st.keycloak](https://github.com/suitenumerique/st-ansible/blob/main/roles/keycloak/REFERENCE.md)
+- [suitenumerique.st.alloy](https://github.com/suitenumerique/st-ansible/blob/main/roles/alloy/REFERENCE.md)
+- [suitenumerique.st.restic](https://github.com/suitenumerique/st-ansible/blob/main/roles/restic/REFERENCE.md)
 
 ## Development
 
