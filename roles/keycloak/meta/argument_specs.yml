@@ -11,6 +11,10 @@ argument_specs:
         type: "int"
         description: "GID of the `keycloak` group, used for the podman role."
         default: "{{ st_keycloak_uid }}"
+      st_keycloak_registries:
+        type: "list"
+        elements: "dict"
+        description: "Optional private container registries to login the `keycloak` user onto."
       st_keycloak_enabled:
         type: "bool"
         description: "Triggers the installation of keycloak."

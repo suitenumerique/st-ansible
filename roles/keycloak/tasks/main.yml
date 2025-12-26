@@ -6,6 +6,7 @@
     st_podman_user: "keycloak"
     st_podman_uid: "{{ st_keycloak_uid }}"
     st_podman_gid: "{{ st_keycloak_gid }}"
+    st_podman_registries: "{{ st_keycloak_registries | default([]) }}"
 
 - name: "Deploy keycloak."
   ansible.builtin.import_tasks: keycloak.yml
