@@ -1,0 +1,28 @@
+---
+- name: "Ensure keycloak application directory."
+  ansible.builtin.file:
+    name: "/opt/keycloak/keycloak"
+    owner: "keycloak"
+    group: "keycloak"
+    mode: "0750"
+    state: directory
+
+- name: "Deploy keycloak env file."
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "/opt/keycloak/keycloak/{{ item.dest }}"
+    owner: "keycloak"
+    group: "keycloak"
+    mode: "0600"
+  notify: "systemctl --user restart keycloak"
+  loop:
+    - { src: "{{ st_keycloak_env_template }}", dest: "env" }
+
+- name: "Create keycloak application."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "keycloak"
+    st_podman_application_name: "keycloak"
+    st_podman_application_compose_template: "{{ st_keycloak_compose_template }}"

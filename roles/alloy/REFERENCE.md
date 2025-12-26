@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.alloy
-Version: 0.0.8
+Version: 0.0.9
 
 This role installs, manages and configures a `alloy` instance on Debian systems.
 
