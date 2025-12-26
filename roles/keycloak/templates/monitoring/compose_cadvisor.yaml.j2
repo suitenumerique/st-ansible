@@ -10,7 +10,7 @@ services:
       - --docker_only=true
     privileged: true
     ports:
-      - "{{ st_drive_cadvisor_port }}:8080"
+      - "{{ st_keycloak_cadvisor_port }}:8080"
     volumes:
       - /:/rootfs:ro
       - ${XDG_RUNTIME_DIR}/podman:/run/podman:ro

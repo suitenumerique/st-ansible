@@ -1,10 +1,10 @@
 ---
 dependencies: []
 galaxy_info:
-  role_name: drive
+  role_name: keycloak
   author: La Suite territoriale
   company: Agence Nationale de la Cohésion des Territoires
-  description: This role deploys the Drive applications from La Suite Territoriale on a rootless podman base on Debian systems.
+  description: This role deploys a Keycloak instance for La Suite Territoriale applications on a rootless podman base on Debian systems.
   license: MIT
   min_ansible_version: 2.18.0
   issue_tracker_url: https://github.com/suitenumerique/st-ansible/issues
