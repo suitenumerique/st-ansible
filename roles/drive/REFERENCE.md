@@ -34,6 +34,7 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 | st_drive_compose_template | Local path to the custom template to use for drive compose file. | str | no | drive/compose.yaml.j2 |
 | st_drive_backend_env_template | Local path to the custom template to use for drive backend env file. | str | no | drive/backend_env.j2 |
 | st_drive_backend_env | Content of the default backend_env_template, not used if st_drive_backend_env_template is defined. | str | no |  |
+| st_drive_backend_run_migrations | Whether to run database migrations on drive backend startup. | bool | no | True |
 | st_drive_frontend_env_template | Local path to the custom template to use for drive frontend env file. | str | no | drive/frontend_env.j2 |
 | st_drive_workers_enabled | Triggers the installation of the drive workers | bool | no | False |
 | st_drive_workers_dir | Remote path to the base directory for drive workers. | str | no | /opt/drive/workers |

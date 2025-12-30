@@ -55,6 +55,10 @@ argument_specs:
         type: "str"
         description: "Content of the default backend_env_template, not used if st_drive_backend_env_template is defined."
         default: ''
+      st_drive_backend_run_migrations:
+        type: "bool"
+        description: "Whether to run database migrations on drive backend startup."
+        default: true
       st_drive_frontend_env_template:
         type: "str"
         description: "Local path to the custom template to use for drive frontend env file."
