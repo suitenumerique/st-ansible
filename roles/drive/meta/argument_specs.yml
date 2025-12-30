@@ -111,7 +111,7 @@ argument_specs:
         default: "9980"
       st_drive_cadvisor_enabled:
         type: "bool"
-        description: "Triggers the installation of the alloy agent, used to send metrics to a Prometheus compatible server and logs to a Loki server."
+        description: "Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool."
         default: false
       st_drive_cadvisor_port:
         type: "str"

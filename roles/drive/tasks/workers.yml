@@ -16,7 +16,7 @@
     mode: "0600"
   notify: "systemctl --user restart workers"
 
-- name: "Create drive application."
+- name: "Create drive workers application."
   ansible.builtin.import_role:
     name: suitenumerique.st.podman
     tasks_from: application.yml
