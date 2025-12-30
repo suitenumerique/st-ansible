@@ -11,5 +11,5 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "celery -A messages.celery_app inspect ping"]
       interval: 1m
-      timeout: 3s
-      start_period: 30s
+      timeout: 10s
+      start_period: 5s

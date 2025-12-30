@@ -7,9 +7,10 @@ services:
     container_name: drive-worker
     image: docker.io/lasuite/drive-backend:{{ st_drive_tag }}
     env_file: ./env
-    command: celery -A drive.celery_app worker --task-events --beat -l INFO -c $CELERY_CONCURRENCY -Q celery,default
+    user: 1001:127 # wait for https://github.com/suitenumerique/drive/issues/472 to be fixed
+    command: celery -A drive.celery_app worker --task-events --beat -l INFO -c {{ ansible_processor_nproc }} -Q celery,default
     healthcheck:
-      test: ["CMD-SHELL", "true"]
-      interval: 1m
+      test: ["CMD-SHELL", "celery -A drive.celery_app inspect ping"]
+      interval: 10s
       timeout: 3s
       start_interval: 5s
