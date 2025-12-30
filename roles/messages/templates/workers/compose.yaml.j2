@@ -12,4 +12,4 @@ services:
       test: ["CMD-SHELL", "celery -A messages.celery_app inspect ping"]
       interval: 1m
       timeout: 10s
-      start_period: 5s
+      start_interval: 5s

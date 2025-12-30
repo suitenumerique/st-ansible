@@ -13,4 +13,4 @@ services:
       test: ["CMD-SHELL", "celery -A drive.celery_app inspect ping"]
       interval: 1m
       timeout: 10s
-      start_period: 5s
+      start_interval: 5s
