@@ -110,14 +110,14 @@ server {
     location ~ "^/403/?$" {
         try_files $uri /403.html;
     }
-    
+
     location = /404.html {
         internal;
     }
 
     # Frontend export
     location / {
-        try_files $uri index.html $uri/ =404;
+        try_files $uri $uri/ /index.html =404;
     }
 }
 
@@ -126,8 +126,8 @@ server {
     server_name  _;
 
     location /healthcheck {
-        return 200 "ok\n";
         add_header Content-Type text/plain;
+        return 200 "ok\n";
         access_log off;
     }
 }

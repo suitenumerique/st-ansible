@@ -11,6 +11,6 @@ services:
     command: celery -A drive.celery_app worker --task-events --beat -l INFO -c {{ ansible_processor_nproc }} -Q celery,default
     healthcheck:
       test: ["CMD-SHELL", "celery -A drive.celery_app inspect ping"]
-      interval: 10s
-      timeout: 3s
-      start_interval: 5s
+      interval: 1m
+      timeout: 10s
+      start_period: 5s

@@ -34,7 +34,7 @@ st_drive_workers_enabled: false
 st_drive_workers_dir: /opt/drive/workers
 # Local path to the custom template to use for drive workers env file.
 st_drive_workers_env_template: workers/env.j2
-# Content of the default workers_env_template, not used if st_drive_workers_env template is defined.
+# Content of the default workers_env_template, not used if st_drive_workers_env_template is defined.
 st_drive_workers_env: '{{ st_drive_backend_env }}'
 # Triggers the installation of collabora.
 st_drive_collabora_enabled: false
@@ -48,7 +48,7 @@ st_drive_collabora_env_template: collabora/env.j2
 st_drive_collabora_compose_template: collabora/compose.yaml.j2
 # The port to open on the host, redirecting to port 9980 in the container. It can also specify the ip address, something like 127.0.0.1:9980.
 st_drive_collabora_port: '9980'
-# Triggers the installation of the alloy agent, used to send metrics to a Prometheus compatible server and logs to a Loki server.
+# Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool.
 st_drive_cadvisor_enabled: false
 # The host published port of the cadvisor container.
 st_drive_cadvisor_port: '127.0.0.1:58080'

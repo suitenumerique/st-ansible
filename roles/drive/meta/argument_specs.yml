@@ -6,6 +6,7 @@ argument_specs:
       st_drive_public_host:
         type: "str"
         description: "The public hostname used to access the drive application."
+        required: true
       st_drive_uid:
         type: "int"
         description: "UID of the `drive` user, used for the podman role."
