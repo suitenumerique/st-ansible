@@ -1,0 +1,11 @@
+---
+{{ ansible_managed | comment }}
+
+name: keycloak
+services:
+  keycloak:
+    container_name: keycloak
+    image: ghcr.io/suitenumerique/messages-keycloak:{{ st_keycloak_tag }}
+    env_file: ./env
+    ports:
+      - "{{ st_keycloak_port }}:8080"

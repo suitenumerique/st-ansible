@@ -1,0 +1,25 @@
+---
+- name: "Import Suite Territoriale podman role."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+  vars:
+    st_podman_user: "keycloak"
+    st_podman_uid: "{{ st_keycloak_uid }}"
+    st_podman_gid: "{{ st_keycloak_gid }}"
+    st_podman_registries: "{{ st_keycloak_registries | default([]) }}"
+
+- name: "Deploy keycloak."
+  ansible.builtin.import_tasks: keycloak.yml
+  when: st_keycloak_enabled
+  tags: ['keycloak_keycloak']
+
+- name: "Create cadvisor application."
+  when: st_keycloak_cadvisor_enabled
+  tags: ['keycloak_cadvisor']
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "keycloak"
+    st_podman_application_name: "cadvisor"
+    st_podman_application_compose_template: monitoring/compose_cadvisor.yaml.j2

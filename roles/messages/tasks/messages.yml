@@ -27,3 +27,21 @@
     st_podman_user: "messages"
     st_podman_application_name: "messages"
     st_podman_application_compose_template: "{{ st_messages_compose_template }}"
+
+- name: "Play messages migrations."
+  become: true
+  become_user: "messages"
+  become_method: ansible.builtin.sudo
+  become_flags: "-i"
+  run_once: true
+  register: migration_result
+  changed_when: "'No migrations to apply.' not in migration_result.stdout"
+  when: st_messages_backend_run_migrations
+  retries: 3
+  delay: 10
+  until: migration_result.rc == 0
+  ansible.builtin.shell: |
+    set -eu
+    podman-compose run --rm --name messages_backend_migrations backend python manage.py migrate --noinput
+  args:
+    chdir: "/opt/messages/messages"

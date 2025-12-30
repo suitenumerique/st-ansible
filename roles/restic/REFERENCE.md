@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.restic
-Version: 0.0.5
+Version: 0.0.9
 
 This role installs and configure restic on Debian systems.
 

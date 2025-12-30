@@ -10,6 +10,7 @@ Restart=on-abnormal
 
 WorkingDirectory={{ st_podman_application_dir }}
 
+ExecStartPre=-podman-compose --no-ansi pull
 ExecStart=podman-compose --podman-run-args="--sdnotify={{ st_podman_application_sdnotify }}" --no-ansi up --abort-on-container-exit
 ExecStop=podman-compose --no-ansi down
 

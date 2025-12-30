@@ -39,6 +39,14 @@ argument_specs:
         type: "str"
         description: "Content of the default backend_env_template, not used if st_messages_backend_env_template is defined."
         default: ""
+      st_messages_backend_run_migrations:
+        type: "bool"
+        description: >
+          Triggers the migrations task on the host.
+          By default this is true, but the task has `run_once:` set on it which will trigger the migrations once per play.
+          This var is useful if your deployment workflow uses `serial:`, in this case the play is separated in X plays of 1 host each, and `run_once` will effectively run once per play, resulting running the migrations on all hosts.
+          If you use `serial:`, set this var to false on every host except one.
+        default: true
       st_messages_frontend_env_template:
         type: "str"
         description: "Local path to the custom template to use for messages env file."

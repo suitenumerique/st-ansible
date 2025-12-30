@@ -38,6 +38,9 @@ argument_specs:
         type: "list"
         elements: "dict"
         description: "List of container registries to connect to podman user onto."
+      st_podman_registries_config_template:
+        type: "str"
+        description: "The ansible template for registries.conf. See https://github.com/containers/image/blob/main/docs/containers-registries.conf.5.md"
       st_podman_application_name:
         type: "str"
         description:
