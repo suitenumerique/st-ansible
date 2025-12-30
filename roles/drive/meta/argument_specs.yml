@@ -3,6 +3,9 @@ argument_specs:
   main:
     short_description: "Installs and configures the Drive application from La Suite Territoriale on Debian systems."
     options:
+      st_drive_public_host:
+        type: "str"
+        description: "The public hostname used to access the drive application."
       st_drive_uid:
         type: "int"
         description: "UID of the `drive` user, used for the podman role."
@@ -77,7 +80,7 @@ argument_specs:
         default: "workers/env.j2"
       st_drive_workers_env:
         type: "str"
-        description: "Content of the default workers_env_template, not used if st_drive_workers_env template is defined."
+        description: "Content of the default workers_env_template, not used if st_drive_workers_env_template is defined."
         default: '{{ st_drive_backend_env }}'
       st_drive_collabora_enabled:
         type: "bool"
