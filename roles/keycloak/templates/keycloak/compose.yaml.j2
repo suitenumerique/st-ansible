@@ -7,5 +7,6 @@ services:
     container_name: keycloak
     image: ghcr.io/suitenumerique/messages-keycloak:{{ st_keycloak_tag }}
     env_file: ./env
+    command: {{ st_keycloak_start_command }}
     ports:
       - "{{ st_keycloak_port }}:8080"
