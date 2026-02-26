@@ -6,7 +6,7 @@ After=podman.socket
 [Service]
 Type=notify
 NotifyAccess=all
-Restart=on-abnormal
+Restart={{ st_podman_application_restart_policy }}
 
 WorkingDirectory={{ st_podman_application_dir }}
 
