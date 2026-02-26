@@ -1,0 +1,204 @@
+---
+- name: "Verify."
+  hosts: instance
+  become: true
+  tasks:
+    - name: "Verify restic binary exists."
+      ansible.builtin.stat:
+        path: /usr/local/bin/restic
+      register: restic_binary
+
+    - name: "Assert restic binary exists."
+      ansible.builtin.assert:
+        that:
+          - restic_binary.stat.exists
+        fail_msg: "restic binary does not exist."
+        success_msg: "restic binary exists."
+
+    - name: "Verify restic binary is executable."
+      ansible.builtin.command: /usr/local/bin/restic version
+      register: restic_version
+      changed_when: false
+
+    - name: "Assert restic version command succeeds."
+      ansible.builtin.assert:
+        that:
+          - restic_version.rc == 0
+        fail_msg: "restic version command failed."
+        success_msg: "restic version command succeeded."
+
+    - name: "Verify restic user exists."
+      ansible.builtin.getent:
+        database: passwd
+        key: restic
+
+    - name: "Assert restic user exists."
+      ansible.builtin.assert:
+        that:
+          - "'restic' in getent_passwd"
+        fail_msg: "restic user does not exist."
+        success_msg: "restic user exists."
+
+    - name: "Verify restic group exists."
+      ansible.builtin.getent:
+        database: group
+        key: restic
+
+    - name: "Assert restic group exists."
+      ansible.builtin.assert:
+        that:
+          - "'restic' in getent_group"
+        fail_msg: "restic group does not exist."
+        success_msg: "restic group exists."
+
+    - name: "Verify configuration directory exists."
+      ansible.builtin.stat:
+        path: /etc/restic
+      register: config_dir
+
+    - name: "Assert configuration directory exists with correct mode."
+      ansible.builtin.assert:
+        that:
+          - config_dir.stat.exists
+          - config_dir.stat.isdir
+          - config_dir.stat.mode == '0750'
+        fail_msg: "restic config directory does not exist or has wrong mode."
+        success_msg: "restic config directory exists with correct mode."
+
+    - name: "Verify cache directory exists."
+      ansible.builtin.stat:
+        path: /var/cache/restic
+      register: cache_dir
+
+    - name: "Assert cache directory exists with correct mode."
+      ansible.builtin.assert:
+        that:
+          - cache_dir.stat.exists
+          - cache_dir.stat.isdir
+          - cache_dir.stat.mode == '0750'
+        fail_msg: "restic cache directory does not exist or has wrong mode."
+        success_msg: "restic cache directory exists with correct mode."
+
+    - name: "Verify files configuration exists."
+      ansible.builtin.stat:
+        path: /etc/restic/files
+      register: files_config
+
+    - name: "Assert files configuration exists."
+      ansible.builtin.assert:
+        that:
+          - files_config.stat.exists
+        fail_msg: "restic files configuration does not exist."
+        success_msg: "restic files configuration exists."
+
+    - name: "Verify env configuration exists."
+      ansible.builtin.stat:
+        path: /etc/restic/env
+      register: env_config
+
+    - name: "Assert env configuration exists."
+      ansible.builtin.assert:
+        that:
+          - env_config.stat.exists
+        fail_msg: "restic env configuration does not exist."
+        success_msg: "restic env configuration exists."
+
+    - name: "Verify restic-backup.service exists."
+      ansible.builtin.stat:
+        path: /etc/systemd/system/restic-backup.service
+      register: backup_service
+
+    - name: "Assert restic-backup.service exists."
+      ansible.builtin.assert:
+        that:
+          - backup_service.stat.exists
+        fail_msg: "restic-backup.service does not exist."
+        success_msg: "restic-backup.service exists."
+
+    - name: "Verify restic-backup.timer exists."
+      ansible.builtin.stat:
+        path: /etc/systemd/system/restic-backup.timer
+      register: backup_timer
+
+    - name: "Assert restic-backup.timer exists."
+      ansible.builtin.assert:
+        that:
+          - backup_timer.stat.exists
+        fail_msg: "restic-backup.timer does not exist."
+        success_msg: "restic-backup.timer exists."
+
+    - name: "Verify restic-forget.service exists."
+      ansible.builtin.stat:
+        path: /etc/systemd/system/restic-forget.service
+      register: forget_service
+
+    - name: "Assert restic-forget.service exists."
+      ansible.builtin.assert:
+        that:
+          - forget_service.stat.exists
+        fail_msg: "restic-forget.service does not exist."
+        success_msg: "restic-forget.service exists."
+
+    - name: "Verify restic-forget.timer exists."
+      ansible.builtin.stat:
+        path: /etc/systemd/system/restic-forget.timer
+      register: forget_timer
+
+    - name: "Assert restic-forget.timer exists."
+      ansible.builtin.assert:
+        that:
+          - forget_timer.stat.exists
+        fail_msg: "restic-forget.timer does not exist."
+        success_msg: "restic-forget.timer exists."
+
+    - name: "Check restic-backup.timer is enabled."  # noqa: command-instead-of-module
+      ansible.builtin.command: systemctl is-enabled restic-backup.timer
+      register: backup_timer_enabled
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert restic-backup.timer is enabled."
+      ansible.builtin.assert:
+        that:
+          - backup_timer_enabled.rc == 0
+        fail_msg: "restic-backup.timer is not enabled."
+        success_msg: "restic-backup.timer is enabled."
+
+    - name: "Check restic-backup.timer is active."  # noqa: command-instead-of-module
+      ansible.builtin.command: systemctl is-active restic-backup.timer
+      register: backup_timer_active
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert restic-backup.timer is active."
+      ansible.builtin.assert:
+        that:
+          - backup_timer_active.rc == 0
+        fail_msg: "restic-backup.timer is not active."
+        success_msg: "restic-backup.timer is active."
+
+    - name: "Check restic-forget.timer is enabled."  # noqa: command-instead-of-module
+      ansible.builtin.command: systemctl is-enabled restic-forget.timer
+      register: forget_timer_enabled
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert restic-forget.timer is enabled."
+      ansible.builtin.assert:
+        that:
+          - forget_timer_enabled.rc == 0
+        fail_msg: "restic-forget.timer is not enabled."
+        success_msg: "restic-forget.timer is enabled."
+
+    - name: "Check restic-forget.timer is active."  # noqa: command-instead-of-module
+      ansible.builtin.command: systemctl is-active restic-forget.timer
+      register: forget_timer_active
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert restic-forget.timer is active."
+      ansible.builtin.assert:
+        that:
+          - forget_timer_active.rc == 0
+        fail_msg: "restic-forget.timer is not active."
+        success_msg: "restic-forget.timer is active."

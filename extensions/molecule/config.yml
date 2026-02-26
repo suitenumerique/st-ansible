@@ -1,0 +1,18 @@
+---
+dependency:
+  name: galaxy
+
+driver:
+  name: vagrant
+
+provisioner:
+  name: ansible
+
+verifier:
+  name: ansible
+
+platforms:
+  - name: instance
+    box: debian/trixie64
+    memory: 512
+    cpus: 1

@@ -1,0 +1,15 @@
+---
+- name: "Converge."
+  hosts: instance
+  become: true
+  vars:
+    restic_files:
+      - /var
+    restic_s3_access_key: test-access-key
+    restic_s3_secret_key: test-secret-key
+    restic_password: test-password
+    restic_repository: /tmp/restic-repo
+  tasks:
+    - name: "Include restic role."
+      ansible.builtin.import_role:
+        name: suitenumerique.st.restic

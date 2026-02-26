@@ -8,8 +8,16 @@ lint:
 test.sanity: clean
 	ansible-test sanity -v --exclude LICENSE
 
-.PHONY: testfull
-testfull: lint test.sanity
+.PHONY: molecule
+molecule:
+ifdef role
+	. extensions/molecule/.env.molecule && molecule test -s $(role)
+else
+	. extensions/molecule/.env.molecule && molecule test --all
+endif
+
+.PHONY: test
+test: lint test.sanity molecule
 
 .PHONY: clean
 clean:

@@ -1,0 +1,66 @@
+---
+- name: Verify
+  hosts: instance
+  become: true
+  tasks:
+    - name: "Verify alloy package is installed"
+      ansible.builtin.package_facts:
+        manager: auto
+
+    - name: "Assert alloy package is installed"
+      ansible.builtin.assert:
+        that:
+          - "'alloy' in ansible_facts.packages"
+        fail_msg: "alloy package is not installed."
+        success_msg: "alloy package is installed."
+
+    - name: "Verify alloy config directory exists"
+      ansible.builtin.stat:
+        path: /etc/alloy
+      register: config_dir
+
+    - name: "Assert config directory exists"
+      ansible.builtin.assert:
+        that:
+          - config_dir.stat.exists
+          - config_dir.stat.isdir
+        fail_msg: "Alloy config directory does not exist."
+        success_msg: "Alloy config directory exists."
+
+    - name: "Gather service facts"
+      ansible.builtin.service_facts:
+
+    - name: "Assert alloy service is enabled and running"
+      ansible.builtin.assert:
+        that:
+          - "'alloy.service' in ansible_facts.services"
+          - ansible_facts.services['alloy.service'].status == 'enabled'
+          - ansible_facts.services['alloy.service'].state == 'running'
+        fail_msg: "alloy service is not enabled or running."
+        success_msg: "alloy service is enabled and running."
+
+    - name: "Verify alloy config file exists"
+      ansible.builtin.stat:
+        path: /etc/alloy/config.alloy
+      register: config_file
+
+    - name: "Assert config file exists"
+      ansible.builtin.assert:
+        that:
+          - config_file.stat.exists
+          - config_file.stat.isreg
+        fail_msg: "Alloy config file does not exist."
+        success_msg: "Alloy config file exists."
+
+    - name: "Verify alloy env file exists"
+      ansible.builtin.stat:
+        path: /etc/default/alloy
+      register: env_file
+
+    - name: "Assert env file exists"
+      ansible.builtin.assert:
+        that:
+          - env_file.stat.exists
+          - env_file.stat.isreg
+        fail_msg: "Alloy env file does not exist."
+        success_msg: "Alloy env file exists."

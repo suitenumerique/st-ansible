@@ -1,0 +1,21 @@
+---
+- name: Converge
+  hosts: instance
+  become: true
+  tasks:
+    - name: "Import podman role"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.podman
+      vars:
+        st_podman_user: "testuser"
+        st_podman_uid: "1100"
+        st_podman_gid: "1100"
+
+    - name: "Deploy test application"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.podman
+        tasks_from: application.yml
+      vars:
+        st_podman_user: "testuser"
+        st_podman_application_name: "testapp"
+        st_podman_application_compose_template: "test.compose.yml.j2"

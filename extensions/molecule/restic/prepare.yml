@@ -1,0 +1,12 @@
+---
+- name: "Prepare."
+  hosts: instance
+  become: true
+  tasks:
+    - name: "Install dependencies."
+      ansible.builtin.apt:
+        name:
+          - gnupg
+          - wget
+          - acl
+        update_cache: true

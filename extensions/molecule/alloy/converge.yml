@@ -1,0 +1,10 @@
+---
+- name: Converge
+  hosts: instance
+  become: true
+  tasks:
+    - name: "Include alloy role"
+      ansible.builtin.include_role:
+        name: suitenumerique.st.alloy
+      vars:
+        st_alloy_config_template: minimal.j2

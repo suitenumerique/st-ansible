@@ -1,0 +1,187 @@
+---
+- name: Verify
+  hosts: instance
+  become: true
+  tasks:
+    - name: "Verify podman package is installed"
+      ansible.builtin.package_facts:
+        manager: auto
+
+    - name: "Assert podman package is installed"
+      ansible.builtin.assert:
+        that:
+          - "'podman' in ansible_facts.packages"
+        fail_msg: "podman package is not installed."
+        success_msg: "podman package is installed."
+
+    - name: "Assert podman-compose package is installed"
+      ansible.builtin.assert:
+        that:
+          - "'podman-compose' in ansible_facts.packages"
+        fail_msg: "podman-compose package is not installed."
+        success_msg: "podman-compose package is installed."
+
+    - name: "Verify testuser exists"
+      ansible.builtin.user:
+        name: "testuser"
+      register: testuser_info
+
+    - name: "Assert testuser exists with correct uid"
+      ansible.builtin.assert:
+        that:
+          - testuser_info.uid == 1100
+          - testuser_info.group == 1100
+          - testuser_info.home == "/opt/testuser"
+          - testuser_info.shell == "/bin/bash"
+        fail_msg: "testuser is not configured correctly."
+        success_msg: "testuser is configured correctly."
+
+    - name: "Verify testuser home directories"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: testuser_dirs
+      failed_when: false
+      loop:
+        - "/opt/testuser"
+        - "/opt/testuser/.config/containers"
+        - "/opt/testuser/.config/systemd/user"
+
+    - name: "Assert testuser home directories exist"
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: "Directory {{ item.item }} does not exist."
+        success_msg: "Directory {{ item.item }} exists."
+      loop: "{{ testuser_dirs.results }}"
+
+    - name: "Verify containers.conf exists"
+      ansible.builtin.stat:
+        path: "/opt/testuser/.config/containers/containers.conf"
+      register: containers_conf
+
+    - name: "Assert containers.conf exists"
+      ansible.builtin.assert:
+        that:
+          - containers_conf.stat.exists
+        fail_msg: "containers.conf does not exist."
+        success_msg: "containers.conf exists."
+
+    - name: "Verify podman.socket is enabled for testuser"  # noqa: command-instead-of-module
+      become: true
+      become_user: testuser
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.command:
+        cmd: "systemctl --user is-enabled podman.socket"
+      register: podman_socket_enabled
+      changed_when: false
+      failed_when: false
+
+    - name: "Verify podman.socket is active for testuser"  # noqa: command-instead-of-module
+      become: true
+      become_user: testuser
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.command:
+        cmd: "systemctl --user is-active podman.socket"
+      register: podman_socket_active
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert podman.socket is enabled"
+      ansible.builtin.assert:
+        that:
+          - podman_socket_enabled.rc == 0
+        fail_msg: "podman.socket is not enabled for testuser."
+        success_msg: "podman.socket is enabled for testuser."
+
+    - name: "Assert podman.socket service is running"
+      ansible.builtin.assert:
+        that:
+          - podman_socket_active.stdout == 'active'
+        fail_msg: "podman.socket service is not running."
+        success_msg: "podman.socket service is running."
+
+    - name: "Verify linger is enabled for testuser"
+      ansible.builtin.stat:
+        path: "/var/lib/systemd/linger/testuser"
+      register: linger_file
+
+    - name: "Assert linger is enabled"
+      ansible.builtin.assert:
+        that:
+          - linger_file.stat.exists
+        fail_msg: "Linger is not enabled for testuser."
+        success_msg: "Linger is enabled for testuser."
+
+    - name: "Verify test application directory exists"
+      ansible.builtin.stat:
+        path: "/opt/testuser/testapp"
+      register: testapp_dir
+
+    - name: "Assert test application directory exists"
+      ansible.builtin.assert:
+        that:
+          - testapp_dir.stat.exists
+        fail_msg: "Test application directory does not exist."
+        success_msg: "Test application directory exists."
+
+    - name: "Verify test compose file exists"
+      ansible.builtin.stat:
+        path: "/opt/testuser/testapp/compose.yaml"
+      register: test_compose_file
+
+    - name: "Assert test compose file exists"
+      ansible.builtin.assert:
+        that:
+          - test_compose_file.stat.exists
+        fail_msg: "Test compose file does not exist."
+        success_msg: "Test compose file exists."
+
+    - name: "Verify systemd service for test application"  # noqa: command-instead-of-module
+      become: true
+      become_user: testuser
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.command:
+        cmd: "systemctl --user is-enabled testapp"
+      register: testapp_enabled
+      changed_when: false
+      failed_when: false
+
+    - name: "Verify systemd service for test application is running"  # noqa: command-instead-of-module
+      become: true
+      become_user: testuser
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.command:
+        cmd: "systemctl --user is-active testapp"
+      register: testapp_active
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert test application service is enabled"
+      ansible.builtin.assert:
+        that:
+          - testapp_enabled.stdout == 'enabled'
+        fail_msg: "Test application service is not enabled."
+        success_msg: "Test application service is enabled."
+
+    - name: "Assert test application service is running"
+      ansible.builtin.assert:
+        that:
+          - testapp_active.stdout == 'active'
+        fail_msg: "Test application service is not running."
+        success_msg: "Test application service is running."
+
+    - name: "Verify compose file content"
+      ansible.builtin.slurp:
+        src: "/opt/testuser/testapp/compose.yaml"
+      register: compose_content
+
+    - name: "Assert compose file is not empty"
+      ansible.builtin.assert:
+        that:
+          - compose_content.content | length > 0
+        fail_msg: "Compose file is empty."
+        success_msg: "Compose file is not empty."

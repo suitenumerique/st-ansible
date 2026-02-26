@@ -1,0 +1,25 @@
+// {{ ansible_managed }}
+
+logging {
+  level = "info"
+}
+
+prometheus.exporter.unix "default" {
+  include_exporter_metrics = true
+  disable_collectors       = ["mdadm"]
+}
+
+prometheus.scrape "default" {
+  targets = array.concat(
+    prometheus.exporter.unix.default.targets,
+  )
+  scrape_interval = "10s"
+
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.remote_write "default" {
+  endpoint {
+    url = "http://localhost:8080"
+  }
+}

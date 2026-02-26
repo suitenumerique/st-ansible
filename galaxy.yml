@@ -12,7 +12,9 @@ homepage: https://suiteterritoriale.anct.gouv.fr/
 tags: ["suitenumerique", "suiteterritoriale", "linux"]
 version: 0.0.11
 description: Installe, configure et pilote les composants de La Suite Territoriale sur des systèmes Debian.
-dependencies: {}
+dependencies:
+  ansible.posix: "2.1.0"
+  containers.podman: "1.19.0"
 build_ignore:
   - .gitignore
   - .ansible-lint

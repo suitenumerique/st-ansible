@@ -10,13 +10,7 @@ git clone git@github.com:suitenumerique/st-ansible.git ~/git/ansible_collections
 
 ## Linting
 
-You can install `ansible-lint` for linting :
-
-```bash
-pipx install ansible-lint
-```
-
-Then you can use the Makefile :
+We use `ansible-lint` for linting (contained in `requirements.txt`), you can use the Makefile :
 
 ```bash
 make lint
@@ -32,15 +26,29 @@ make test.sanity
 
 For more information about sanity tests, unit tests and integration tests, see [Testing Collections](https://docs.ansible.com/ansible/latest/dev_guide/developing_collections_testing.html#testing-collections).
 
-## Documentation
+## Molecule Tests
 
-To generate the documentation you can install `aar-doc` :
+You need to install vagrant and libvirt to run molecule tests:
 
 ```bash
-pipx install aar-doc
+apt install -y vagrant libvirt-daemon-system
 ```
 
-Then fill in `meta/main.yml` if not already and `meta/argument_specs.yml` with your variables ([more info](https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_reuse_roles.html#role-argument-validation)).
+You can then run Molecule tests to verify roles:
+
+```bash
+make molecule
+```
+
+To run tests for a specific role:
+
+```bash
+make molecule role=restic
+```
+
+## Documentation
+
+To generate the documentation you can install `aar-doc` (contained in `requirements.txt`), then fill in `meta/main.yml` if not already and `meta/argument_specs.yml` with your variables ([more info](https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_reuse_roles.html#role-argument-validation)).
 
 Then use the Makefile :
 

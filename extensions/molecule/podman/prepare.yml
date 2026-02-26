@@ -1,0 +1,10 @@
+---
+- name: Prepare
+  hosts: instance
+  become: true
+  tasks:
+    - name: "Install acl for vagrant box default setup"
+      ansible.builtin.apt:
+        name:
+          - acl
+        update_cache: true

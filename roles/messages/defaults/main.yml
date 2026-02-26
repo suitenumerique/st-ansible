@@ -20,6 +20,8 @@ st_messages_backend_env: ''
 st_messages_backend_run_migrations: true
 # Local path to the custom template to use for messages env file.
 st_messages_frontend_env_template: messages/frontend_env.j2
+# Content of the default frontend_env_template, not used if st_messages_frontend_env_template is defined.
+st_messages_frontend_env: ''
 # Triggers the installation of the messages workers
 st_messages_workers_enabled: false
 # Remote path to the base directory for messages workers.
