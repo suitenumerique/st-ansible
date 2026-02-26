@@ -195,5 +195,10 @@ argument_specs:
         default: "127.0.0.1:58080"
       st_messages_sdnotify:
         type: "str"
-        description: "The sdnotify mode to use. The healthchecks have been removed temporarily, remove this when the healthchecks are back."
+        description: "The systemd notification mode for Podman containers. Controls how the container signals readiness to systemd."
         default: "container"
+        choices:
+          - container
+          - conmon
+          - ignore
+          - healthy
