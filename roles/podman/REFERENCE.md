@@ -38,6 +38,27 @@ Installs and configures the podman rootless base for La Suite Territoriale appli
 | st_podman_application_sdnotify | Configures podman to send a systemd-notify to the systemd unit either when the container is started or when the container is healthy. Our default is `healthy`, which means we have to configure a healthcheck for every service of every compose file. See https://docs.podman.io/en/stable/markdown/podman-run.1.html#sdnotify-container-conmon-healthy-ignore | str | no | healthy |
 | st_podman_application_restart_policy | The restart policy to apply to the systemd unit of the application. | str | no | on-abnormal |
 
+#### Choices for main > st_podman_application_sdnotify
+
+|Choice|
+|---|
+| container |
+| conmon |
+| ignore |
+| healthy |
+
+#### Choices for main > st_podman_application_restart_policy
+
+|Choice|
+|---|
+| no |
+| on-success |
+| on-failure |
+| on-abnormal |
+| on-watchdog |
+| on-abort |
+| always |
+
 
 
 ## Dependencies
