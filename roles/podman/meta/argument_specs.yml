@@ -65,3 +65,20 @@ argument_specs:
           - "Our default is `healthy`, which means we have to configure a healthcheck for every service of every compose file."
           - "See https://docs.podman.io/en/stable/markdown/podman-run.1.html#sdnotify-container-conmon-healthy-ignore"
         default: "healthy"
+        choices:
+          - container
+          - conmon
+          - ignore
+          - healthy
+      st_podman_application_restart_policy:
+        type: "str"
+        description: "The restart policy to apply to the systemd unit of the application."
+        default: "on-abnormal"
+        choices:
+          - "no"
+          - "on-success"
+          - "on-failure"
+          - "on-abnormal"
+          - "on-watchdog"
+          - "on-abort"
+          - "always"
