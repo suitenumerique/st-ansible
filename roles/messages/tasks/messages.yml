@@ -27,6 +27,7 @@
     st_podman_user: "messages"
     st_podman_application_name: "messages"
     st_podman_application_compose_template: "{{ st_messages_compose_template }}"
+    st_podman_application_sdnotify: "{{ st_messages_sdnotify }}"
 
 - name: "Play messages migrations."
   become: true
