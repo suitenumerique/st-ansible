@@ -24,3 +24,4 @@
     st_podman_user: "messages"
     st_podman_application_name: "workers"
     st_podman_application_compose_template: "{{ st_messages_workers_compose_template }}"
+    st_podman_application_sdnotify: "{{ st_messages_sdnotify }}"

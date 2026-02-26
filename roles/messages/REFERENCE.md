@@ -66,6 +66,16 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mpa_compose_template | Local path to the custom template to use for mpa compose file. | str | no | mpa/compose.yaml.j2 |
 | st_messages_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
 | st_messages_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:58080 |
+| st_messages_sdnotify | The systemd notification mode for Podman containers. Controls how the container signals readiness to systemd. | str | no | container |
+
+#### Choices for main > st_messages_sdnotify
+
+|Choice|
+|---|
+| container |
+| conmon |
+| ignore |
+| healthy |
 
 
 

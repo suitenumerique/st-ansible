@@ -193,3 +193,12 @@ argument_specs:
         type: "str"
         description: "The host published port of the cadvisor container."
         default: "127.0.0.1:58080"
+      st_messages_sdnotify:
+        type: "str"
+        description: "The systemd notification mode for Podman containers. Controls how the container signals readiness to systemd."
+        default: "container"
+        choices:
+          - container
+          - conmon
+          - ignore
+          - healthy
