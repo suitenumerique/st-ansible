@@ -10,6 +10,8 @@ st_messages_tag: main
 st_messages_enabled: false
 # Remote path to the base directory for messages app.
 st_messages_dir: /opt/messages/messages
+# The systemd notification mode for Podman containers. Controls how the container signals readiness to systemd.
+st_messages_sdnotify: conmon
 # Local path to the custom template to use for messages compose file.
 st_messages_compose_template: messages/compose.yaml.j2
 # Local path to the custom template to use for messages env file.
@@ -79,5 +81,3 @@ st_messages_mpa_compose_template: mpa/compose.yaml.j2
 st_messages_cadvisor_enabled: false
 # The host published port of the cadvisor container.
 st_messages_cadvisor_port: '127.0.0.1:58080'
-# The systemd notification mode for Podman containers. Controls how the container signals readiness to systemd.
-st_messages_sdnotify: container

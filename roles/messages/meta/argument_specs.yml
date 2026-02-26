@@ -27,6 +27,15 @@ argument_specs:
         type: "str"
         description: "Remote path to the base directory for messages app."
         default: "/opt/messages/messages"
+      st_messages_sdnotify:
+        type: "str"
+        description: "The systemd notification mode for Podman containers. Controls how the container signals readiness to systemd."
+        default: "conmon"
+        choices:
+          - container
+          - conmon
+          - ignore
+          - healthy
       st_messages_compose_template:
         type: "str"
         description: "Local path to the custom template to use for messages compose file."
@@ -194,12 +203,3 @@ argument_specs:
         type: "str"
         description: "The host published port of the cadvisor container."
         default: "127.0.0.1:58080"
-      st_messages_sdnotify:
-        type: "str"
-        description: "The systemd notification mode for Podman containers. Controls how the container signals readiness to systemd."
-        default: "container"
-        choices:
-          - container
-          - conmon
-          - ignore
-          - healthy

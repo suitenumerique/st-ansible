@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.messages
-Version: 0.0.11
+Version: 0.0.12
 
 This role deploys the Messages applications from La Suite Territoriale on a rootless podman base on Debian systems.
 
@@ -27,6 +27,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_tag | Tag of the messages docker images to deploy. | str | no | main |
 | st_messages_enabled | Triggers the installation of the messages application. | bool | no | False |
 | st_messages_dir | Remote path to the base directory for messages app. | str | no | /opt/messages/messages |
+| st_messages_sdnotify | The systemd notification mode for Podman containers. Controls how the container signals readiness to systemd. | str | no | conmon |
 | st_messages_compose_template | Local path to the custom template to use for messages compose file. | str | no | messages/compose.yaml.j2 |
 | st_messages_backend_env_template | Local path to the custom template to use for messages env file. | str | no | messages/backend_env.j2 |
 | st_messages_backend_env | Content of the default backend_env_template, not used if st_messages_backend_env_template is defined. | str | no |  |
@@ -66,7 +67,6 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mpa_compose_template | Local path to the custom template to use for mpa compose file. | str | no | mpa/compose.yaml.j2 |
 | st_messages_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
 | st_messages_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:58080 |
-| st_messages_sdnotify | The systemd notification mode for Podman containers. Controls how the container signals readiness to systemd. | str | no | container |
 
 #### Choices for main > st_messages_sdnotify
 
