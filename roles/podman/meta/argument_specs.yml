@@ -55,6 +55,13 @@ argument_specs:
         type: "str"
         description: "The permissions to apply to the base directory to deploy the application compose to."
         default: "0750"
+      st_podman_application_files:
+        type: "list"
+        elements: "dict"
+        description:
+          - "Additional files needed for deployment."
+          - "Could be an env file, a configuration file mounted in the container or anything else"
+          - "You don't need to create the directories - the role strips them from the path and creates them on the fly."
       st_podman_application_compose_template:
         type: "str"
         description: "Local path to the docker compose template for the application."

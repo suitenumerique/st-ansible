@@ -1,7 +1,8 @@
 {{ ansible_managed | comment }}
 [Unit]
 Description={{ st_podman_application_name }} on rootless podman with compose file.
-After=podman.socket
+Wants=network-online.target podman.socket
+After=network-online.target podman.socket
 
 [Service]
 Type=notify
