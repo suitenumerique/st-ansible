@@ -1,11 +1,69 @@
 ---
-- name: "Ensure {{ st_podman_application_name }} application dir permissions."
+- name: "Ensure {{ st_podman_application_name }} application directory."
   ansible.builtin.file:
     name: "{{ st_podman_application_dir }}"
     owner: "{{ st_podman_user }}"
     group: "{{ st_podman_group }}"
     mode: "{{ st_podman_application_dir_mode }}"
     state: directory
+
+# INFO: Rootless podman maps UIDs through subuids. Container UID 888 is actually subuid_start + 888.
+# We get them there in case the user needs to give permission to the files to a container user through container_uid / gid.
+# This allows us to give proper in-container permissions to directories without having to `podman unshare` or some other crap.
+- name: "Get subuid start for {{ st_podman_user }}."
+  changed_when: false
+  ansible.builtin.shell:
+    cmd: "awk -F: '$1 == \"{{ st_podman_user }}\" {print $2}' /etc/subuid"
+  register: _subuid_start
+
+- name: "Get subgid start for {{ st_podman_group }}."
+  changed_when: false
+  ansible.builtin.shell:
+    cmd: "awk -F: '$1 == \"{{ st_podman_group }}\" {print $2}' /etc/subgid"
+  register: _subgid_start
+
+- name: "Set subuid/subgid facts for {{ st_podman_user }}."
+  ansible.builtin.set_fact:
+    st_podman_subuid_start: "{{ _subuid_start.stdout | int }}"
+    st_podman_subgid_start: "{{ _subgid_start.stdout | int }}"
+
+# INFO: Users only give the file list, but ansible does not automatically create the parent directories.
+# The goal here is to get the path with `| dirname` and create the directories.
+# We don't really have an easy and clean way to `unique` the list so we may loop multiple times over the same dir, which is fine-ish for a `file` task.
+
+# INFO: Example list:
+# st_podman_application_files:
+#   - src: foo.conf.j2
+#     dest config/foo.conf # will create the "{{ st_podman_application_dir }}/config" directory
+#     dir_mode: "0700"
+#     mode: "0600"
+#     container_uid: 999   # will chmod the owner to uid 999 inside the container
+#     container_gid: 999
+- name: "Ensure {{ st_podman_application_name }} application files directories."
+  when:
+    - item.when | default(true)
+    - item.dest | dirname | length > 0
+  ansible.builtin.file:
+    path: "{{ st_podman_application_dir }}/{{ item.dest | dirname }}"
+    owner: "{{ ((item.container_uid | int) + (st_podman_subuid_start | int)) if item.container_uid is defined else item.owner | default(st_podman_user) }}"
+    group: "{{ ((item.container_gid | int) + (st_podman_subgid_start | int)) if item.container_gid is defined else item.group | default(st_podman_group) }}"
+    mode: "{{ item.dir_mode | default('0700') }}"
+    state: directory
+  loop: "{{ st_podman_application_files }}"
+  loop_control:
+    label: "{{ item.dest | dirname }}"
+
+- name: "Deploy {{ st_podman_application_name }} application files."
+  when: item.when | default(true)
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ st_podman_application_dir }}/{{ item.dest }}"
+    owner: "{{ ((item.container_uid | int) + (st_podman_subuid_start | int)) if item.container_uid is defined else item.owner | default(st_podman_user) }}"
+    group: "{{ ((item.container_gid | int) + (st_podman_subgid_start | int)) if item.container_gid is defined else item.group | default(st_podman_group) }}"
+    mode: "{{ item.mode | default('0600') }}"
+  loop: "{{ st_podman_application_files }}"
+  notify:
+    - "systemctl --user restart {{ st_podman_application_name }}"
 
 - name: "Deploy {{ st_podman_application_name }} application compose file."
   ansible.builtin.template:

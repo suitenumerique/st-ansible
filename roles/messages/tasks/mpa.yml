@@ -1,71 +1,20 @@
 ---
-- name: "Ensure mpa application directories."
-  ansible.builtin.file:
-    name: "{{ item }}"
-    owner: "messages"
-    group: "messages"
-    mode: "0755"
-    state: directory
-  loop:
-    - "{{ st_messages_mpa_dir }}/rspamd_config"
-    - "{{ st_messages_mpa_dir }}/rspamd_config/local.d"
-    - "{{ st_messages_mpa_dir }}/rspamd_config/override.d"
-    - "{{ st_messages_mpa_dir }}/unbound_config"
-    - "{{ st_messages_mpa_dir }}/clamav_config"
-    - "{{ st_messages_mpa_dir }}/nginx_config"
+# Don't specify permissions and owner here because it's get owned by the unbound user subuid inside the container
+# - { src: "{{ st_messages_mpa_unbound_config_template }}", dest: unbound_config/unbound.conf, mode: omit, dir_mode: omit }
 
-- name: "Setup default rspamd configuration templates."
+- name: "Setup default mpa configuration templates."
   ansible.builtin.set_fact:
-    rspamd_default_templates:
-      - { src: mpa/rspamd/worker-controller.inc.j2, dest: override.d/worker-controller.inc }
-      - { src: mpa/rspamd/worker-proxy.inc.j2, dest: override.d/worker-proxy.inc }
-      - { src: mpa/rspamd/options.inc.j2, dest: local.d/options.inc }
-      - { src: mpa/rspamd/logging.inc.j2, dest: local.d/logging.inc }
-      - { src: mpa/rspamd/antivirus.conf.j2, dest: local.d/antivirus.conf }
-      - { src: mpa/rspamd/multimap.conf.j2, dest: local.d/multimap.conf }
-      - { src: mpa/rspamd/history_redis.conf.j2, dest: local.d/history_redis.conf }
-
-- name: "Deploy redis.conf rspamd configuration for local valkey."
-  when: st_messages_mpa_valkey_enabled
-  ansible.builtin.set_fact:
-    rspamd_default_templates: "{{ rspamd_default_templates + [{'src': 'mpa/rspamd/redis.conf.j2', 'dest': 'local.d/redis.conf'}] }}"
-
-- name: "Deploy rspamd configuration files."
-  ansible.builtin.template:
-    src: "{{ item.src }}"
-    dest: "{{ st_messages_mpa_dir }}/rspamd_config/{{ item.dest }}"
-    owner: "messages"
-    group: "messages"
-    mode: "0644"
-  notify: "systemctl --user restart mpa"
-  loop: "{{ rspamd_default_templates | community.general.lists_mergeby(st_messages_mpa_rspamd_config_templates, 'dest') }}"
-
-# Don't specify permissions and owner here because it's get owned by the
-# unbound user subuid inside the container
-- name: "Deploy unbound configuration file." # noqa: risky-file-permissions
-  ansible.builtin.template:
-    src: "{{ st_messages_mpa_unbound_config_template }}"
-    dest: "{{ st_messages_mpa_dir }}/unbound_config/unbound.conf"
-  notify: "systemctl --user restart mpa"
-
-- name: "Deploy clamav configuration file."
-  ansible.builtin.template:
-    src: "{{ st_messages_mpa_clamav_config_template }}"
-    dest: "{{ st_messages_mpa_dir }}/clamav_config/clamd.conf"
-    owner: "messages"
-    group: "messages"
-    mode: "0644"
-  notify: "systemctl --user restart mpa"
-
-- name: "Deploy nginx configuration file."
-  when: st_messages_mpa_auth_bearer is defined and st_messages_mpa_auth_bearer | length > 0
-  ansible.builtin.template:
-    src: "mpa/nginx.conf.j2"
-    dest: "{{ st_messages_mpa_dir }}/nginx_config/nginx.conf"
-    owner: "messages"
-    group: "messages"
-    mode: "0600"
-  notify: "systemctl --user restart mpa"
+    mpa_base_files:
+      - { src: mpa/rspamd/worker-controller.inc.j2, dest: rspamd_config/override.d/worker-controller.inc, mode: "0644", dir_mode: "0755" }
+      - { src: mpa/rspamd/worker-proxy.inc.j2, dest: rspamd_config/override.d/worker-proxy.inc, mode: "0644", dir_mode: "0755" }
+      - { src: mpa/rspamd/options.inc.j2, dest: rspamd_config/local.d/options.inc, mode: "0644", dir_mode: "0755" }
+      - { src: mpa/rspamd/logging.inc.j2, dest: rspamd_config/local.d/logging.inc, mode: "0644", dir_mode: "0755" }
+      - { src: mpa/rspamd/antivirus.conf.j2, dest: rspamd_config/local.d/antivirus.conf, mode: "0644", dir_mode: "0755" }
+      - { src: mpa/rspamd/multimap.conf.j2, dest: rspamd_config/local.d/multimap.conf, mode: "0644", dir_mode: "0755" }
+      - { src: mpa/rspamd/history_redis.conf.j2, dest: rspamd_config/local.d/history_redis.conf, mode: "0644", dir_mode: "0755" }
+      - { src: "{{ st_messages_mpa_clamav_config_template }}", dest: clamav_config/clamd.conf, mode: "0644", dir_mode: "0755" }
+      - { src: "mpa/rspamd/redis.conf.j2", dest: rspamd_config/local.d/redis.conf, mode: "0644", dir_mode: "0755", when: st_messages_mpa_valkey_enabled }
+      - { src: "mpa/nginx.conf.j2", dest: nginx_config/nginx.conf, when: st_messages_mpa_auth_bearer is defined and st_messages_mpa_auth_bearer | length > 0 }
 
 - name: "Create mpa app"
   ansible.builtin.import_role:
@@ -75,3 +24,4 @@
     st_podman_user: "messages"
     st_podman_application_name: "mpa"
     st_podman_application_compose_template: "{{ st_messages_mpa_compose_template }}"
+    st_podman_application_files: "{{ mpa_base_files | community.general.lists_mergeby(st_messages_mpa_rspamd_config_templates, 'dest') }}"
