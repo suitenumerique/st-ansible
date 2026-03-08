@@ -3,16 +3,17 @@ dependency:
   name: galaxy
 
 driver:
-  name: vagrant
+  name: molecule-lima
 
 provisioner:
   name: ansible
+  config_options:
+    defaults:
+      callbacks_enabled: profile_tasks,timer
+      host_key_checking: false
 
 verifier:
   name: ansible
 
 platforms:
   - name: instance
-    box: debian/trixie64
-    memory: 512
-    cpus: 1
