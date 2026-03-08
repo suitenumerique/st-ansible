@@ -44,3 +44,11 @@ endif
 .PHONY: build
 build: clean
 	ansible-galaxy collection build --output-path build --force
+
+.PHONY: changelog.lint
+changelog.lint:
+	antsibull-changelog lint
+
+.PHONY: changelog.release
+changelog.release:
+	antsibull-changelog release
