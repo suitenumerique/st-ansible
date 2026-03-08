@@ -1,5 +1,5 @@
 ---
-name: CLI tests
+name: CLI - Tests
 permissions:
   contents: read
 on:

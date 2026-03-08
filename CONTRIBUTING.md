@@ -57,6 +57,42 @@ make docs
 make docs role=bla
 ```
 
+## Changelog
+
+This collection uses `antsibull-changelog` (contained in `requirements.txt`, configured in `changelogs/config.yaml`). The human-readable changelog is `CHANGELOG.md` at the repo root and is generated — never edit it by hand.
+
+Every pull request must add a fragment: a small YAML file in `changelogs/fragments/`. Scaffold one with the Makefile :
+
+```bash
+make changelog.fragment name=fix-rspamd-port
+```
+
+This creates `changelogs/fragments/fix-rspamd-port.yml`. Open it and fill in the relevant section(s), then remove the placeholder. Valid sections (each value is a list of Markdown strings): `major_changes`, `minor_changes`, `breaking_changes`, `deprecated_features`, `removed_features`, `security_fixes`, `bugfixes`, `known_issues`, plus `release_summary` and `trivial`. For example :
+
+```yaml
+bugfixes:
+  - Fixed the default rspamd controller port for single-host deployments.
+```
+
+The `st-cli` subproject shares the collection's version, so it shares this same changelog. Prefix cli entries so readers know the scope :
+
+```yaml
+minor_changes:
+  - "st-cli: added a --dry-run flag to the deploy command."
+```
+
+For changes that should NOT appear in the released changelog (CI tweaks, chores, refactors with no user-facing effect), use a `trivial:` fragment. It still satisfies the PR check but is dropped from the released changelog.
+
+Validate fragments locally before pushing :
+
+```bash
+make changelog.lint
+```
+
+A GitHub Actions "Changelog" workflow runs on every pull request: it lints the fragments and fails the PR if no fragment was added (a `trivial:` fragment counts).
+
+Maintainers roll the fragments into `CHANGELOG.md` at release time with `make changelog.release` (this consumes and deletes the fragments) — contributors do not run this.
+
 ## Build
 
 You can build the collection with the Makefile :

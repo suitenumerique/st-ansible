@@ -1,0 +1,22 @@
+ancestor: null
+releases:
+  0.1.0:
+    changes:
+      major_changes:
+      - (cli) added st-cli \#27
+      - (roles) refactor every uid, gid and ports to allow single-host deployments
+        \#26
+      minor_changes:
+      - (changelog) added antsibull-changelog config, Makefile targets and CI job
+        \#13
+      release_summary: 'Added st-cli to manage LST environments bootstraps and deployments,
+        refactored roles to make single-host deployments easier, started the CHANGELOG
+        dance.
+
+        '
+    fragments:
+    - add-antsibull-changelog.yml
+    - add-st-cli.yml
+    - refactor-single-host-deployments.yml
+    - release_summary.yml
+    release_date: '2026-07-21'

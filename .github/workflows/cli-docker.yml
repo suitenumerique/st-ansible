@@ -1,5 +1,5 @@
 ---
-name: Build CLI image
+name: CLI - Docker
 permissions:
   contents: read
   packages: write

@@ -2,7 +2,7 @@
 
 .PHONY: lint
 lint: lint.cli
-	ansible-lint -v --exclude cli/
+	ansible-lint -v --exclude cli/ --exclude changelogs/
 
 # Lint + format-check the st-cli (ruff), matching CI (cli-tests.yml).
 .PHONY: lint.cli
@@ -61,3 +61,39 @@ endif
 	sed -i -E 's/^version = ".*"/version = "$(version)"/' cli/pyproject.toml
 	sed -i -E 's/^__version__ = ".*"/__version__ = "$(version)"/' cli/st_cli/__init__.py
 	$(MAKE) docs
+
+# Scaffold a changelog fragment: make changelog.fragment name=fix-rspamd-port
+# Fill in the relevant section(s), then run: make changelog.lint
+.PHONY: changelog.fragment
+changelog.fragment:
+ifndef name
+	$(error name is required, e.g. make changelog.fragment name=fix-rspamd-port)
+endif
+	mkdir -p changelogs/fragments
+	f=changelogs/fragments/$(name).yml; \
+	if [ -e "$$f" ]; then echo "ERROR: $$f already exists"; exit 1; fi; \
+	if [ "$(name)" = release_summary ]; then \
+	  printf '%s\n' \
+	    '# Summary of the whole release, shown at the top of the changelog.' \
+	    'release_summary: |' \
+	    '  Describe this release here.' \
+	    > "$$f"; \
+	else \
+	  printf '%s\n' \
+	    '# Sections: major_changes, minor_changes, breaking_changes,' \
+	    '# deprecated_features, removed_features, security_fixes, bugfixes,' \
+	    '# known_issues, release_summary, trivial. Entries are Markdown strings.' \
+	    '# Use `trivial:` for changes that should NOT appear in the changelog.' \
+	    'minor_changes:' \
+	    '  - Describe your change here.' \
+	    > "$$f"; \
+	fi; \
+	echo "Created $$f"
+
+.PHONY: changelog.lint
+changelog.lint:
+	antsibull-changelog lint
+
+.PHONY: changelog.release
+changelog.release:
+	antsibull-changelog release
