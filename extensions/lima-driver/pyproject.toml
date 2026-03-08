@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "molecule-lima"
+dynamic = ["version"]
+description = "Molecule driver for Lima VM - Test Ansible roles on Linux"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Bastien Ogier", email = "bastien.ogier@ext.anct.gouv.fr"}
+]
+maintainers = [
+    {name = "Bastien Ogier", email = "bastien.ogier@ext.anct.gouv.fr"}
+]
+keywords = [
+    "ansible",
+    "molecule",
+    "testing",
+    "lima",
+    "virtualization",
+    "linux"
+]
+requires-python = ">=3.13"
+dependencies = [
+    "molecule>=6.0.0",
+    "ansible-core>=2.12.0",
+    "pyyaml>=5.1",
+    "jinja2>=2.11.3",
+]
+
+[project.entry-points."molecule.driver"]
+molecule-lima = "molecule_lima.driver:Lima"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["molecule_lima*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "molecule_lima.__version__" }

@@ -1,0 +1,34 @@
+---
+- name: Destroy Lima instances
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Check if instances exist
+      ansible.builtin.shell:
+        executable: /bin/bash
+        cmd: |
+          set -euo pipefail
+          limactl list --format '{{"{{.Name}}"}}' 2>/dev/null | grep -Fxq "{{ item.name }}" && echo "exists" || echo "not_found"
+      register: instance_checks
+      loop: "{{ molecule_yml.platforms }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Stop and delete Lima instances
+      ansible.builtin.command: |
+        limactl delete --force "{{ item.item.name }}"
+      loop: "{{ instance_checks.results }}"
+      when: item.stdout == "exists"
+      changed_when: true
+      failed_when: false
+
+    - name: Remove Lima configuration files
+      ansible.builtin.file:
+        path: "{{ molecule_ephemeral_directory }}/{{ item.name }}-config.yaml"
+        state: absent
+      loop: "{{ molecule_yml.platforms }}"
+
+    - name: Remove instance config
+      ansible.builtin.file:
+        path: "{{ molecule_ephemeral_directory }}/instance_config.yml"
+        state: absent
