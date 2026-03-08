@@ -11,9 +11,11 @@ test.sanity: clean
 .PHONY: molecule
 molecule:
 ifdef role
-	. extensions/molecule/.env.molecule && molecule test -s $(role)
+	molecule test -s $(role)
 else
-	. extensions/molecule/.env.molecule && molecule test --all
+	molecule create --all
+	molecule test --all --workers 4
+	molecule destroy --all
 endif
 
 .PHONY: test

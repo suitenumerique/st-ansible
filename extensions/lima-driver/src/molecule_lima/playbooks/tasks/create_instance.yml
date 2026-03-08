@@ -1,0 +1,124 @@
+---
+- name: Set instance variables
+  ansible.builtin.set_fact:
+    instance_name: "{{ instance.name }}"
+    lima_config_file: "{{ molecule_ephemeral_directory }}/{{ instance.name }}-config.yaml"
+    instance_image: "{{ instance.image | default('https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2') }}"
+
+- name: Create Lima configuration file
+  ansible.builtin.copy:
+    dest: "{{ lima_config_file }}"
+    content: |
+      # Lima configuration for Molecule testing - {{ instance.name }}
+      vmType: qemu
+
+      images:
+        - location: "{{ instance_image }}"
+          arch: x86_64
+
+      cpus: {{ instance.cpus | default(2) }}
+      memory: "{{ instance.memory | default('2GiB') }}"
+      disk: "{{ instance.disk | default('20GiB') }}"
+
+      mounts:
+        - location: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+          writable: false
+      {% if instance.mounts is defined %}
+      {% for mount in instance.mounts %}
+        - location: "{{ mount.location }}"
+          writable: {{ mount.writable | default(false) | lower }}
+      {% endfor %}
+      {% endif %}
+
+      provision:
+        - mode: system
+          script: |
+            #!/bin/bash
+            set -eux -o pipefail
+            export DEBIAN_FRONTEND=noninteractive
+
+            # Determine package manager
+            if command -v apt-get &> /dev/null; then
+              apt-get update
+              apt-get install -y python3 python3-pip python3-apt sudo curl git
+            fi
+
+            {% if instance.provision_script is defined %}
+            {{ instance.provision_script | indent(width=12, first=true) }}
+            {% endif %}
+    mode: '0644'
+
+- name: Check if Lima instance exists
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -euo pipefail
+      limactl list --format '{{"{{.Name}}"}}' 2>/dev/null | grep -Fxq "{{ instance_name }}" || echo "not_found"
+  register: instance_check
+  changed_when: false
+  failed_when: false
+
+- name: Get instance status if exists
+  ansible.builtin.shell: limactl list "{{ instance_name }}" --format '{{"{{.Status}}"}}'
+  register: instance_status
+  when: instance_check.stdout != "not_found"
+  changed_when: false
+  failed_when: false
+
+- name: Start existing Lima instance
+  ansible.builtin.command: limactl start "{{ instance_name }}"
+  when:
+    - instance_check.stdout != "not_found"
+    - instance_status.stdout is defined and instance_status.stdout != "Running"
+  changed_when: true
+
+- name: Create new Lima instance
+  ansible.builtin.command: |
+    limactl start --name="{{ instance_name }}" --tty=false "{{ lima_config_file }}"
+  when: instance_check.stdout == "not_found"
+  changed_when: true
+  register: create_result
+  async: 600
+  poll: 10
+
+- name: Wait for SSH to be ready
+  ansible.builtin.shell: |
+    timeout {{ ssh_timeout }} bash -c 'until limactl shell {{ instance_name }} echo ready 2>/dev/null; do sleep 2; done'
+  changed_when: false
+  retries: 3
+  delay: 5
+
+- name: Get SSH connection info
+  ansible.builtin.shell: limactl list "{{ instance_name }}" --format '{{"{{.SSHLocalPort}}"}}'
+  register: ssh_port
+  changed_when: false
+
+- name: Get SSH identity file
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -euo pipefail
+      grep IdentityFile {{ lookup('env', 'HOME') }}/.lima/{{ instance_name }}/ssh.config | \
+      head -1 | \
+      awk '{print $2}' | \
+      tr -d '"'
+  register: ssh_identity
+  changed_when: false
+
+- name: Store instance connection info
+  ansible.builtin.set_fact:
+    lima_instances: "{{ lima_instances | default({}) | combine({instance_name: {'ssh_port': ssh_port.stdout, 'ssh_key': ssh_identity.stdout}}) }}"
+    instance_config_data: "{{ instance_config_data | default([]) + [{'instance': instance_name, 'address': '127.0.0.1', 'port': ssh_port.stdout | int, 'user': lookup('env', 'USER'), 'identity_file': ssh_identity.stdout}] }}"
+
+- name: Test instance connectivity
+  ansible.builtin.command: |
+    limactl shell "{{ instance_name }}" python3 --version
+  register: connectivity_test
+  changed_when: false
+
+- name: Display instance info
+  ansible.builtin.debug:
+    msg:
+      - "Instance '{{ instance_name }}' is ready"
+      - "SSH: 127.0.0.1:{{ ssh_port.stdout }}"
+      - "Python: {{ connectivity_test.stdout }}"

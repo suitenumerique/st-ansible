@@ -1,0 +1,13 @@
+---
+- name: Check instance is running
+  ansible.builtin.shell: limactl list "{{ instance.name }}" --format '{{"{{.Status}}"}}'
+  register: status_check
+  changed_when: false
+  failed_when: status_check.stdout != "Running"
+
+- name: Validate SSH connectivity
+  ansible.builtin.command: |
+    limactl shell "{{ instance.name }}" echo "OK"
+  register: ssh_check
+  changed_when: false
+  failed_when: ssh_check.rc != 0
