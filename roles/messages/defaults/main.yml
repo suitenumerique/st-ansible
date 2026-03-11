@@ -10,8 +10,8 @@ st_messages_tag: main
 st_messages_enabled: false
 # Remote path to the base directory for messages app.
 st_messages_dir: /opt/messages/messages
-# The systemd notification mode for Podman containers. Controls how the container signals readiness to systemd.
-st_messages_sdnotify: conmon
+# Whether or not to trigger the rollback tasks if the messages deployment fails.
+st_messages_rollback_enabled: false
 # Local path to the custom template to use for messages compose file.
 st_messages_compose_template: messages/compose.yaml.j2
 # Local path to the custom template to use for messages env file.
@@ -32,6 +32,8 @@ st_messages_workers_dir: /opt/messages/workers
 st_messages_workers_env_template: workers/env.j2
 # Content of the default workers_env_template, not used if st_messages_workers_env_template is defined.
 st_messages_workers_env: '{{ st_messages_backend_env }}'
+# Whether or not to trigger the rollback tasks if the workers deployment fails.
+st_messages_workers_rollback_enabled: false
 # Local path to the custom template to use for messages workers compose file.
 st_messages_workers_compose_template: workers/compose.yaml.j2
 # Triggers the installation of the mta-in.
@@ -44,6 +46,8 @@ st_messages_mta_in_dir: /opt/messages/mta-in
 st_messages_mta_in_env_template: mta_in/env.j2
 # Local path to the custom template to use for mta-in compose file.
 st_messages_mta_in_compose_template: mta_in/compose.yaml.j2
+# Whether or not to trigger the rollback tasks if the mta-in deployment fails.
+st_messages_mta_in_rollback_enabled: false
 # Triggers the installation of the socks-proxy.
 st_messages_socks_proxy_enabled: false
 # Tag of the socks-proxy docker image to deploy.
@@ -54,6 +58,8 @@ st_messages_socks_proxy_dir: /opt/messages/socks-proxy
 st_messages_socks_proxy_env_template: socks_proxy/env.j2
 # Local path to the custom template to use for socks-proxy compose file.
 st_messages_socks_proxy_compose_template: socks_proxy/compose.yaml.j2
+# Whether or not to trigger the rollback tasks if the socks-proxy deployment fails.
+st_messages_socks_proxy_rollback_enabled: false
 # Triggers the installation of the mpa.
 st_messages_mpa_enabled: false
 # Remote path to the base directory for mpa app.
@@ -75,6 +81,8 @@ st_messages_mpa_valkey_enabled: true
 # The tag of the valkey docker image to use.
 # See https://hub.docker.com/r/valkey/valkey/tags.
 st_messages_mpa_valkey_tag: '8'
+# Whether or not to trigger the rollback tasks if the mpa deployment fails.
+st_messages_mpa_rollback_enabled: false
 # Local path to the custom template to use for mpa compose file.
 st_messages_mpa_compose_template: mpa/compose.yaml.j2
 # Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool.

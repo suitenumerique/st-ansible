@@ -27,15 +27,10 @@ argument_specs:
         type: "str"
         description: "Remote path to the base directory for messages app."
         default: "/opt/messages/messages"
-      st_messages_sdnotify:
-        type: "str"
-        description: "The systemd notification mode for Podman containers. Controls how the container signals readiness to systemd."
-        default: "conmon"
-        choices:
-          - container
-          - conmon
-          - ignore
-          - healthy
+      st_messages_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the messages deployment fails."
+        default: false
       st_messages_compose_template:
         type: "str"
         description: "Local path to the custom template to use for messages compose file."
@@ -80,6 +75,10 @@ argument_specs:
         type: "str"
         description: "Content of the default workers_env_template, not used if st_messages_workers_env_template is defined."
         default: "{{ st_messages_backend_env }}"
+      st_messages_workers_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the workers deployment fails."
+        default: false
       st_messages_workers_compose_template:
         type: "str"
         description: "Local path to the custom template to use for messages workers compose file."
@@ -113,6 +112,10 @@ argument_specs:
         type: "str"
         description: "Local path to the custom template to use for mta-in compose file."
         default: "mta_in/compose.yaml.j2"
+      st_messages_mta_in_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the mta-in deployment fails."
+        default: false
       st_messages_socks_proxy_enabled:
         type: "bool"
         description: "Triggers the installation of the socks-proxy."
@@ -136,6 +139,10 @@ argument_specs:
         type: "str"
         description: "Local path to the custom template to use for socks-proxy compose file."
         default: "socks_proxy/compose.yaml.j2"
+      st_messages_socks_proxy_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the socks-proxy deployment fails."
+        default: false
       st_messages_mpa_enabled:
         type: "bool"
         description: "Triggers the installation of the mpa."
@@ -191,6 +198,10 @@ argument_specs:
           - "The tag of the valkey docker image to use."
           - "See https://hub.docker.com/r/valkey/valkey/tags."
         default: "8"
+      st_messages_mpa_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the mpa deployment fails."
+        default: false
       st_messages_mpa_compose_template:
         type: "str"
         description: "Local path to the custom template to use for mpa compose file."

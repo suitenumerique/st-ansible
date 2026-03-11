@@ -27,7 +27,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_tag | Tag of the messages docker images to deploy. | str | no | main |
 | st_messages_enabled | Triggers the installation of the messages application. | bool | no | False |
 | st_messages_dir | Remote path to the base directory for messages app. | str | no | /opt/messages/messages |
-| st_messages_sdnotify | The systemd notification mode for Podman containers. Controls how the container signals readiness to systemd. | str | no | conmon |
+| st_messages_rollback_enabled | Whether or not to trigger the rollback tasks if the messages deployment fails. | bool | no | False |
 | st_messages_compose_template | Local path to the custom template to use for messages compose file. | str | no | messages/compose.yaml.j2 |
 | st_messages_backend_env_template | Local path to the custom template to use for messages env file. | str | no | messages/backend_env.j2 |
 | st_messages_backend_env | Content of the default backend_env_template, not used if st_messages_backend_env_template is defined. | str | no |  |
@@ -38,6 +38,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_workers_dir | Remote path to the base directory for messages workers. | str | no | /opt/messages/workers |
 | st_messages_workers_env_template | Local path to the custom template to use for messages workers env file. | str | no | workers/env.j2 |
 | st_messages_workers_env | Content of the default workers_env_template, not used if st_messages_workers_env_template is defined. | str | no | {{ st_messages_backend_env }} |
+| st_messages_workers_rollback_enabled | Whether or not to trigger the rollback tasks if the workers deployment fails. | bool | no | False |
 | st_messages_workers_compose_template | Local path to the custom template to use for messages workers compose file. | str | no | workers/compose.yaml.j2 |
 | st_messages_mta_in_enabled | Triggers the installation of the mta-in. | bool | no | False |
 | st_messages_mta_in_tag | Tag of the mta-in docker image to deploy. | str | no | main |
@@ -46,12 +47,14 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mta_in_env | Content of the default mta_in_env_template, not used if st_messages_mta_in_env_template is defined. | str | no |  |
 | st_messages_mta_in_starttls_certificate_path | Path of the starttls certificate on the remote host. The certificate must be in the smtpd_tls_chain_files format, see https://www.postfix.org/postconf.5.html#smtpd_tls_chain_files. The file must be accessible by the `messages` user. | str | no |  |
 | st_messages_mta_in_compose_template | Local path to the custom template to use for mta-in compose file. | str | no | mta_in/compose.yaml.j2 |
+| st_messages_mta_in_rollback_enabled | Whether or not to trigger the rollback tasks if the mta-in deployment fails. | bool | no | False |
 | st_messages_socks_proxy_enabled | Triggers the installation of the socks-proxy. | bool | no | False |
 | st_messages_socks_proxy_tag | Tag of the socks-proxy docker image to deploy. | str | no | main |
 | st_messages_socks_proxy_dir | Remote path to the base directory for socks-proxy app. | str | no | /opt/messages/socks-proxy |
 | st_messages_socks_proxy_env_template | Local path to the custom template to use for socks-proxy env file. | str | no | socks_proxy/env.j2 |
 | st_messages_socks_proxy_env | Content of the default socks_proxy_env_template, not used if st_messages_socks_proxy_env_template is defined. | str | no |  |
 | st_messages_socks_proxy_compose_template | Local path to the custom template to use for socks-proxy compose file. | str | no | socks_proxy/compose.yaml.j2 |
+| st_messages_socks_proxy_rollback_enabled | Whether or not to trigger the rollback tasks if the socks-proxy deployment fails. | bool | no | False |
 | st_messages_mpa_enabled | Triggers the installation of the mpa. | bool | no | False |
 | st_messages_mpa_dir | Remote path to the base directory for mpa app. | str | no | /opt/messages/mpa |
 | st_messages_mpa_auth_bearer | Add an optional nginx container in front of the rspamd worker with a simple authorization check. The value of this variable should then be used as a Bearer token when calling the /checkv2 rspamd endpoint. | str | no |  |
@@ -64,18 +67,10 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mpa_clamav_config_template | Local path to the clamd.conf template. | str | no | mpa/clamd.conf.j2 |
 | st_messages_mpa_valkey_enabled | Triggers the installation of a local valkey instance, which also deploys a default redis.conf rspamd config. | bool | no | True |
 | st_messages_mpa_valkey_tag | The tag of the valkey docker image to use. See https://hub.docker.com/r/valkey/valkey/tags. | str | no | 8 |
+| st_messages_mpa_rollback_enabled | Whether or not to trigger the rollback tasks if the mpa deployment fails. | bool | no | False |
 | st_messages_mpa_compose_template | Local path to the custom template to use for mpa compose file. | str | no | mpa/compose.yaml.j2 |
 | st_messages_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
 | st_messages_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:58080 |
-
-#### Choices for main > st_messages_sdnotify
-
-|Choice|
-|---|
-| container |
-| conmon |
-| ignore |
-| healthy |
 
 
 
