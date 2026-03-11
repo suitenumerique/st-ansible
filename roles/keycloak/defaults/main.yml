@@ -16,6 +16,8 @@ st_keycloak_compose_template: keycloak/compose.yaml.j2
 st_keycloak_port: '8080'
 # When using the default compose template, specify the `command` to use to start keycloak.
 st_keycloak_start_command: start --optimized
+# Whether or not to trigger the rollback tasks if the keycloak deployment fails.
+st_keycloak_rollback_enabled: false
 # Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server.
 st_keycloak_cadvisor_enabled: false
 # The host published port of the cadvisor container.

@@ -42,6 +42,10 @@ argument_specs:
         type: "str"
         description: "When using the default compose template, specify the `command` to use to start keycloak."
         default: "start --optimized"
+      st_keycloak_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the keycloak deployment fails."
+        default: false
       st_keycloak_cadvisor_enabled:
         type: "bool"
         description: "Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server."

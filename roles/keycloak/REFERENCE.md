@@ -31,6 +31,7 @@ Installs and configures the keycloak application from La Suite Territoriale on D
 | st_keycloak_compose_template | Local path to the custom template to use for keycloak compose file. | str | no | keycloak/compose.yaml.j2 |
 | st_keycloak_port | The port to open on the host, redirecting to port 8080 in the container. It can also specify the ip address, something like 127.0.0.1:8080. | str | no | 8080 |
 | st_keycloak_start_command | When using the default compose template, specify the `command` to use to start keycloak. | str | no | start --optimized |
+| st_keycloak_rollback_enabled | Whether or not to trigger the rollback tasks if the keycloak deployment fails. | bool | no | False |
 | st_keycloak_cadvisor_enabled | Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server. | bool | no | False |
 | st_keycloak_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:58080 |
 
