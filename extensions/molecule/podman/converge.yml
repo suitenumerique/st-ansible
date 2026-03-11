@@ -19,3 +19,8 @@
         st_podman_user: "testuser"
         st_podman_application_name: "testapp"
         st_podman_application_compose_template: "test.compose.yml.j2"
+        st_podman_application_files:
+          - src: "test-app-env.j2"
+            dest: "config/app.env"
+            mode: "0640"
+            dir_mode: "0750"

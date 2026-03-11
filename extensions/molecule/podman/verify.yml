@@ -185,3 +185,58 @@
           - compose_content.content | length > 0
         fail_msg: "Compose file is empty."
         success_msg: "Compose file is not empty."
+
+    - name: "Verify application env file exists"
+      ansible.builtin.stat:
+        path: "/opt/testuser/testapp/config/app.env"
+      register: app_env_file
+
+    - name: "Assert application env file exists"
+      ansible.builtin.assert:
+        that:
+          - app_env_file.stat.exists
+        fail_msg: "Application env file does not exist."
+        success_msg: "Application env file exists."
+
+    - name: "Assert application env file has correct permissions"
+      ansible.builtin.assert:
+        that:
+          - app_env_file.stat.mode | int == 640
+        fail_msg: "Application env file has incorrect permissions."
+        success_msg: "Application env file has correct permissions."
+
+    - name: "Verify application config directory exists"
+      ansible.builtin.stat:
+        path: "/opt/testuser/testapp/config"
+      register: app_config_dir
+
+    - name: "Assert application config directory exists"
+      ansible.builtin.assert:
+        that:
+          - app_config_dir.stat.exists
+        fail_msg: "Application config directory does not exist."
+        success_msg: "Application config directory exists."
+
+    - name: "Verify application config directory permissions"
+      ansible.builtin.stat:
+        path: "/opt/testuser/testapp/config"
+      register: app_config_dir_perms
+
+    - name: "Assert application config directory has correct permissions"
+      ansible.builtin.assert:
+        that:
+          - app_config_dir_perms.stat.mode | int == 750
+        fail_msg: "Application config directory has incorrect permissions."
+        success_msg: "Application config directory has correct permissions."
+
+    - name: "Verify application env file content"
+      ansible.builtin.slurp:
+        src: "/opt/testuser/testapp/config/app.env"
+      register: app_env_content
+
+    - name: "Assert application env file content is correct"
+      ansible.builtin.assert:
+        that:
+          - app_env_content.content | b64decode == "TEST_ENV_VAR=hello_world\nTEST_ANOTHER_VAR=12345\n"
+        fail_msg: "Application env file content is incorrect."
+        success_msg: "Application env file content is correct."

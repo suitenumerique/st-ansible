@@ -22,3 +22,5 @@ st_podman_application_dir_mode: '0750'
 st_podman_application_sdnotify: healthy
 # The restart policy to apply to the systemd unit of the application.
 st_podman_application_restart_policy: on-abnormal
+# Whether or not to trigger the rollback tasks if the deployment fails.
+st_podman_application_rollback_enabled: false

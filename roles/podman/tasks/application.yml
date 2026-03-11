@@ -1,11 +1,91 @@
 ---
-- name: "Ensure {{ st_podman_application_name }} application dir permissions."
+- name: "Clean up {{ st_podman_application_name }} application rollback directory."
+  when: st_podman_application_rollback_enabled
+  ansible.builtin.file:
+    path: "{{ st_podman_application_dir }}.rollback"
+    state: absent
+
+- name: "Check if {{ st_podman_application_name }} application directory exists for backup."
+  when: st_podman_application_rollback_enabled
+  ansible.builtin.stat:
+    path: "{{ st_podman_application_dir }}"
+  register: app_dir_stat
+
+# INFO: We use `cp` here because the copy module breaks ownership in every case
+- name: "Backup {{ st_podman_application_name }} application directory for potential rollback."
+  when: st_podman_application_rollback_enabled and app_dir_stat.stat.exists
+  ansible.builtin.command:
+    cmd: "cp -a {{ st_podman_application_dir }}/. {{ st_podman_application_dir }}.rollback/"
+  changed_when: true
+
+- name: "Ensure {{ st_podman_application_name }} application directory."
   ansible.builtin.file:
     name: "{{ st_podman_application_dir }}"
     owner: "{{ st_podman_user }}"
     group: "{{ st_podman_group }}"
     mode: "{{ st_podman_application_dir_mode }}"
     state: directory
+
+# INFO: Rootless podman maps UIDs through subuids. Container UID 888 is actually subuid_start + 888.
+# We get them there in case the user needs to give permission to the files to a container user through container_uid / gid.
+# This allows us to give proper in-container permissions to directories without having to `podman unshare` or some other crap.
+- name: "Get subuid start for {{ st_podman_user }}."
+  changed_when: false
+  ansible.builtin.shell:
+    cmd: "awk -F: '$1 == \"{{ st_podman_user }}\" {print $2}' /etc/subuid"
+  register: _subuid_start
+
+- name: "Get subgid start for {{ st_podman_group }}."
+  changed_when: false
+  ansible.builtin.shell:
+    cmd: "awk -F: '$1 == \"{{ st_podman_group }}\" {print $2}' /etc/subgid"
+  register: _subgid_start
+
+- name: "Set subuid/subgid facts for {{ st_podman_user }}."
+  ansible.builtin.set_fact:
+    st_podman_subuid_start: "{{ _subuid_start.stdout | int }}"
+    st_podman_subgid_start: "{{ _subgid_start.stdout | int }}"
+
+# INFO: Users only give the file list, but ansible does not automatically create the parent directories.
+# The goal here is to get the path with `| dirname` and create the directories.
+# We don't really have an easy and clean way to `unique` the list so we may loop multiple times over the same dir, which is fine-ish for a `file` task.
+# Example list:
+# st_podman_application_files:
+#   - src: foo.conf.j2
+#     dest config/foo.conf # will create the "{{ st_podman_application_dir }}/config" directory
+#     dir_mode: "0700"
+#     mode: "0600"
+#     container_uid: 999   # will chmod the owner to uid 999 inside the container
+#     container_gid: 999
+#     when: "{{ foo_enabled }}"
+- name: "Ensure {{ st_podman_application_name }} application files directories."
+  when:
+    - st_podman_application_files is defined and st_podman_application_files | length > 0
+    - item.dest | dirname | length > 0
+    - item.when | default(true)
+  ansible.builtin.file:
+    path: "{{ st_podman_application_dir }}/{{ item.dest | dirname }}"
+    owner: "{{ ((item.container_uid | int) + (st_podman_subuid_start | int)) if item.container_uid is defined else item.owner | default(st_podman_user) }}"
+    group: "{{ ((item.container_gid | int) + (st_podman_subgid_start | int)) if item.container_gid is defined else item.group | default(st_podman_group) }}"
+    mode: "{{ item.dir_mode | default('0700') }}"
+    state: directory
+  loop: "{{ st_podman_application_files }}"
+  loop_control:
+    label: "{{ item.dest | dirname }}"
+
+- name: "Deploy {{ st_podman_application_name }} application files."
+  when:
+    - st_podman_application_files is defined and st_podman_application_files | length > 0
+    - item.when | default(true)
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ st_podman_application_dir }}/{{ item.dest }}"
+    owner: "{{ ((item.container_uid | int) + (st_podman_subuid_start | int)) if item.container_uid is defined else item.owner | default(st_podman_user) }}"
+    group: "{{ ((item.container_gid | int) + (st_podman_subgid_start | int)) if item.container_gid is defined else item.group | default(st_podman_group) }}"
+    mode: "{{ item.mode | default('0600') }}"
+  loop: "{{ st_podman_application_files }}"
+  notify:
+    - "systemctl --user restart {{ st_podman_application_name }}"
 
 - name: "Deploy {{ st_podman_application_name }} application compose file."
   ansible.builtin.template:
@@ -28,16 +108,58 @@
     - "systemctl --user daemon-reload {{ st_podman_application_name }}"
     - "systemctl --user restart {{ st_podman_application_name }}"
 
-- name: "Flush handlers."
-  ansible.builtin.meta: flush_handlers
+- name: "Deploy and start {{ st_podman_application_name }}."
+  block:
+    - name: "Flush handlers."
+      ansible.builtin.meta: flush_handlers
 
-- name: "Ensure {{ st_podman_application_name }} application is started and enabled."
-  become: true
-  become_user: "{{ st_podman_user }}"
-  become_method: ansible.builtin.sudo
-  become_flags: "-i"
-  ansible.builtin.systemd_service:
-    name: "{{ st_podman_application_name }}"
-    state: started
-    enabled: true
-    scope: user
+    - name: "Ensure {{ st_podman_application_name }} application is started and enabled."
+      become: true
+      become_user: "{{ st_podman_user }}"
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.systemd_service:
+        name: "{{ st_podman_application_name }}"
+        state: started
+        enabled: true
+        scope: user
+
+    # INFO: This will only runs if the deploy works.
+    - name: "Clean up {{ st_podman_application_name }} application rollback directory."
+      when: st_podman_application_rollback_enabled
+      ansible.builtin.file:
+        path: "{{ st_podman_application_dir }}.rollback"
+        state: absent
+
+  rescue:
+    - name: "Perform rollback on {{ st_podman_application_name }}."
+      when: st_podman_application_rollback_enabled
+      block:
+        - name: "ROLLBACK | Remove broken application directory."
+          ansible.builtin.file:
+            path: "{{ st_podman_application_dir }}"
+            state: absent
+
+        - name: "ROLLBACK | Restore {{ st_podman_application_name }} directory from rollback."
+          ansible.builtin.command:
+            cmd: "mv {{ st_podman_application_dir }}.rollback {{ st_podman_application_dir }}"
+          changed_when: true
+
+        # INFO: We can't use the handlers here because if any task fails,
+        # Ansible stops the execution on the host, and any notified handler will not run.
+        - name: "ROLLBACK | systemctl --user restart {{ st_podman_application_name }}"
+          become: true
+          become_user: "{{ st_podman_user }}"
+          become_method: ansible.builtin.sudo
+          become_flags: "-i"
+          ansible.builtin.systemd_service:
+            name: "{{ st_podman_application_name }}"
+            state: restarted
+            scope: user
+
+    - name: "Fail deployment."
+      ansible.builtin.fail:
+        msg: >-
+          {{ "Deployment failed, rollback performed."
+             if st_podman_application_rollback_enabled
+             else "Deployment failed, no rollback performed as it is disabled." }}
