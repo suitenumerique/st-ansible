@@ -108,6 +108,17 @@
     - "systemctl --user daemon-reload {{ st_podman_application_name }}"
     - "systemctl --user restart {{ st_podman_application_name }}"
 
+- name: "Deploy {{ st_podman_application_name }} application systemd ExecStart script."
+  ansible.builtin.copy:
+    src: "application_execstart.sh"
+    dest: "{{ st_podman_home }}/.config/systemd/user/{{ st_podman_application_name }}.sh"
+    owner: "{{ st_podman_user }}"
+    group: "{{ st_podman_group }}"
+    mode: "0700"
+  notify:
+    - "systemctl --user daemon-reload {{ st_podman_application_name }}"
+    - "systemctl --user restart {{ st_podman_application_name }}"
+
 - name: "Deploy and start {{ st_podman_application_name }}."
   block:
     - name: "Flush handlers."

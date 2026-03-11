@@ -65,18 +65,6 @@ argument_specs:
       st_podman_application_compose_template:
         type: "str"
         description: "Local path to the docker compose template for the application."
-      st_podman_application_sdnotify:
-        type: "str"
-        description:
-          - "Configures podman to send a systemd-notify to the systemd unit either when the container is started or when the container is healthy."
-          - "Our default is `healthy`, which means we have to configure a healthcheck for every service of every compose file."
-          - "See https://docs.podman.io/en/stable/markdown/podman-run.1.html#sdnotify-container-conmon-healthy-ignore"
-        default: "healthy"
-        choices:
-          - container
-          - conmon
-          - ignore
-          - healthy
       st_podman_application_restart_policy:
         type: "str"
         description: "The restart policy to apply to the systemd unit of the application."
@@ -93,3 +81,7 @@ argument_specs:
         type: "bool"
         description: "Whether or not to trigger the rollback tasks if the deployment fails."
         default: false
+      st_podman_application_timeout:
+        type: "int"
+        description: "The timeout for starting the application compose."
+        default: 300

@@ -12,8 +12,21 @@ Restart={{ st_podman_application_restart_policy }}
 WorkingDirectory={{ st_podman_application_dir }}
 
 ExecStartPre=-podman-compose --no-ansi pull
-ExecStart=podman-compose --podman-run-args="--sdnotify={{ st_podman_application_sdnotify }}" --no-ansi up --abort-on-container-exit
-ExecStop=podman-compose --no-ansi down
+ExecStartPre=podman-compose --no-ansi up -d
+ExecStart=%h/.config/systemd/user/{{ st_podman_application_name }}.sh
+
+# This allows graceful stop before SIGKILL
+ExecStop=podman-compose --no-ansi stop
+# ExecStopPost executes on any stop, including failure to avoids leftover pieces of namespace
+ExecStopPost=podman-compose --no-ansi down
+
+Environment=TIMEOUT={{ st_podman_application_timeout }}
+# TIMEOUT + 30s buffer for podman-compose overhead (pulling, network setup, etc.)
+TimeoutStartSec={{ st_podman_application_timeout + 30 }}
+
+# How often systemd expects a heartbeat from the ExecStart script.
+# If no check-in within this window, systemd considers the service hung.
+WatchdogSec=60
 
 [Install]
 WantedBy=default.target
