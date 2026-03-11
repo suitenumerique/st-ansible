@@ -21,7 +21,7 @@ Install and configure a alloy instance on Debian systems.
 
 |Option|Description|Type|Required|Default|
 |---|---|---|---|---|
-| st_alloy_manage_user | Controls wether the role manages the alloy user of if it's externally managed. | bool | no | True |
+| st_alloy_manage_user | Controls whether the role manages the alloy user or if it's externally managed. | bool | no | True |
 | st_alloy_user | The unix user to run alloy as. | str | no | alloy |
 | st_alloy_group | The primary group of the alloy user. | str | no | {{ st_alloy_user }} |
 | st_alloy_config_template | Local path to the alloy configuration template. | str | yes |  |

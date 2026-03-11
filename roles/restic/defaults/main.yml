@@ -25,7 +25,7 @@ restic_forget_keep_yearly: 0
 # Add the CAP_DAC_READ_SEARCH ambient capability to the backup systemd unit.
 # This is used when we need the restic user to read anywhere in the system, to backup files from multiple users.
 restic_setcap_read_search: true
-# Controls wether the role manages the restic_user and restic_group (true) or if they're created externally (false).
+# Controls whether the role manages the restic_user and restic_group (true) or if they're created externally (false).
 restic_manage_user: true
 # The unix user to create and start the backups with.
 restic_user: restic

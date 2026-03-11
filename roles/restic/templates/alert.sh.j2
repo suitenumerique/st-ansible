@@ -19,7 +19,7 @@ mattermost_json=$(cat <<EOF
     {
       "color": "#FFDE21",
       "title": "⚠️ Backup error on ${HOSTNAME}.",
-      "text": "The last restic-backup on ${HOSTNAME} exited abnormaly with status code $(systemctl show restic-backup.service --property ExecMainStatus --value).",
+      "text": "The last restic-backup on ${HOSTNAME} exited abnormally with status code $(systemctl show restic-backup.service --property ExecMainStatus --value).",
       "fields": [
         {
           "short": true,

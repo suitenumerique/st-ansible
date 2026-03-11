@@ -81,7 +81,7 @@ argument_specs:
         default: true
       restic_manage_user:
         type: "bool"
-        description: "Controls wether the role manages the restic_user and restic_group (true) or if they're created externally (false)."
+        description: "Controls whether the role manages the restic_user and restic_group (true) or if they're created externally (false)."
         default: true
       restic_user:
         type: "str"

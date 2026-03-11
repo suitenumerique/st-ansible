@@ -5,7 +5,7 @@ argument_specs:
     options:
       st_alloy_manage_user:
         type: "bool"
-        description: "Controls wether the role manages the alloy user of if it's externally managed."
+        description: "Controls whether the role manages the alloy user or if it's externally managed."
         default: true
       st_alloy_user:
         type: "str"

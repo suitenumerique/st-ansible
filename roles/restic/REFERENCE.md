@@ -39,7 +39,7 @@ Install and configure a restic instance on Debian systems.
 | restic_forget_keep_monthly | Number of monthly backups to keep. | int | no | 12 |
 | restic_forget_keep_yearly | Number of yearly backups to keep. | int | no | 0 |
 | restic_setcap_read_search | Add the CAP_DAC_READ_SEARCH ambient capability to the backup systemd unit. This is used when we need the restic user to read anywhere in the system, to backup files from multiple users. | bool | no | True |
-| restic_manage_user | Controls wether the role manages the restic_user and restic_group (true) or if they're created externally (false). | bool | no | True |
+| restic_manage_user | Controls whether the role manages the restic_user and restic_group (true) or if they're created externally (false). | bool | no | True |
 | restic_user | The unix user to create and start the backups with. | str | no | restic |
 | restic_group | The unix group to create associated to restic_user. | str | no | {{ restic_user }} |
 | restic_home | Path to the home directory of the restic_user. | str | no | /var/lib/restic |
