@@ -11,6 +11,7 @@
     secret: "{{ item.secret | default(omit) }}"
     password: "{{ item.password | default(omit) }}"
     registry: "{{ item.registry }}"
+    authfile: "{{ st_podman_home }}/.config/containers/auth.json"
   loop: "{{ st_podman_registries }}"
 
 - name: "Ensure registries.conf for user {{ st_podman_user }}"
