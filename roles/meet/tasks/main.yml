@@ -1,0 +1,30 @@
+---
+- name: "Import Suite Territoriale podman role."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+  vars:
+    st_podman_user: "meet"
+    st_podman_uid: "{{ st_meet_uid }}"
+    st_podman_gid: "{{ st_meet_gid }}"
+    st_podman_registries: "{{ st_meet_registries | default([]) }}"
+
+- name: "Deploy meet."
+  ansible.builtin.import_tasks: meet.yml
+  when: st_meet_enabled
+  tags: ['meet_meet']
+
+- name: "Deploy livekit."
+  ansible.builtin.import_tasks: livekit.yml
+  when: st_meet_livekit_enabled
+  tags: ['meet_livekit']
+
+- name: "Create cadvisor application."
+  when: st_meet_cadvisor_enabled
+  tags: ['meet_cadvisor']
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "meet"
+    st_podman_application_name: "cadvisor"
+    st_podman_application_compose_template: monitoring/compose_cadvisor.yaml.j2

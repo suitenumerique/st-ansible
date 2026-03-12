@@ -1,0 +1,85 @@
+---
+argument_specs:
+  main:
+    short_description: "Installs and configures the meet application from La Suite Territoriale on Debian systems."
+    options:
+      st_meet_uid:
+        type: "int"
+        description: "UID of the `meet` user, used for the podman role."
+        default: 1100
+      st_meet_gid:
+        type: "int"
+        description: "GID of the `meet` group, used for the podman role."
+        default: "{{ st_meet_uid }}"
+      st_meet_registries:
+        type: "list"
+        elements: "dict"
+        description: "Optional private container registries to login the `meet` user onto."
+      st_meet_enabled:
+        type: "bool"
+        description: "Triggers the installation of meet."
+        default: false
+      st_meet_dir:
+        type: "str"
+        description: "Remote path to the base directory for meet app."
+        default: "/opt/meet/meet"
+      st_meet_tag:
+        type: "str"
+        description: "Tag of the meet docker image to deploy."
+        default: "latest"
+      st_meet_backend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for meet env file."
+        default: "meet/backend_env.j2"
+      st_meet_backend_env:
+        type: "str"
+        description: "Content of the default backend_env_template, not used if st_meet_backend_env_template is defined."
+        default: ""
+      st_meet_backend_run_migrations:
+        type: "bool"
+        description: "Whether to run database migrations on meet backend startup."
+        default: true
+      st_meet_frontend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for meet frontend env file."
+        default: "meet/frontend_env.j2"
+      st_meet_frontend_env:
+        type: "str"
+        description: "Content of the default frontend_env_template, not used if st_meet_frontend_env_template is defined."
+        default: ""
+      st_meet_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for meet compose file."
+        default: meet/compose.yaml.j2
+      st_meet_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the meet deployment fails."
+        default: false
+      st_meet_livekit_enabled:
+        type: "bool"
+        description: "Triggers the installation of meet."
+        default: false
+      st_meet_livekit_tag:
+        type: "str"
+        description: "Tag of the meet docker image to deploy."
+        default: "latest"
+      st_meet_livekit_dir:
+        type: "str"
+        description: "Remote path to the base directory for livekit app."
+        default: "/opt/meet/livekit"
+      st_meet_livekit_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for meet compose file."
+        default: meet/compose.yaml.j2
+      st_meet_livekit_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the meet deployment fails."
+        default: false
+      st_meet_cadvisor_enabled:
+        type: "bool"
+        description: "Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server."
+        default: false
+      st_meet_cadvisor_port:
+        type: "str"
+        description: "The host published port of the cadvisor container."
+        default: "127.0.0.1:58080"

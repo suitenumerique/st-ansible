@@ -1,0 +1,12 @@
+---
+- name: "Create meet livekit application."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "meet"
+    st_podman_application_name: "livekit"
+    st_podman_application_dir: "{{ st_meet_livekit_dir }}"
+    st_podman_application_rollback_enabled: "{{ st_meet_livekit_rollback_enabled }}"
+    st_podman_application_compose_template: "{{ st_meet_livekit_compose_template }}"
+    # st_podman_application_files: TODO

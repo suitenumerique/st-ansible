@@ -1,0 +1,30 @@
+---
+{{ ansible_managed | comment }}
+
+name: meet
+services:
+  frontend:
+    container_name: meet-frontend
+    image: docker.io/lasuite/meet-frontend:{{ st_meet_tag }}
+    env_file: ./frontend_env
+    ports:
+      - "8080:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+#   healthcheck:
+#     test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/healthcheck"]
+#     interval: 1s
+#     timeout: 5s
+#     retries: 3
+
+  backend:
+    container_name: meet-backend
+    image: docker.io/lasuite/meet-backend:{{ st_meet_tag }}
+    env_file: ./backend_env
+    healthcheck:
+      test: ["CMD", "python", "manage.py", "check"]
+      interval: 15s
+      timeout: 30s
+      retries: 20
+      start_period: 10s
