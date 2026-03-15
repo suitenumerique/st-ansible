@@ -1,0 +1,27 @@
+---
+{{ ansible_managed | comment }}
+
+name: livekit
+services:
+  caddy:
+    container_name: caddy
+    image: #TODO
+    network_mode: "host"
+    command: "/bin/caddy run --config /etc/caddy.yaml"
+    volumes:
+      - ./caddy/caddy.yaml:/etc/caddy.yaml
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 10s
+      timeout: 1s
+  livekit:
+    container_name: livekit
+    image: docker.io/livekit/livekit-server:v1.9.11
+    command: --config /etc/livekit.yaml
+    network_mode: "host"
+    volumes:
+      - ./livekit/livekit.yaml:/etc/livekit.yaml
+    healthcheck:
+      test: wget -q --spider http://localhost:7880
+      interval: 10s
+      timeout: 1s

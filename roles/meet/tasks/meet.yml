@@ -1,0 +1,34 @@
+---
+- name: "Create meet application."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "meet"
+    st_podman_application_name: "meet"
+    st_podman_application_dir: "{{ st_meet_dir }}"
+    st_podman_application_rollback_enabled: "{{ st_meet_rollback_enabled }}"
+    st_podman_application_compose_template: "{{ st_meet_compose_template }}"
+    st_podman_application_files:
+      - src: "{{ st_meet_backend_env_template }}"
+        dest: "backend_env"
+      - src: "{{ st_meet_frontend_env_template }}"
+        dest: "frontend_env"
+
+- name: "Play meet migrations."
+  become: true
+  become_user: "meet"
+  become_method: ansible.builtin.sudo
+  become_flags: "-i"
+  run_once: true
+  register: migration_result
+  changed_when: "'No migrations to apply.' not in migration_result.stdout"
+  when: st_meet_backend_run_migrations
+  retries: 3
+  delay: 10
+  until: migration_result.rc == 0
+  ansible.builtin.shell:
+    chdir: "{{ st_meet_dir }}"
+    cmd: |
+      set -eu
+      podman-compose run --rm --name meet_backend_migrations backend python manage.py migrate --noinput
