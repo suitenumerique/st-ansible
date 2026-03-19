@@ -26,7 +26,8 @@
     mode: "{{ st_podman_application_dir_mode }}"
     state: directory
 
-# INFO: Rootless podman maps UIDs through subuids. Container UID 888 is actually subuid_start + 888.
+# INFO: Rootless podman maps UIDs through subuids. Container UID 888 is actually 888 + subuid_start - 1.
+# The -1 is there because UID 0 is mapped separately for the actual hosts' user UID, which means suibuid_start is mapped to UID 1.
 # We get them there in case the user needs to give permission to the files to a container user through container_uid / gid.
 # This allows us to give proper in-container permissions to directories without having to `podman unshare` or some other crap.
 - name: "Get subuid start for {{ st_podman_user }}."
@@ -55,7 +56,7 @@
 #     dest config/foo.conf # will create the "{{ st_podman_application_dir }}/config" directory
 #     dir_mode: "0700"
 #     mode: "0600"
-#     container_uid: 999   # will chmod the owner to uid 999 inside the container
+#     container_uid: 999   # will set the owner to uid 999 inside the container
 #     container_gid: 999
 #     when: "{{ foo_enabled }}"
 - name: "Ensure {{ st_podman_application_name }} application files directories."
@@ -65,8 +66,8 @@
     - item.when | default(true)
   ansible.builtin.file:
     path: "{{ st_podman_application_dir }}/{{ item.dest | dirname }}"
-    owner: "{{ ((item.container_uid | int) + (st_podman_subuid_start | int)) if item.container_uid is defined else item.owner | default(st_podman_user) }}"
-    group: "{{ ((item.container_gid | int) + (st_podman_subgid_start | int)) if item.container_gid is defined else item.group | default(st_podman_group) }}"
+    owner: "{{ ((item.container_uid | int) + (st_podman_subuid_start | int) - 1) if item.container_uid is defined else item.owner | default(st_podman_user) }}"
+    group: "{{ ((item.container_gid | int) + (st_podman_subgid_start | int) - 1) if item.container_gid is defined else item.group | default(st_podman_group) }}"
     mode: "{{ item.dir_mode | default('0700') }}"
     state: directory
   loop: "{{ st_podman_application_files }}"
@@ -80,8 +81,8 @@
   ansible.builtin.template:
     src: "{{ item.src }}"
     dest: "{{ st_podman_application_dir }}/{{ item.dest }}"
-    owner: "{{ ((item.container_uid | int) + (st_podman_subuid_start | int)) if item.container_uid is defined else item.owner | default(st_podman_user) }}"
-    group: "{{ ((item.container_gid | int) + (st_podman_subgid_start | int)) if item.container_gid is defined else item.group | default(st_podman_group) }}"
+    owner: "{{ ((item.container_uid | int) + (st_podman_subuid_start | int) - 1) if item.container_uid is defined else item.owner | default(st_podman_user) }}"
+    group: "{{ ((item.container_gid | int) + (st_podman_subgid_start | int) - 1) if item.container_gid is defined else item.group | default(st_podman_group) }}"
     mode: "{{ item.mode | default('0600') }}"
   loop: "{{ st_podman_application_files }}"
   notify:
