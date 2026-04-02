@@ -1,0 +1,16 @@
+---
+- name: "Deploy keycloak."
+  ansible.builtin.import_tasks: deploy/keycloak.yml
+  when: st_keycloak_enabled
+  tags: ['keycloak_keycloak']
+
+- name: "Create cadvisor application."
+  when: st_keycloak_cadvisor_enabled
+  tags: ['keycloak_cadvisor']
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "keycloak"
+    st_podman_application_name: "cadvisor"
+    st_podman_application_compose_template: monitoring/compose_cadvisor.yaml.j2

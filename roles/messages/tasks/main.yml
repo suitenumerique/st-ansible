@@ -9,37 +9,4 @@
     st_podman_registries: "{{ st_messages_registries | default([]) }}"
 
 - name: "Deploy messages."
-  ansible.builtin.import_tasks: messages.yml
-  when: st_messages_enabled
-  tags: ['messages_messages']
-
-- name: "Deploy messages workers."
-  ansible.builtin.import_tasks: workers.yml
-  when: st_messages_workers_enabled
-  tags: ['messages_workers']
-
-- name: "Deploy mta-in."
-  ansible.builtin.import_tasks: mta_in.yml
-  when: st_messages_mta_in_enabled
-  tags: ['messages_mta_in']
-
-- name: "Deploy socks-proxy."
-  ansible.builtin.import_tasks: socks_proxy.yml
-  when: st_messages_socks_proxy_enabled
-  tags: ['messages_socks_proxy']
-
-- name: "Deploy mpa."
-  ansible.builtin.import_tasks: mpa.yml
-  when: st_messages_mpa_enabled
-  tags: ['messages_mpa']
-
-- name: "Create cadvisor application."
-  tags: ['messages_cadvisor']
-  when: st_messages_cadvisor_enabled
-  ansible.builtin.import_role:
-    name: suitenumerique.st.podman
-    tasks_from: application.yml
-  vars:
-    st_podman_user: "messages"
-    st_podman_application_name: "cadvisor"
-    st_podman_application_compose_template: monitoring/compose_cadvisor.yaml.j2
+  ansible.builtin.import_tasks: deploy.yml
