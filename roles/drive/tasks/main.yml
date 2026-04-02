@@ -1,35 +1,6 @@
 ---
-- name: "Import Suite Territoriale podman role."
-  ansible.builtin.import_role:
-    name: suitenumerique.st.podman
-  vars:
-    st_podman_user: "drive"
-    st_podman_uid: "{{ st_drive_uid }}"
-    st_podman_gid: "{{ st_drive_gid }}"
-    st_podman_registries: "{{ st_drive_registries | default([]) }}"
+- name: "Install drive."
+  ansible.builtin.import_tasks: install.yml
 
 - name: "Deploy drive."
-  ansible.builtin.import_tasks: drive.yml
-  when: st_drive_enabled
-  tags: ['drive_drive']
-
-- name: "Deploy drive workers."
-  ansible.builtin.import_tasks: workers.yml
-  when: st_drive_workers_enabled
-  tags: ['drive_workers']
-
-- name: "Deploy collabora."
-  ansible.builtin.import_tasks: collabora.yml
-  when: st_drive_collabora_enabled
-  tags: ['drive_collabora']
-
-- name: "Create cadvisor application."
-  when: st_drive_cadvisor_enabled
-  tags: ['drive_cadvisor']
-  ansible.builtin.import_role:
-    name: suitenumerique.st.podman
-    tasks_from: application.yml
-  vars:
-    st_podman_user: "drive"
-    st_podman_application_name: "cadvisor"
-    st_podman_application_compose_template: monitoring/compose_cadvisor.yaml.j2
+  ansible.builtin.import_tasks: deploy.yml
