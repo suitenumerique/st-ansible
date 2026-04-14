@@ -225,9 +225,65 @@
     - name: "Assert application config directory has correct permissions"
       ansible.builtin.assert:
         that:
-          - app_config_dir_perms.stat.mode | int == 750
+          - app_config_dir_perms.stat.mode | int == 770
         fail_msg: "Application config directory has incorrect permissions."
         success_msg: "Application config directory has correct permissions."
+
+    - name: "Verify application config file exists"
+      ansible.builtin.stat:
+        path: "/opt/testuser/testapp/config/app.config"
+      register: app_config_file
+
+    - name: "Assert application config file exists"
+      ansible.builtin.assert:
+        that:
+          - app_config_file.stat.exists
+        fail_msg: "Application config file does not exist."
+        success_msg: "Application config file exists."
+
+    - name: "Assert application config file has correct permissions"
+      ansible.builtin.assert:
+        that:
+          - app_config_file.stat.mode | int == 660
+        fail_msg: "Application config file has incorrect permissions."
+        success_msg: "Application config file has correct permissions."
+
+    - name: "Get subuid range for testuser"
+      ansible.builtin.shell:
+        cmd: "awk -F: '/^testuser:/ {print $2}' /etc/subuid"
+      register: testuser_subuid_start
+      changed_when: false
+      failed_when: false
+
+    - name: "Calculate expected container uid"
+      ansible.builtin.set_fact:
+        expected_container_uid: "{{ (testuser_subuid_start.stdout | int) + 999 - 1 }}"
+
+    - name: "Assert application config file has correct owner"
+      ansible.builtin.assert:
+        that:
+          - app_config_file.stat.uid == expected_container_uid | int
+        fail_msg: "Application config file has incorrect owner."
+        success_msg: "Application config file has correct owner."
+
+    - name: "Assert application config file has correct group"
+      ansible.builtin.assert:
+        that:
+          - app_config_file.stat.gid == 1100
+        fail_msg: "Application config file has incorrect group."
+        success_msg: "Application config file has correct group."
+
+    - name: "Verify application config file content"
+      ansible.builtin.slurp:
+        src: "/opt/testuser/testapp/config/app.config"
+      register: app_config_content
+
+    - name: "Assert application config file content is correct"
+      ansible.builtin.assert:
+        that:
+          - app_config_content.content | b64decode == "# this is a configuration\n"
+        fail_msg: "Application config file content is incorrect."
+        success_msg: "Application config file content is correct."
 
     - name: "Verify application env file content"
       ansible.builtin.slurp:

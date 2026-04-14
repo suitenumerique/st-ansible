@@ -18,86 +18,6 @@
     cmd: "cp -a {{ st_podman_application_dir }}/. {{ st_podman_application_dir }}.rollback/"
   changed_when: true
 
-- name: "Ensure {{ st_podman_application_name }} application directory."
-  ansible.builtin.file:
-    name: "{{ st_podman_application_dir }}"
-    owner: "{{ st_podman_user }}"
-    group: "{{ st_podman_group }}"
-    mode: "{{ st_podman_application_dir_mode }}"
-    state: directory
-
-# INFO: Rootless podman maps UIDs through subuids. Container UID 888 is actually 888 + subuid_start - 1.
-# The -1 is there because UID 0 is mapped separately for the actual hosts' user UID, which means suibuid_start is mapped to UID 1.
-# We get them there in case the user needs to give permission to the files to a container user through container_uid / gid.
-# This allows us to give proper in-container permissions to directories without having to `podman unshare` or some other crap.
-- name: "Get subuid start for {{ st_podman_user }}."
-  changed_when: false
-  ansible.builtin.shell:
-    cmd: "awk -F: '$1 == \"{{ st_podman_user }}\" {print $2}' /etc/subuid"
-  register: _subuid_start
-
-- name: "Get subgid start for {{ st_podman_group }}."
-  changed_when: false
-  ansible.builtin.shell:
-    cmd: "awk -F: '$1 == \"{{ st_podman_group }}\" {print $2}' /etc/subgid"
-  register: _subgid_start
-
-- name: "Set subuid/subgid facts for {{ st_podman_user }}."
-  ansible.builtin.set_fact:
-    st_podman_subuid_start: "{{ _subuid_start.stdout | int }}"
-    st_podman_subgid_start: "{{ _subgid_start.stdout | int }}"
-
-# INFO: Users only give the file list, but ansible does not automatically create the parent directories.
-# The goal here is to get the path with `| dirname` and create the directories.
-# We don't really have an easy and clean way to `unique` the list so we may loop multiple times over the same dir, which is fine-ish for a `file` task.
-# Example list:
-# st_podman_application_files:
-#   - src: foo.conf.j2
-#     dest config/foo.conf # will create the "{{ st_podman_application_dir }}/config" directory
-#     dir_mode: "0700"
-#     mode: "0600"
-#     container_uid: 999   # will set the owner to uid 999 inside the container
-#     container_gid: 999
-#     when: "{{ foo_enabled }}"
-- name: "Ensure {{ st_podman_application_name }} application files directories."
-  when:
-    - st_podman_application_files is defined and st_podman_application_files | length > 0
-    - item.dest | dirname | length > 0
-    - item.when | default(true)
-  ansible.builtin.file:
-    path: "{{ st_podman_application_dir }}/{{ item.dest | dirname }}"
-    owner: "{{ ((item.container_uid | int) + (st_podman_subuid_start | int) - 1) if item.container_uid is defined else item.owner | default(st_podman_user) }}"
-    group: "{{ ((item.container_gid | int) + (st_podman_subgid_start | int) - 1) if item.container_gid is defined else item.group | default(st_podman_group) }}"
-    mode: "{{ item.dir_mode | default('0700') }}"
-    state: directory
-  loop: "{{ st_podman_application_files }}"
-  loop_control:
-    label: "{{ item.dest | dirname }}"
-
-- name: "Deploy {{ st_podman_application_name }} application files."
-  when:
-    - st_podman_application_files is defined and st_podman_application_files | length > 0
-    - item.when | default(true)
-  ansible.builtin.template:
-    src: "{{ item.src }}"
-    dest: "{{ st_podman_application_dir }}/{{ item.dest }}"
-    owner: "{{ ((item.container_uid | int) + (st_podman_subuid_start | int) - 1) if item.container_uid is defined else item.owner | default(st_podman_user) }}"
-    group: "{{ ((item.container_gid | int) + (st_podman_subgid_start | int) - 1) if item.container_gid is defined else item.group | default(st_podman_group) }}"
-    mode: "{{ item.mode | default('0600') }}"
-  loop: "{{ st_podman_application_files }}"
-  notify:
-    - "systemctl --user restart {{ st_podman_application_name }}"
-
-- name: "Deploy {{ st_podman_application_name }} application compose file."
-  ansible.builtin.template:
-    src: "{{ st_podman_application_compose_template }}"
-    dest: "{{ st_podman_application_dir }}/compose.yaml"
-    owner: "{{ st_podman_user }}"
-    group: "{{ st_podman_group }}"
-    mode: "0600"
-  notify:
-    - "systemctl --user restart {{ st_podman_application_name }}"
-
 - name: "Deploy {{ st_podman_application_name }} application systemd unit."
   ansible.builtin.template:
     src: "application_systemd_unit.j2"
@@ -117,11 +37,50 @@
     group: "{{ st_podman_group }}"
     mode: "0700"
   notify:
-    - "systemctl --user daemon-reload {{ st_podman_application_name }}"
     - "systemctl --user restart {{ st_podman_application_name }}"
+
+- name: "Ensure {{ st_podman_application_name }} application directory."
+  ansible.builtin.file:
+    name: "{{ st_podman_application_dir }}"
+    owner: "{{ st_podman_user }}"
+    group: "{{ st_podman_group }}"
+    mode: "{{ st_podman_application_dir_mode }}"
+    state: directory
 
 - name: "Deploy and start {{ st_podman_application_name }}."
   block:
+    # INFO:
+    # Getting this to work was kind of a pain:
+    #  - we want some files (env files, config files...) to be accessible by a subuid inside the container
+    #  - Linux does not really care if the subuid belongs to you when checking the permissions -
+    #    that means everything kind of breaks for st_podman_user if the file is only accessible by the subuid
+    #  - We would like to use the podman_unshare become module for this matter, but we can't control -
+    #    if the end user will ssh as st_podman_user or another, and ansible doesn't support nested becomes
+    # In the end what we do is :
+    #  - Deploy everything as 0770 or 0660
+    #  - If no container_uid →  owner and group set to st_podman_user
+    #  - If container_uid →  owner set to container_uid with `podman unshare`, group stays to st_podman_user (0770/0660 makes it so it doesn't break)
+    #  - The user can still change container_gid if he knows what he's doing, but it will probably break stuff
+    - name: "Ensure {{ st_podman_application_name }} application directories and files"
+      become: true
+      become_user: "{{ st_podman_user }}"
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.import_tasks: application/files.yml
+      when: >
+        (st_podman_application_directories is defined and st_podman_application_directories | length > 0)
+        or (st_podman_application_files is defined and st_podman_application_files | length > 0)
+
+    - name: "Deploy {{ st_podman_application_name }} application compose file."
+      ansible.builtin.template:
+        src: "{{ st_podman_application_compose_template }}"
+        dest: "{{ st_podman_application_dir }}/compose.yaml"
+        owner: "{{ st_podman_user }}"
+        group: "{{ st_podman_group }}"
+        mode: "0600"
+      notify:
+        - "systemctl --user restart {{ st_podman_application_name }}"
+
     - name: "Flush handlers."
       ansible.builtin.meta: flush_handlers
 
@@ -158,7 +117,7 @@
           changed_when: true
 
         # INFO: We can't use the handlers here because if any task fails,
-        # Ansible stops the execution on the host, and any notified handler will not run.
+        # Ansible stops the execution on the host, and doesn't run the handlers.
         - name: "ROLLBACK | systemctl --user restart {{ st_podman_application_name }}"
           become: true
           become_user: "{{ st_podman_user }}"

@@ -1,0 +1,87 @@
+- name: "Ensure {{ st_podman_application_name }} application directories."
+  when:
+    - st_podman_application_directories is defined and st_podman_application_directories | length > 0
+    - item.when | default(true)
+  ansible.builtin.file:
+    path: "{{ st_podman_application_dir }}/{{ item.name }}"
+    mode: "{{ item.mode | default('0770') }}"
+    state: directory
+  loop: "{{ st_podman_application_directories }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify:
+    - "systemctl --user restart {{ st_podman_application_name }}"
+
+- name: "Check {{ st_podman_application_name }} application directories current ownership."
+  when:
+    - st_podman_application_directories is defined and st_podman_application_directories | length > 0
+    - item.when | default(true)
+    - item.container_uid is defined or item.container_gid is defined
+  ansible.builtin.command:
+    cmd: "podman unshare stat -c '%u:%g' {{ st_podman_application_dir }}/{{ item.name }}"
+  register: _dir_ownership
+  changed_when: false
+  loop: "{{ st_podman_application_directories }}"
+
+- name: "Set {{ st_podman_application_name }} application directories ownership."
+  when:
+    - item.stdout is defined
+    - item.stdout != (item.item.container_uid | default(0) | string) + ':' + (item.item.container_gid | default(0) | string)
+  ansible.builtin.command:
+    cmd: >
+      podman unshare chown
+      {{ item.item.container_uid | default(0) }}:{{ item.item.container_gid | default(0) }}
+      {{ st_podman_application_dir }}/{{ item.item.name }}
+  loop: "{{ _dir_ownership.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  changed_when: true
+  notify:
+    - "systemctl --user restart {{ st_podman_application_name }}"
+
+# INFO: Example list:
+# st_podman_application_files:
+#   - src: foo.j2
+#     dest: config/foo
+#     mode: "0660"         # default
+#     container_uid: 999   # will set the owner to uid 999 inside the container
+#     container_gid: 0     # will set the group to root inside the container (st_podman_user on host - default)
+#     when: "{{ foo_enabled }}"
+- name: "Deploy {{ st_podman_application_name }} application files."
+  when:
+    - st_podman_application_files is defined and st_podman_application_files | length > 0
+    - item.when | default(true)
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ st_podman_application_dir }}/{{ item.dest }}"
+    mode: "{{ item.mode | default('0660') }}"
+  loop: "{{ st_podman_application_files }}"
+  notify:
+    - "systemctl --user restart {{ st_podman_application_name }}"
+
+- name: "Check {{ st_podman_application_name }} application files current ownership."
+  when:
+    - st_podman_application_files is defined and st_podman_application_files | length > 0
+    - item.when | default(true)
+    - item.container_uid is defined or item.container_gid is defined
+  ansible.builtin.command:
+    cmd: "podman unshare stat -c '%u:%g' {{ st_podman_application_dir }}/{{ item.dest }}"
+  register: _file_ownership
+  changed_when: false
+  loop: "{{ st_podman_application_files }}"
+
+- name: "Set {{ st_podman_application_name }} application files ownership."
+  when:
+    - item.stdout is defined
+    - item.stdout != (item.item.container_uid | default(0) | string) + ':' + (item.item.container_gid | default(0) | string)
+  ansible.builtin.command:
+    cmd: >
+      podman unshare chown
+      {{ item.item.container_uid | default(0) }}:{{ item.item.container_gid | default(0) }}
+      {{ st_podman_application_dir }}/{{ item.item.dest }}
+  loop: "{{ _file_ownership.results }}"
+  loop_control:
+    label: "{{ item.item.dest }}"
+  changed_when: true
+  notify:
+    - "systemctl --user restart {{ st_podman_application_name }}"

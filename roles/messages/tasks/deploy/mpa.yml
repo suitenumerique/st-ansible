@@ -2,17 +2,18 @@
 - name: "Setup default mpa configuration templates."
   ansible.builtin.set_fact:
     mpa_base_files:
-      - { src: mpa/rspamd/worker-controller.inc.j2, dest: rspamd_config/override.d/worker-controller.inc, mode: "0644", dir_mode: "0755" }
-      - { src: mpa/rspamd/worker-proxy.inc.j2, dest: rspamd_config/override.d/worker-proxy.inc, mode: "0644", dir_mode: "0755" }
-      - { src: mpa/rspamd/options.inc.j2, dest: rspamd_config/local.d/options.inc, mode: "0644", dir_mode: "0755" }
-      - { src: mpa/rspamd/logging.inc.j2, dest: rspamd_config/local.d/logging.inc, mode: "0644", dir_mode: "0755" }
-      - { src: mpa/rspamd/antivirus.conf.j2, dest: rspamd_config/local.d/antivirus.conf, mode: "0644", dir_mode: "0755" }
-      - { src: mpa/rspamd/multimap.conf.j2, dest: rspamd_config/local.d/multimap.conf, mode: "0644", dir_mode: "0755" }
-      - { src: mpa/rspamd/history_redis.conf.j2, dest: rspamd_config/local.d/history_redis.conf, mode: "0644", dir_mode: "0755" }
-      - { src: "mpa/rspamd/redis.conf.j2", dest: rspamd_config/local.d/redis.conf, mode: "0644", dir_mode: "0755", when: "{{ st_messages_mpa_valkey_enabled }}" }
-      - { src: "mpa/nginx.conf.j2", dest: nginx_config/nginx.conf, when: "{{ st_messages_mpa_auth_bearer is defined and st_messages_mpa_auth_bearer | length > 0 }}" }
-      - { src: "{{ st_messages_mpa_clamav_config_template }}", dest: clamav_config/clamd.conf, mode: "0644", dir_mode: "0755" }
-      - { src: "{{ st_messages_mpa_unbound_config_template }}", dest: unbound_config/unbound.conf, mode: "0644", dir_mode: "0755" }
+      - { src: mpa/rspamd/worker-controller.inc.j2, dest: rspamd_config/override.d/worker-controller.inc, container_uid: "11333" }
+      - { src: mpa/rspamd/worker-proxy.inc.j2, dest: rspamd_config/override.d/worker-proxy.inc, container_uid: "11333" }
+      - { src: mpa/rspamd/options.inc.j2, dest: rspamd_config/local.d/options.inc, container_uid: "11333" }
+      - { src: mpa/rspamd/logging.inc.j2, dest: rspamd_config/local.d/logging.inc, container_uid: "11333" }
+      - { src: mpa/rspamd/antivirus.conf.j2, dest: rspamd_config/local.d/antivirus.conf, container_uid: "11333" }
+      - { src: mpa/rspamd/multimap.conf.j2, dest: rspamd_config/local.d/multimap.conf, container_uid: "11333" }
+      - { src: mpa/rspamd/history_redis.conf.j2, dest: rspamd_config/local.d/history_redis.conf, container_uid: "11333" }
+      - { src: mpa/rspamd/redis.conf.j2, dest: rspamd_config/local.d/redis.conf, container_uid: "11333", when: "{{ st_messages_mpa_valkey_enabled }}" }
+
+      - { src: mpa/nginx.conf.j2, dest: nginx_config/nginx.conf, when: "{{ st_messages_mpa_auth_bearer is defined and st_messages_mpa_auth_bearer | length > 0 }}" }
+      - { src: "{{ st_messages_mpa_clamav_config_template }}", dest: clamav_config/clamd.conf, mode: "0644" }
+      - { src: "{{ st_messages_mpa_unbound_config_template }}", dest: unbound_config/unbound.conf, mode: "0644" }
 
 - name: "Create mpa app"
   ansible.builtin.import_role:
@@ -24,4 +25,14 @@
     st_podman_application_dir: "{{ st_messages_mpa_dir }}"
     st_podman_application_rollback_enabled: "{{ st_messages_mpa_rollback_enabled }}"
     st_podman_application_compose_template: "{{ st_messages_mpa_compose_template }}"
-    st_podman_application_files: "{{ mpa_base_files | community.general.lists_mergeby(st_messages_mpa_rspamd_config_templates, 'dest') }}"
+    st_podman_application_directories:
+      - { name: rspamd_config, container_uid: "11333" }
+      - { name: rspamd_config/local.d, container_uid: "11333" }
+      - { name: rspamd_config/override.d, container_uid: "11333" }
+      - { name: clamav_config, mode: "0755" }
+      - { name: unbound_config, mode: "0755" }
+      - { name: nginx_config }
+    # INFO: Filter out base_files items that exist in the user custom list.
+    # This way, if the user specify for example "rspamd_config.local.d/redis.conf",
+    #  the base entry is completely removed from the final list.
+    st_podman_application_files: "{{ mpa_base_files | rejectattr('dest', 'in', (st_messages_mpa_rspamd_config_templates | map(attribute='dest'))) + (st_messages_mpa_rspamd_config_templates) }}"
