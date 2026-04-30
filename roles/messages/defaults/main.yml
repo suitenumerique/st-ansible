@@ -64,23 +64,36 @@ st_messages_socks_proxy_rollback_enabled: false
 st_messages_mpa_enabled: false
 # Remote path to the base directory for mpa app.
 st_messages_mpa_dir: /opt/messages/mpa
+# The tag of the caddy docker image to use.
+# See https://hub.docker.com/_/caddy/tags.
+st_messages_mpa_caddy_tag: 2-alpine
+# The host published port for the caddy /checkv2 endpoint.
+st_messages_mpa_caddy_port: '50080'
+# The host published port for the caddy /healthcheck endpoint.
+st_messages_mpa_caddy_healthcheck_port: '50090'
 # The tag of the rspamd docker image to use.
 # See https://hub.docker.com/r/rspamd/rspamd/tags.
-st_messages_mpa_rspamd_tag: '3'
+st_messages_mpa_rspamd_tag: '4'
+# Domains to blacklist via rspamd multimap.
+st_messages_mpa_blacklist_domains: []
+# IPs or CIDRs to blacklist via rspamd multimap.
+st_messages_mpa_blacklist_ips: []
+# Domains to whitelist via rspamd multimap.
+st_messages_mpa_whitelist_domains: []
+# IPs or CIDRs to whitelist via rspamd multimap.
+st_messages_mpa_whitelist_ips: []
 # List of rspamd configs to deploy, merged with the default configuration list.
 st_messages_mpa_rspamd_config_templates: []
 # Local path to the unbound.conf template.
 st_messages_mpa_unbound_config_template: mpa/unbound.conf.j2
 # The tag of the clamav docker image to use.
 # See https://hub.docker.com/r/clamav/clamav/tags.
-st_messages_mpa_clamav_tag: '1.4'
+st_messages_mpa_clamav_tag: '1.5'
 # Local path to the clamd.conf template.
 st_messages_mpa_clamav_config_template: mpa/clamd.conf.j2
-# Triggers the installation of a local valkey instance, which also deploys a default redis.conf rspamd config.
-st_messages_mpa_valkey_enabled: true
 # The tag of the valkey docker image to use.
 # See https://hub.docker.com/r/valkey/valkey/tags.
-st_messages_mpa_valkey_tag: '8'
+st_messages_mpa_valkey_tag: '9'
 # Whether or not to trigger the rollback tasks if the mpa deployment fails.
 st_messages_mpa_rollback_enabled: false
 # Local path to the custom template to use for mpa compose file.

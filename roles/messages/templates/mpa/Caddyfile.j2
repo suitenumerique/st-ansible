@@ -1,0 +1,24 @@
+{{ ansible_managed | comment }}
+
+:80 {
+	header -Server
+	route /checkv2 {
+		request_body {
+			max_size 0
+		}
+		{% if st_messages_mpa_auth_bearer is defined and st_messages_mpa_auth_bearer | length > 0 %}
+		@unauthorized {
+			not header Authorization "Bearer {{ st_messages_mpa_auth_bearer }}"
+		}
+		respond @unauthorized 401
+		{% endif %}
+		reverse_proxy rspamd:11333
+	}
+}
+
+:90 {
+	header -Server
+	route /healthcheck {
+		respond "ok\n" 200
+	}
+}

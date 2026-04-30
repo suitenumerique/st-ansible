@@ -154,21 +154,51 @@ argument_specs:
       st_messages_mpa_auth_bearer:
         type: "str"
         description:
-          - "Add an optional nginx container in front of the rspamd worker with a simple authorization check."
+          - "Add a caddy container in front of the rspamd worker with a simple authorization check."
           - "The value of this variable should then be used as a Bearer token when calling the /checkv2 rspamd endpoint."
+      st_messages_mpa_caddy_tag:
+        type: "str"
+        description:
+          - "The tag of the caddy docker image to use."
+          - "See https://hub.docker.com/_/caddy/tags."
+        default: "2-alpine"
+      st_messages_mpa_caddy_port:
+        type: "str"
+        description: "The host published port for the caddy /checkv2 endpoint."
+        default: "50080"
+      st_messages_mpa_caddy_healthcheck_port:
+        type: "str"
+        description: "The host published port for the caddy /healthcheck endpoint."
+        default: "50090"
       st_messages_mpa_rspamd_tag:
         type: "str"
         description:
           - "The tag of the rspamd docker image to use."
           - "See https://hub.docker.com/r/rspamd/rspamd/tags."
-        default: "3"
+        default: "4"
       st_messages_mpa_rspamd_controller_password:
         type: "str"
         description: "Password of the rspamd controller webui."
-      st_messages_mpa_rspamd_neighbours:
+      st_messages_mpa_blacklist_domains:
         type: "list"
         elements: "str"
-        description: "List of URLs to the rspamd neighbours controllers."
+        description: "Domains to blacklist via rspamd multimap."
+        default: []
+      st_messages_mpa_blacklist_ips:
+        type: "list"
+        elements: "str"
+        description: "IPs or CIDRs to blacklist via rspamd multimap."
+        default: []
+      st_messages_mpa_whitelist_domains:
+        type: "list"
+        elements: "str"
+        description: "Domains to whitelist via rspamd multimap."
+        default: []
+      st_messages_mpa_whitelist_ips:
+        type: "list"
+        elements: "str"
+        description: "IPs or CIDRs to whitelist via rspamd multimap."
+        default: []
       st_messages_mpa_rspamd_config_templates:
         type: "list"
         elements: "dict"
@@ -183,21 +213,17 @@ argument_specs:
         description:
           - "The tag of the clamav docker image to use."
           - "See https://hub.docker.com/r/clamav/clamav/tags."
-        default: "1.4"
+        default: "1.5"
       st_messages_mpa_clamav_config_template:
         type: "str"
         description: "Local path to the clamd.conf template."
         default: "mpa/clamd.conf.j2"
-      st_messages_mpa_valkey_enabled:
-        type: "bool"
-        default: true
-        description: "Triggers the installation of a local valkey instance, which also deploys a default redis.conf rspamd config."
       st_messages_mpa_valkey_tag:
         type: "str"
         description:
           - "The tag of the valkey docker image to use."
           - "See https://hub.docker.com/r/valkey/valkey/tags."
-        default: "8"
+        default: "9"
       st_messages_mpa_rollback_enabled:
         type: "bool"
         description: "Whether or not to trigger the rollback tasks if the mpa deployment fails."

@@ -57,16 +57,21 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_socks_proxy_rollback_enabled | Whether or not to trigger the rollback tasks if the socks-proxy deployment fails. | bool | no | False |
 | st_messages_mpa_enabled | Triggers the installation of the mpa. | bool | no | False |
 | st_messages_mpa_dir | Remote path to the base directory for mpa app. | str | no | /opt/messages/mpa |
-| st_messages_mpa_auth_bearer | Add an optional nginx container in front of the rspamd worker with a simple authorization check. The value of this variable should then be used as a Bearer token when calling the /checkv2 rspamd endpoint. | str | no |  |
-| st_messages_mpa_rspamd_tag | The tag of the rspamd docker image to use. See https://hub.docker.com/r/rspamd/rspamd/tags. | str | no | 3 |
+| st_messages_mpa_auth_bearer | Add a caddy container in front of the rspamd worker with a simple authorization check. The value of this variable should then be used as a Bearer token when calling the /checkv2 rspamd endpoint. | str | no |  |
+| st_messages_mpa_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | 2-alpine |
+| st_messages_mpa_caddy_port | The host published port for the caddy /checkv2 endpoint. | str | no | 50080 |
+| st_messages_mpa_caddy_healthcheck_port | The host published port for the caddy /healthcheck endpoint. | str | no | 50090 |
+| st_messages_mpa_rspamd_tag | The tag of the rspamd docker image to use. See https://hub.docker.com/r/rspamd/rspamd/tags. | str | no | 4 |
 | st_messages_mpa_rspamd_controller_password | Password of the rspamd controller webui. | str | no |  |
-| st_messages_mpa_rspamd_neighbours | List of URLs to the rspamd neighbours controllers. | list of 'str' | no |  |
+| st_messages_mpa_blacklist_domains | Domains to blacklist via rspamd multimap. | list of 'str' | no | [] |
+| st_messages_mpa_blacklist_ips | IPs or CIDRs to blacklist via rspamd multimap. | list of 'str' | no | [] |
+| st_messages_mpa_whitelist_domains | Domains to whitelist via rspamd multimap. | list of 'str' | no | [] |
+| st_messages_mpa_whitelist_ips | IPs or CIDRs to whitelist via rspamd multimap. | list of 'str' | no | [] |
 | st_messages_mpa_rspamd_config_templates | List of rspamd configs to deploy, merged with the default configuration list. | list of 'dict' | no | [] |
 | st_messages_mpa_unbound_config_template | Local path to the unbound.conf template. | str | no | mpa/unbound.conf.j2 |
-| st_messages_mpa_clamav_tag | The tag of the clamav docker image to use. See https://hub.docker.com/r/clamav/clamav/tags. | str | no | 1.4 |
+| st_messages_mpa_clamav_tag | The tag of the clamav docker image to use. See https://hub.docker.com/r/clamav/clamav/tags. | str | no | 1.5 |
 | st_messages_mpa_clamav_config_template | Local path to the clamd.conf template. | str | no | mpa/clamd.conf.j2 |
-| st_messages_mpa_valkey_enabled | Triggers the installation of a local valkey instance, which also deploys a default redis.conf rspamd config. | bool | no | True |
-| st_messages_mpa_valkey_tag | The tag of the valkey docker image to use. See https://hub.docker.com/r/valkey/valkey/tags. | str | no | 8 |
+| st_messages_mpa_valkey_tag | The tag of the valkey docker image to use. See https://hub.docker.com/r/valkey/valkey/tags. | str | no | 9 |
 | st_messages_mpa_rollback_enabled | Whether or not to trigger the rollback tasks if the mpa deployment fails. | bool | no | False |
 | st_messages_mpa_compose_template | Local path to the custom template to use for mpa compose file. | str | no | mpa/compose.yaml.j2 |
 | st_messages_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
