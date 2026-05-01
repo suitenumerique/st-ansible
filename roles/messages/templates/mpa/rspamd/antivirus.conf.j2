@@ -6,5 +6,7 @@ clamav {
   type = "clamav";
   # If set true, log message is emitted for clean messages
   log_clean = true;
-  servers = "127.0.0.1:3310";
+  servers = "clamav:3310";
+  # Scan whole message - slightly more load
+  scan_mime_parts = false;
 }

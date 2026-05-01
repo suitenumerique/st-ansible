@@ -1,0 +1,6 @@
+{{ ansible_managed | comment }}
+
+# Enable OpenPhish real-time phishing URL detection
+# Phishtank is already enabled by default in rspamd
+openphish_enabled = true;
+openphish_map = "https://raw.githubusercontent.com/openphish/public_feed/refs/heads/main/feed.txt";

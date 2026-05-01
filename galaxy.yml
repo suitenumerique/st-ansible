@@ -18,4 +18,5 @@ dependencies:
 build_ignore:
   - .gitignore
   - .ansible-lint
+  - .opencode
   - build

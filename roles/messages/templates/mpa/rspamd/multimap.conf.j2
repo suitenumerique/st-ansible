@@ -17,21 +17,14 @@ BLACKLIST_IP {
   type = "ip";
   prefilter = true;
   map = "file:///var/lib/rspamd/blacklist_ips.map";
-  action = "reject";
+  score = 15.0;
 }
 
 WHITELIST_FROM_DOMAIN {
   type = "from";
   filter = "email:domain";
   map = "file:///var/lib/rspamd/whitelist_domains.map";
-  score = 15.0;
-}
-
-WHITELIST_TO_DOMAIN {
-  type = "to";
-  filter = "email:domain";
-  map = "file:///var/lib/rspamd/whitelist_domains.map";
-  score = 15.0;
+  score = -15.0;
 }
 
 WHITELIST_IP {
@@ -39,4 +32,19 @@ WHITELIST_IP {
   prefilter = true;
   map = "file:///var/lib/rspamd/whitelist_ips.map";
   action = "accept";
+}
+
+# Abuse.ch feeds — active malware URLs and known-bad attachment hashes
+URLHAUS_ABUSE_CH {
+  type = "selector";
+  selector = "urls";
+  map = "https://urlhaus.abuse.ch/downloads/text_online/";
+  score = 10.0;
+}
+
+BAZAAR_ABUSE_CH {
+  type = "selector";
+  selector = "attachments(hex,md5)";
+  map = "https://bazaar.abuse.ch/export/txt/md5/recent/";
+  score = 10.0;
 }

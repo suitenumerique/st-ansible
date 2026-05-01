@@ -8,10 +8,15 @@
       - { src: mpa/rspamd/logging.inc.j2, dest: rspamd_config/local.d/logging.inc, container_uid: "11333" }
       - { src: mpa/rspamd/antivirus.conf.j2, dest: rspamd_config/local.d/antivirus.conf, container_uid: "11333" }
       - { src: mpa/rspamd/multimap.conf.j2, dest: rspamd_config/local.d/multimap.conf, container_uid: "11333" }
+      - { src: mpa/rspamd/phishing.conf.j2, dest: rspamd_config/local.d/phishing.conf, container_uid: "11333" }
+      - { src: mpa/rspamd/mime_types.conf.j2, dest: rspamd_config/local.d/mime_types.conf, container_uid: "11333" }
       - { src: mpa/rspamd/history_redis.conf.j2, dest: rspamd_config/local.d/history_redis.conf, container_uid: "11333" }
-      - { src: mpa/rspamd/redis.conf.j2, dest: rspamd_config/local.d/redis.conf, container_uid: "11333", when: "{{ st_messages_mpa_valkey_enabled }}" }
-
-      - { src: mpa/nginx.conf.j2, dest: nginx_config/nginx.conf, when: "{{ st_messages_mpa_auth_bearer is defined and st_messages_mpa_auth_bearer | length > 0 }}" }
+      - { src: mpa/rspamd/redis.conf.j2, dest: rspamd_config/local.d/redis.conf, container_uid: "11333" }
+      - { src: mpa/rspamd/blacklist_domains.map.j2, dest: rspamd_data/blacklist_domains.map, mode: "0644" }
+      - { src: mpa/rspamd/blacklist_ips.map.j2, dest: rspamd_data/blacklist_ips.map, mode: "0644" }
+      - { src: mpa/rspamd/whitelist_domains.map.j2, dest: rspamd_data/whitelist_domains.map, mode: "0644" }
+      - { src: mpa/rspamd/whitelist_ips.map.j2, dest: rspamd_data/whitelist_ips.map, mode: "0644" }
+      - { src: mpa/Caddyfile.j2, dest: caddy_config/Caddyfile }
       - { src: "{{ st_messages_mpa_clamav_config_template }}", dest: clamav_config/clamd.conf, mode: "0644" }
       - { src: "{{ st_messages_mpa_unbound_config_template }}", dest: unbound_config/unbound.conf, mode: "0644" }
 
@@ -29,9 +34,11 @@
       - { name: rspamd_config, container_uid: "11333" }
       - { name: rspamd_config/local.d, container_uid: "11333" }
       - { name: rspamd_config/override.d, container_uid: "11333" }
+      - { name: rspamd_data, container_uid: "11333" }
       - { name: clamav_config, mode: "0755" }
       - { name: unbound_config, mode: "0755" }
-      - { name: nginx_config }
+      - { name: caddy_config }
+      - { name: valkey_data, container_uid: "999" }
     # INFO: Filter out base_files items that exist in the user custom list.
     # This way, if the user specify for example "rspamd_config.local.d/redis.conf",
     #  the base entry is completely removed from the final list.
