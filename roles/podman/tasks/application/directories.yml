@@ -1,0 +1,47 @@
+---
+# INFO: Example list:
+# st_podman_application_directories:
+#   - name: app_config/
+#     mode: "2770"         # default
+#     container_uid: 999   # will set the owner to uid 999 inside the container
+#     container_gid: 0     # will set the group to root inside the container (st_podman_user on host - default)
+#     when: "{{ foo_enabled }}"
+- name: "Ensure {{ st_podman_application_name }} directory {{ item.name }} exists." # noqa: risky-file-permissions
+  ansible.builtin.file:
+    path: "{{ st_podman_application_dir }}/{{ item.name }}"
+    state: directory
+
+# NOTE: After creation, the directory is owned by the Ansible user.
+# On subsequent runs, the directory can be owned by the container UID if container_uid is set,
+# so Ansible cannot chmod on it directly.
+# Instead, we check the current state (mode|ownership|ACL) in a single podman unshare call,
+# then fix everything in one shot if drift is detected.
+# Default ACL (setfacl -d -m g::rw) ensures new files inherit group read-write,
+# and setgid (2770) ensures new files inherit the directory's group.
+# Together they guarantee the host user retains access to files created by container processes.
+
+# NOTE: We use `podman unshare` CLI directly instead of the podman_unshare Ansible become method
+# because we can't control which user Ansible connects as via SSH — it may not be st_podman_user.
+# We assume the SSH user can become the application user via sudo, which is sufficient.
+- name: "Check {{ st_podman_application_name }} directory {{ item.name }} current owner, permissions and acl."
+  ansible.builtin.command:
+    cmd: >-
+      podman unshare sh -c
+      'MODE=$(stat -c "%a" "{{ st_podman_application_dir }}/{{ item.name }}");
+      OWN=$(stat -c "%u:%g" "{{ st_podman_application_dir }}/{{ item.name }}");
+      ACL=$(getfacl --omit-header "{{ st_podman_application_dir }}/{{ item.name }}" 2>/dev/null | grep "^default:group::" || echo "none");
+      printf "%04d|%s|%s\n" "$MODE" "$OWN" "$ACL"'
+  register: _dir_state
+  changed_when: false
+
+- name: "Ensure {{ st_podman_application_name }} directory {{ item.name }} owner, permissions and acl."
+  when: _dir_state.stdout != (item.mode | default('2770')) ~ '|' ~ (item.container_uid | default(0)) ~ ':' ~ (item.container_gid | default(0)) ~ '|default:group::rw-'
+  ansible.builtin.command:
+    cmd: >-
+      podman unshare sh -c
+      'chown {{ item.container_uid | default(0) }}:{{ item.container_gid | default(0) }} "{{ st_podman_application_dir }}/{{ item.name }}"
+      && chmod {{ item.mode | default('2770') }} "{{ st_podman_application_dir }}/{{ item.name }}"
+      && setfacl -d -m g::rw "{{ st_podman_application_dir }}/{{ item.name }}"'
+  changed_when: true
+  notify:
+    - "systemctl --user restart {{ st_podman_application_name }}"

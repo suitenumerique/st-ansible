@@ -5,6 +5,7 @@
       - podman
       - podman-compose
       - docker-cli
+      - acl
     update_cache: true
 
 - name: "Allow unprivileged ports binding."

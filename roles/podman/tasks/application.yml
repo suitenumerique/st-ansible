@@ -48,28 +48,39 @@
     state: directory
 
 - name: "Deploy and start {{ st_podman_application_name }}."
+  become: true
+  become_user: "{{ st_podman_user }}"
+  become_method: ansible.builtin.sudo
+  become_flags: "-i"
   block:
     # INFO:
-    # Getting this to work was kind of a pain:
     #  - we want some files (env files, config files...) to be accessible by a subuid inside the container
     #  - Linux does not really care if the subuid belongs to you when checking the permissions -
     #    that means everything kind of breaks for st_podman_user if the file is only accessible by the subuid
-    #  - We would like to use the podman_unshare become module for this matter, but we can't control -
-    #    if the end user will ssh as st_podman_user or another, and ansible doesn't support nested becomes
     # In the end what we do is :
-    #  - Deploy everything as 0770 or 0660
+    #  - Deploy everything as 2770 or 0660
     #  - If no container_uid →  owner and group set to st_podman_user
-    #  - If container_uid →  owner set to container_uid with `podman unshare`, group stays to st_podman_user (0770/0660 makes it so it doesn't break)
-    #  - The user can still change container_gid if he knows what he's doing, but it will probably break stuff
-    - name: "Ensure {{ st_podman_application_name }} application directories and files"
-      become: true
-      become_user: "{{ st_podman_user }}"
-      become_method: ansible.builtin.sudo
-      become_flags: "-i"
-      ansible.builtin.import_tasks: application/files.yml
-      when: >
-        (st_podman_application_directories is defined and st_podman_application_directories | length > 0)
-        or (st_podman_application_files is defined and st_podman_application_files | length > 0)
+    #  - If container_uid →  owner set to container_uid with `podman unshare`, group stays to st_podman_user (2770/0660 makes it so it doesn't break)
+    #  - The user can still change container_gid if he knows what he's doing, **but it will probably break stuff**
+    - name: "Ensure {{ st_podman_application_name }} application directories"
+      ansible.builtin.include_tasks: application/directories.yml
+      loop: "{{ st_podman_application_directories }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - st_podman_application_directories is defined
+        - st_podman_application_directories | length > 0
+        - item.when | default(true)
+
+    - name: "Ensure {{ st_podman_application_name }} application files"
+      ansible.builtin.include_tasks: application/files.yml
+      loop: "{{ st_podman_application_files }}"
+      loop_control:
+        label: "{{ item.dest }}"
+      when:
+        - st_podman_application_files is defined
+        - st_podman_application_files | length > 0
+        - item.when | default(true)
 
     - name: "Deploy {{ st_podman_application_name }} application compose file."
       ansible.builtin.template:
@@ -85,10 +96,6 @@
       ansible.builtin.meta: flush_handlers
 
     - name: "Ensure {{ st_podman_application_name }} application is started and enabled."
-      become: true
-      become_user: "{{ st_podman_user }}"
-      become_method: ansible.builtin.sudo
-      become_flags: "-i"
       ansible.builtin.systemd_service:
         name: "{{ st_podman_application_name }}"
         state: started
@@ -104,6 +111,10 @@
 
   rescue:
     - name: "Perform rollback on {{ st_podman_application_name }}."
+      become: true
+      become_user: "{{ st_podman_user }}"
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
       when: st_podman_application_rollback_enabled
       block:
         - name: "ROLLBACK | Remove broken application directory."
@@ -119,10 +130,6 @@
         # INFO: We can't use the handlers here because if any task fails,
         # Ansible stops the execution on the host, and doesn't run the handlers.
         - name: "ROLLBACK | systemctl --user restart {{ st_podman_application_name }}"
-          become: true
-          become_user: "{{ st_podman_user }}"
-          become_method: ansible.builtin.sudo
-          become_flags: "-i"
           ansible.builtin.systemd_service:
             name: "{{ st_podman_application_name }}"
             state: restarted

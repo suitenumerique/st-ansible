@@ -225,7 +225,7 @@
     - name: "Assert application config directory has correct permissions"
       ansible.builtin.assert:
         that:
-          - app_config_dir_perms.stat.mode | int == 770
+          - app_config_dir_perms.stat.mode | int == 2770
         fail_msg: "Application config directory has incorrect permissions."
         success_msg: "Application config directory has correct permissions."
 
