@@ -1,0 +1,51 @@
+---
+{{ ansible_managed | comment }}
+name: livekit
+services:
+  caddy:
+    container_name: caddy
+    image: docker.io/livekit/caddyl4:{{ st_meet_livekit_caddyl4_tag }}
+    command: run --config /etc/caddy.yaml --adapter yaml
+    network_mode: "host"
+    volumes:
+      - {{ st_meet_livekit_dir }}/caddy.yaml:/etc/caddy.yaml
+      - {{ st_meet_livekit_dir }}/caddy_data:/data
+  livekit:
+    container_name: livekit
+    image: docker.io/livekit/livekit-server:{{ st_meet_livekit_tag }}
+    command: --config /etc/livekit.yaml
+    network_mode: "host"
+    depends_on:
+      valkey:
+        condition: service_healthy
+    volumes:
+      - {{ st_meet_livekit_dir }}/livekit.yaml:/etc/livekit.yaml
+    healthcheck:
+      test: wget -q --spider http://localhost:7880
+      interval: 10s
+      timeout: 3s
+  egress:
+    container_name: egress
+    image: docker.io/livekit/egress:{{ st_meet_livekit_egress_tag }}
+    environment:
+      - EGRESS_CONFIG_FILE=/etc/egress.yaml
+    network_mode: "host"
+    depends_on:
+      valkey:
+        condition: service_healthy
+    volumes:
+      - {{ st_meet_livekit_dir }}/egress.yaml:/etc/egress.yaml
+    cap_add:
+      - CAP_SYS_ADMIN
+  valkey:
+    container_name: valkey
+    image: docker.io/valkey/valkey:{{ st_meet_livekit_valkey_tag }}
+    network_mode: "host"
+    volumes:
+      - {{ st_meet_livekit_dir }}/valkey_data:/data
+      - {{ st_meet_livekit_dir }}/valkey_config:/usr/local/etc/valkey
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s

@@ -1,0 +1,132 @@
+---
+argument_specs:
+  main:
+    short_description: "Installs and configures the meet application from La Suite Territoriale on Debian systems."
+    options:
+      st_meet_uid:
+        type: "int"
+        description: "UID of the `meet` user, used for the podman role."
+        default: 1100
+      st_meet_gid:
+        type: "int"
+        description: "GID of the `meet` group, used for the podman role."
+        default: "{{ st_meet_uid }}"
+      st_meet_registries:
+        type: "list"
+        elements: "dict"
+        description: "Optional private container registries to login the `meet` user onto."
+      st_meet_enabled:
+        type: "bool"
+        description: "Triggers the installation of meet."
+        default: false
+      st_meet_dir:
+        type: "str"
+        description: "Remote path to the base directory for meet app."
+        default: "/opt/meet/meet"
+      st_meet_tag:
+        type: "str"
+        description: "Tag of the meet docker image to deploy."
+        default: "latest"
+      st_meet_backend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for meet env file."
+        default: "meet/backend_env.j2"
+      st_meet_backend_env:
+        type: "str"
+        description: "Content of the default backend_env_template, not used if st_meet_backend_env_template is defined."
+        default: ""
+      st_meet_backend_run_migrations:
+        type: "bool"
+        description: "Whether to run database migrations on meet backend startup."
+        default: true
+      st_meet_frontend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for meet frontend env file."
+        default: "meet/frontend_env.j2"
+      st_meet_frontend_env:
+        type: "str"
+        description: "Content of the default frontend_env_template, not used if st_meet_frontend_env_template is defined."
+        default: ""
+      st_meet_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for meet compose file."
+        default: "meet/compose.yaml.j2"
+      st_meet_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the meet deployment fails."
+        default: false
+      st_meet_livekit_tag:
+        type: "str"
+        description: "Tag of the livekit docker image to deploy."
+        default: "latest"
+      st_meet_livekit_egress_tag:
+        type: "str"
+        description: "Tag of the livekit egress docker image to deploy."
+        default: "latest"
+      st_meet_livekit_caddyl4_tag:
+        type: "str"
+        description: "Tag of the livekit caddyl4 docker image to deploy."
+        default: "latest"
+      st_meet_livekit_valkey_tag:
+        type: "str"
+        description: "Tag of the valkey docker image to deploy for livekit when using the full compose template."
+        default: "latest"
+      st_meet_livekit_enabled:
+        type: "bool"
+        description: "Triggers the installation of livekit."
+        default: false
+      st_meet_livekit_dir:
+        type: "str"
+        description: "Remote path to the base directory for livekit app."
+        default: "/opt/meet/livekit"
+      st_meet_livekit_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for the livekit compose file."
+        default: "livekit/compose.default.yaml.j2"
+      st_meet_livekit_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the livekit deployment fails."
+        default: false
+      st_meet_livekit_domain:
+        type: "str"
+        description: "The domain name for the livekit server. Used in the default caddy configuration."
+      st_meet_livekit_turn_domain:
+        type: "str"
+        description: "The domain name for the livekit TURN server. Used in the default livekit and caddy configurations."
+      st_meet_livekit_api_key:
+        type: "str"
+        description: "The API key for the livekit server. Used in the default livekit configuration."
+      st_meet_livekit_api_secret:
+        type: "str"
+        description: "The API secret for the livekit server. Used in the default livekit configuration."
+      st_meet_livekit_files:
+        type: "list"
+        elements: "dict"
+        description: >
+          List of files to deploy for the livekit application.
+          By default deploys livekit.yaml, caddy.yaml and redis.conf from the default templates.
+          Override this entirely to deploy a custom livekit configuration.
+        default:
+          - { src: "livekit/livekit.default.yaml.j2", dest: "livekit.yaml" }
+          - { src: "livekit/caddy.default.yaml.j2", dest: "caddy.yaml" }
+          - { src: "livekit/valkey.default.conf.j2", dest: "valkey_config/valkey.conf" }
+          - { src: "livekit/egress.default.yaml.j2", dest: "egress.yaml" }
+      st_meet_livekit_directories:
+        type: "list"
+        elements: "dict"
+        description: >
+          List of directories to create for the livekit application.
+          By default creates caddy_data for the caddy file_system storage module.
+          Override this entirely for custom setups.
+        default:
+          - { name: "caddy_data" }
+          - { name: "valkey_data", container_uid: "999" }
+          - { name: "valkey_config" }
+      st_meet_cadvisor_enabled:
+        type: "bool"
+        description: "Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server."
+        default: false
+      st_meet_cadvisor_port:
+        type: "str"
+        description: "The host published port of the cadvisor container."
+        default: "127.0.0.1:58080"

@@ -1,0 +1,31 @@
+{{ ansible_managed | comment }}
+
+port: 7880
+bind_addresses:
+    - ""
+rtc:
+    tcp_port: 7881
+    port_range_start: 50000
+    port_range_end: 60000
+    use_external_ip: true
+    enable_loopback_candidate: false
+redis:
+    address: 127.0.0.1:6379
+    username: ""
+    password: ""
+    db: 0
+    use_tls: false
+    sentinel_master_name: ""
+    sentinel_username: ""
+    sentinel_password: ""
+    sentinel_addresses: []
+    cluster_addresses: []
+    max_redirects: null
+turn:
+    enabled: true
+    domain: "{{ st_meet_livekit_turn_domain }}"
+    tls_port: 5349
+    udp_port: 3478
+    external_tls: true
+keys:
+    "{{ st_meet_livekit_api_key }}": "{{ st_meet_livekit_api_secret }}"
