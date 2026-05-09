@@ -1,0 +1,27 @@
+{{ ansible_managed | comment }}
+port: 7880
+prometheus:
+    port: 6789
+rtc:
+    tcp_port: 7881
+    port_range_start: 50000
+    port_range_end: 60000
+    use_external_ip: false
+    enable_loopback_candidate: false
+    interfaces:
+      includes:
+        - {{ public_interface }}
+redis:
+    address: {{ redis_host }}
+    username: "{{ redis_username }}"
+    password: "{{ redis_password }}"
+    db: 0
+    use_tls: false
+turn:
+    enabled: true
+    domain: "{{ st_meet_livekit_turn_domain }}"
+    tls_port: 5349
+    udp_port: 3478
+    external_tls: true
+keys:
+   "{{ st_meet_livekit_api_key }}": "{{ st_meet_livekit_api_secret }}"

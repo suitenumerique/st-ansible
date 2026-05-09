@@ -1,0 +1,37 @@
+---
+- name: "Deploy livekit egress."
+  hosts: egress
+  tasks:
+    - name: "Install meet base."
+      become: true
+      become_user: root
+      ansible.builtin.import_role:
+        name: suitenumerique.st.meet
+
+    - name: "Deploy livekit egress application."
+      become: true
+      become_user: meet
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.meet
+        tasks_from: deploy.yml
+      vars:
+        st_meet_livekit_enabled: true
+        st_meet_livekit_rollback_enabled: true
+        st_meet_livekit_egress_tag: vx.y.z # check https://hub.docker.com/r/livekit/egress/tags
+
+        st_meet_livekit_domain: livekit.suite.anct.gouv.fr
+        st_meet_livekit_api_key: "{{ vault_livekit_api_key }}"
+        st_meet_livekit_api_secret: "{{ vault_livekit_api_secret }}"
+
+        st_meet_livekit_compose_template: "compose.egress.yaml.j2"
+        st_meet_livekit_directories: []
+
+        st_meet_livekit_files:
+          - { src: "egress.yaml.j2", dest: egress.yaml }
+
+        # templates variables
+        redis_host: "10.0.0.243:6379"
+        redis_username: "{{ vault_redis_username }}"
+        redis_password: "{{ vault_redis_password }}"

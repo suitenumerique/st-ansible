@@ -1,0 +1,31 @@
+---
+- name: "Deploy drive workers."
+  hosts: drive_workers
+  tasks:
+    - name: "Install drive base."
+      become: true
+      become_user: root
+      ansible.builtin.import_role:
+        name: suitenumerique.st.drive
+
+    # NOTE: Splitting in two tasks is not mandatory, you could also play
+    # the whole thing as root by appending the variables on the first task.
+    # This setup is useful for CI/CD pipelines without root access.
+    - name: "Deploy drive workers application."
+      become: true
+      become_user: drive
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.drive
+        tasks_from: deploy.yml
+      vars:
+        st_drive_workers_enabled: true
+        st_drive_tag: vx.y.z # check https://github.com/suitenumerique/drive/releases
+        st_drive_workers_rollback_enabled: true
+        st_drive_workers_env: |
+          DJANGO_CONFIGURATION=Production
+          DJANGO_SECRET_KEY=changeme
+          DATABASE_URL=postgres://user:pass@db.example.com/drive
+          DJANGO_CELERY_BROKER_URL=redis://redis.example.com:6379/0
+          # ... check https://github.com/suitenumerique/drive/blob/main/docs/env.md

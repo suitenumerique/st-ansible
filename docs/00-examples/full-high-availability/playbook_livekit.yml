@@ -1,0 +1,33 @@
+---
+- name: "Deploy livekit."
+  hosts: livekit
+  tasks:
+    - name: "Install meet base."
+      become: true
+      become_user: root
+      ansible.builtin.import_role:
+        name: suitenumerique.st.meet
+
+    # NOTE: Splitting in two tasks is not mandatory, you could also play
+    # the whole thing as root by appending the variables on the first task.
+    # This setup is useful for CI/CD pipelines without root access.
+    - name: "Deploy livekit application."
+      become: true
+      become_user: meet
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.meet
+        tasks_from: deploy.yml
+      vars:
+        st_meet_livekit_enabled: true
+        st_meet_livekit_rollback_enabled: true
+        st_meet_livekit_tag: vx.y.z # check https://hub.docker.com/r/livekit/livekit-server/tags
+        st_meet_livekit_egress_tag: vx.y.z # check https://hub.docker.com/r/livekit/egress/tags
+        st_meet_livekit_valkey_tag: x.y.z # check https://hub.docker.com/r/valkey/valkey/tags
+        st_meet_livekit_caddyl4_tag: vx.y.z # check https://hub.docker.com/r/livekit/caddyl4/tags
+        st_meet_livekit_domain: meet.example.com
+        st_meet_livekit_turn_domain: turn.example.com
+        st_meet_livekit_api_key: changeme
+        st_meet_livekit_api_secret: changeme
+        st_meet_cadvisor_enabled: true

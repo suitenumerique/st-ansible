@@ -1,8 +1,11 @@
 # La Suite Territoriale Ansible Collection
 
-## Install
+Ansible collection for deploying La Suite Territoriale applications on Debian systems
+using rootless Podman containers managed by systemd user units.
 
-To install the collection, add a `galaxy_requirements.yml` file to your ansible code containing :
+## Installing the Collection
+
+Add a `galaxy-requirements.yml` file:
 
 ```yaml
 collections:
@@ -11,68 +14,40 @@ collections:
     version: "1"
 ```
 
-Then use `ansible-galaxy install -r galaxy_requirements.yml`.
+Then install:
 
-## Usage
-
-### Roles
-
-The collection contains the following roles:
-- [suitenumerique.st.podman](https://github.com/suitenumerique/st-ansible/blob/main/roles/podman/REFERENCE.md)
-- [suitenumerique.st.messages](https://github.com/suitenumerique/st-ansible/blob/main/roles/messages/REFERENCE.md)
-- [suitenumerique.st.drive](https://github.com/suitenumerique/st-ansible/blob/main/roles/drive/REFERENCE.md)
-- [suitenumerique.st.keycloak](https://github.com/suitenumerique/st-ansible/blob/main/roles/keycloak/REFERENCE.md)
-- [suitenumerique.st.meet](https://github.com/suitenumerique/st-ansible/blob/main/roles/meet/REFERENCE.md)
-- [suitenumerique.st.alloy](https://github.com/suitenumerique/st-ansible/blob/main/roles/alloy/REFERENCE.md)
-- [suitenumerique.st.restic](https://github.com/suitenumerique/st-ansible/blob/main/roles/restic/REFERENCE.md)
-
-## Development
-
-### Dependencies
-Create a virtualenv using:
 ```bash
-python3 -m virtualenv ./venv
-```
-And activate it:
-```bash
-source ./venv/bin/activate
+ansible-galaxy collection install -r galaxy-requirements.yml
 ```
 
-Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+## Documentation
 
-### Building locally
+You can find the documentation of the collection under the [docs/](docs/) directory.
 
-Before building, run:
-```bash
-make docs
-```
-to update the documentations and propagate the default values to roles/<role>/defaults from the argument_specs.yml files
+- **[01-fundamentals/](docs/01-fundamentals/)** architecture, podman base role, deployment, upgrade guide
+- **[02-messages/](docs/02-messages/)** messages app, workers, mta-in, socks-proxy, mpa
+- **[03-drive/](docs/03-drive/)**  drive app, workers, collabora
+- **[04-keycloak/](docs/04-keycloak/)** keycloak identity provider
+- **[05-meet/](docs/05-meet/)** meet app, livekit
+- **[06-monitoring.md](docs/06-monitoring.md)** cAdvisor + Grafana Alloy
+- **[07-backup.md](docs/07-backup.md)** Restic backup
+- **[08-troubleshooting.md](docs/08-troubleshooting.md)** common issues and debug commands
+- **[00-examples/](docs/00-examples/)** playbook examples:
+  - [full-high-availability](docs/00-examples/full-high-availability/)
+  - [meet](docs/00-examples/meet/)
 
-Then build:
-```bash
-make build
-```
-This will output a line with the location of the built file: `Created collection for suitenumerique.st at <path>/suitenumerique-st-<version>.tar.gz`
+## Roles
 
-### Using the locally built collection
-In your consumer repository's `galaxy_requirements.yml`, overwrite the `collections` key:
-```yaml
-collections:
-  - name: <path>/suitenumerique-st-<version>.tar.gz
-    version: <version>
-    type: file
-```
-and run
-```bash
-ansible-galaxy install -r galaxy_requirements.yml --force
-```
-to forcefully update the dependency. You can then repeat the `make docs`, `make build` and the previous update command to update the galaxy collection.
+| Role | Description | Reference |
+|------|-------------|-----------|
+| podman | Rootless Podman base | [REFERENCE.md](roles/podman/REFERENCE.md) |
+| messages | Messages application | [REFERENCE.md](roles/messages/REFERENCE.md) |
+| drive | Drive application | [REFERENCE.md](roles/drive/REFERENCE.md) |
+| keycloak | Keycloak identity provider | [REFERENCE.md](roles/keycloak/REFERENCE.md) |
+| meet | Meet video conferencing | [REFERENCE.md](roles/meet/REFERENCE.md) |
+| alloy | Grafana Alloy telemetry | [REFERENCE.md](roles/alloy/REFERENCE.md) |
+| restic | Restic backup | [REFERENCE.md](roles/restic/REFERENCE.md) |
 
-## Licensing
+## License
 
-This codebase is under MIT License.
-
-See [LICENSE](https://github.com/suitenumerique/st-ansible/blob/main/LICENSE) for full text.
+MIT, see [LICENSE](LICENSE)

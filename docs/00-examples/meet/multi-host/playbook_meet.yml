@@ -1,0 +1,42 @@
+---
+- name: "Deploy meet."
+  hosts: meet
+  serial: 1
+  tasks:
+    - name: "Install meet base."
+      become: true
+      become_user: root
+      ansible.builtin.import_role:
+        name: suitenumerique.st.meet
+
+    - name: "Deploy meet application."
+      become: true
+      become_user: meet
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.meet
+        tasks_from: deploy.yml
+      vars:
+        st_meet_enabled: true
+        st_meet_rollback_enabled: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+        st_meet_backend_run_migrations: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+        st_meet_tag: vx.y.z # check https://github.com/suitenumerique/meet/releases
+        st_meet_frontend_env: |
+          NEXT_PUBLIC_API_ORIGIN=https://meet.example.com
+          NEXT_PUBLIC_LIVEKIT_URL=wss://livekit.example.com
+          # ... check https://github.com/suitenumerique/meet
+        st_meet_backend_env: |
+          DJANGO_CONFIGURATION=Production
+          DJANGO_SECRET_KEY=changeme
+          DJANGO_ALLOWED_HOSTS=meet.example.com
+          DATABASE_URL=postgres://user:pass@db.example.com/meet
+          REDIS_URL=redis://redis.example.com:6379
+          STORAGES_DEFAULT_BACKEND=django_s3_storage.S3Storage
+          AWS_S3_ENDPOINT_URL=https://s3.example.com
+          AWS_ACCESS_KEY_ID=changeme
+          AWS_SECRET_ACCESS_KEY=changeme
+          AWS_STORAGE_BUCKET_NAME=meet
+          CSRF_TRUSTED_ORIGINS=https://meet.example.com
+          # ... check https://github.com/suitenumerique/meet
+        st_meet_cadvisor_enabled: true

@@ -1,0 +1,38 @@
+[keycloak]
+keycloak1 ansible_host=10.0.0.1
+keycloak2 ansible_host=10.0.0.2
+
+[messages]
+messages1 ansible_host=10.0.0.3
+messages2 ansible_host=10.0.0.4
+
+[mta_in]
+mta-in1 ansible_host=10.0.0.5
+mta-in2 ansible_host=10.0.0.6
+
+[messages_workers]
+messages-workers1 ansible_host=10.0.0.7
+
+[socks_proxy]
+socks-proxy1 ansible_host=10.0.0.14
+socks-proxy2 ansible_host=10.0.0.15
+
+[mpa]
+mpa1 ansible_host=10.0.0.8
+
+[drive]
+drive1 ansible_host=10.0.0.9
+drive2 ansible_host=10.0.0.10
+
+[drive_workers]
+drive-workers1 ansible_host=10.0.0.11
+
+[collabora]
+collabora1 ansible_host=10.0.0.12
+
+[meet]
+meet1 ansible_host=10.0.0.16
+meet2 ansible_host=10.0.0.17
+
+[livekit]
+livekit1 ansible_host=10.0.0.18

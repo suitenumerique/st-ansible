@@ -1,0 +1,22 @@
+# {{ ansible_managed }}
+# Based on https://github.com/livekit/deploy/blob/main/caddyl4/Dockerfile
+
+FROM golang:1.25-alpine AS builder
+
+ARG CADDY_VERSION="{{ st_meet_livekit_caddy_version }}"
+ENV CADDY_VERSION=$CADDY_VERSION
+WORKDIR /workspace
+
+RUN <<EOR
+go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+GOOS=linux GOARCH=amd64 xcaddy build \
+    --with github.com/mholt/caddy-l4 \
+    --with github.com/pberkel/caddy-storage-redis \
+    --with github.com/caddy-dns/scaleway
+EOR
+
+FROM alpine
+
+RUN apk --no-cache add curl
+COPY --from=builder /workspace/caddy /bin/caddy
+

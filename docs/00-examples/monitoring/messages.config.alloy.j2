@@ -77,7 +77,7 @@ loki.relabel "journal_messages" {
 // Get logs from journald
 loki.source.journal "messages" {
   max_age       = "24h0m0s"
-  matches       = "_UID={{ st_messages_uid }} {{ '_SYSTEMD_USER_UNIT=mta-in.service' if st_messages_mta_in_enabled }} {{ '_SYSTEMD_USER_UNIT=mpa.service' if st_messages_mpa_enabled }}"
+  matches       = "_UID={{ st_messages_uid }}"
   relabel_rules = loki.relabel.journal_messages.rules
   forward_to    = [loki.process.default.receiver]
 }

@@ -1,0 +1,30 @@
+---
+- name: "Deploy socks-proxy."
+  hosts: socks_proxy
+  serial: 1
+  tasks:
+    - name: "Install messages base."
+      become: true
+      become_user: root
+      ansible.builtin.import_role:
+        name: suitenumerique.st.messages
+
+    # NOTE: Splitting in two tasks is not mandatory, you could also play
+    # the whole thing as root by appending the variables on the first task.
+    # This setup is useful for CI/CD pipelines without root access.
+    - name: "Deploy socks-proxy application."
+      become: true
+      become_user: messages
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.messages
+        tasks_from: deploy.yml
+      vars:
+        st_messages_socks_proxy_enabled: true
+        st_messages_socks_proxy_rollback_enabled: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+        st_messages_socks_proxy_tag: vx.y.z # check https://github.com/suitenumerique/messages/releases
+        st_messages_socks_proxy_env: |
+          MTA_OUT_MODE=direct
+          MTA_OUT_DIRECT_PROXIES=["socks5://proxy1:1080","socks5://proxy2:1080"]
+          # ... check https://github.com/suitenumerique/messages/blob/main/docs/env.md#mta-settings

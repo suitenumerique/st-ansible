@@ -1,0 +1,31 @@
+---
+- name: "Deploy collabora."
+  hosts: collabora
+  tasks:
+    - name: "Install drive base."
+      become: true
+      become_user: root
+      ansible.builtin.import_role:
+        name: suitenumerique.st.drive
+
+    # NOTE: Splitting in two tasks is not mandatory, you could also play
+    # the whole thing as root by appending the variables on the first task.
+    # This setup is useful for CI/CD pipelines without root access.
+    - name: "Deploy collabora application."
+      become: true
+      become_user: drive
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.drive
+        tasks_from: deploy.yml
+      vars:
+        st_drive_collabora_enabled: true
+        st_drive_collabora_tag: vx.y.z # check https://hub.docker.com/r/collabora/code/tags
+        st_drive_collabora_rollback_enabled: true
+        st_drive_collabora_env: |
+          server_name=collabora.example.com
+          aliasgroup1=https://drive\.example\.com:443
+          dictionaries=en_US fr_FR
+          extra_params=--o:ssl.enable=false --o:ssl.termination=true
+          # ... check https://sdk.collaboraonline.com/docs/installation/CODE_Docker_image.html#how-to-configure-docker-image

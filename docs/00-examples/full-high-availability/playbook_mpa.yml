@@ -1,0 +1,34 @@
+---
+- name: "Deploy mpa."
+  hosts: mpa
+  tasks:
+    - name: "Install messages base."
+      become: true
+      become_user: root
+      ansible.builtin.import_role:
+        name: suitenumerique.st.messages
+
+    # NOTE: Splitting in two tasks is not mandatory, you could also play
+    # the whole thing as root by appending the variables on the first task.
+    # This setup is useful for CI/CD pipelines without root access.
+    - name: "Deploy mpa application."
+      become: true
+      become_user: messages
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.messages
+        tasks_from: deploy.yml
+      vars:
+        st_messages_mpa_enabled: true
+        st_messages_mpa_rollback_enabled: false # don't rollback the valkey and rspamd data directories
+        st_messages_mpa_clamav_tag: x.y.z # check https://hub.docker.com/r/clamav/clamav/tags
+        st_messages_mpa_rspamd_tag: x.y.z # check https://hub.docker.com/r/rspamd/rspamd/tags
+        st_messages_mpa_caddy_tag: x.y.z # check https://hub.docker.com/_/caddy/tags
+        st_messages_mpa_valkey_tag: x.y.z # check https://hub.docker.com/r/valkey/valkey/tags
+        st_messages_mpa_rspamd_controller_password: "superPassword!"
+        st_messages_mpa_auth_bearer: "superBearerToken!"
+        st_messages_mpa_blacklist_domains: []
+        st_messages_mpa_blacklist_ips: []
+        st_messages_mpa_whitelist_domains: []
+        st_messages_mpa_whitelist_ips: []

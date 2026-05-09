@@ -1,0 +1,42 @@
+---
+- name: "Deploy drive."
+  hosts: drive
+  serial: 1
+  tasks:
+    - name: "Install drive base."
+      become: true
+      become_user: root
+      ansible.builtin.import_role:
+        name: suitenumerique.st.drive
+
+    # NOTE: Splitting in two tasks is not mandatory, you could also play
+    # the whole thing as root by appending the variables on the first task.
+    # This setup is useful for CI/CD pipelines without root access.
+    - name: "Deploy drive application."
+      become: true
+      become_user: drive
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.drive
+        tasks_from: deploy.yml
+      vars:
+        st_drive_enabled: true
+        st_drive_rollback_enabled: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+        st_drive_public_host: drive.example.com
+        st_drive_tag: vx.y.z # check https://github.com/suitenumerique/drive/releases
+        st_drive_backend_run_migrations: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+        st_drive_backend_env: |
+          DJANGO_CONFIGURATION=Production
+          DJANGO_SECRET_KEY=changeme
+          DATABASE_URL=postgres://user:pass@db.example.com/drive
+          REDIS_URL=redis://redis.example.com:6379
+          AWS_S3_ENDPOINT_URL=https://s3.example.com
+          AWS_S3_ACCESS_KEY_ID=drive
+          AWS_S3_SECRET_ACCESS_KEY=changeme
+          AWS_STORAGE_BUCKET_NAME=drive-media-storage
+          # ... check https://github.com/suitenumerique/drive/blob/main/docs/env.md
+        st_drive_frontend_env: |
+          NEXT_PUBLIC_API_ORIGIN=https://drive.example.com
+          # ... check https://github.com/suitenumerique/drive/blob/main/docs/env.md
+        st_drive_cadvisor_enabled: true

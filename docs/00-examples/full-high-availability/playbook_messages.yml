@@ -1,0 +1,37 @@
+---
+- name: "Deploy messages."
+  hosts: messages
+  serial: 1
+  tasks:
+    - name: "Install messages base."
+      become: true
+      become_user: root
+      ansible.builtin.import_role:
+        name: suitenumerique.st.messages
+
+    # NOTE: Splitting in two tasks is not mandatory, you could also play
+    # the whole thing as root by appending the variables on the first task.
+    # This setup is useful for CI/CD pipelines without root access.
+    - name: "Deploy messages application."
+      become: true
+      become_user: messages
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.messages
+        tasks_from: deploy.yml
+      vars:
+        st_messages_enabled: true
+        st_messages_rollback_enabled: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+        st_messages_backend_run_migrations: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+        st_messages_tag: vx.y.z # check https://github.com/suitenumerique/messages/releases
+        st_messages_frontend_env: |
+          NEXT_PUBLIC_API_ORIGIN=https://messages.example.com
+          # ... check https://github.com/suitenumerique/messages/blob/main/docs/env.md
+        st_messages_backend_env: |
+          DJANGO_CONFIGURATION=Production
+          DJANGO_SECRET_KEY=changeme
+          DATABASE_URL=postgres://user:pass@db.example.com/messages
+          REDIS_URL=redis://redis.example.com:6379
+          # ... check https://github.com/suitenumerique/messages/blob/main/docs/env.md
+        st_messages_cadvisor_enabled: true

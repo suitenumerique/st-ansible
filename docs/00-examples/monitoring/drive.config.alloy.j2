@@ -77,7 +77,7 @@ loki.relabel "journal_drive" {
 // Get logs from journald
 loki.source.journal "drive" {
   max_age       = "24h0m0s"
-  matches       = "_UID={{ st_drive_uid }} {{ '_SYSTEMD_USER_UNIT=collabora.service' if st_drive_collabora_enabled }}"
+  matches       = "_UID={{ st_drive_uid }}"
   relabel_rules = loki.relabel.journal_drive.rules
   forward_to    = [loki.process.default.receiver]
 }

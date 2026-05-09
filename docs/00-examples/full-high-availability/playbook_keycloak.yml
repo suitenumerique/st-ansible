@@ -1,0 +1,38 @@
+---
+- name: "Deploy keycloak."
+  hosts: keycloak
+  serial: 1
+  tasks:
+    - name: "Install keycloak base."
+      become: true
+      become_user: root
+      ansible.builtin.import_role:
+        name: suitenumerique.st.keycloak
+
+    # NOTE: Splitting in two tasks is not mandatory, you could also play
+    # the whole thing as root by appending the variables on the first task.
+    # This setup is useful for CI/CD pipelines without root access.
+    - name: "Deploy keycloak application."
+      become: true
+      become_user: keycloak
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.keycloak
+        tasks_from: deploy.yml
+      vars:
+        st_keycloak_enabled: true
+        st_keycloak_rollback_enabled: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+        st_keycloak_tag: vx.y.z # check https://github.com/keycloak/keycloak/releases
+        st_keycloak_start_command: "start --optimized"
+        st_keycloak_env: |
+          KC_DB=postgres
+          KC_DB_URL=jdbc:postgresql://db.example.com/keycloak
+          KC_DB_USERNAME=keycloak
+          KC_DB_PASSWORD=changeme
+          KC_HOSTNAME=keycloak.example.com
+          KC_HTTP_ENABLED=true
+          KEYCLOAK_ADMIN=admin
+          KEYCLOAK_ADMIN_PASSWORD=changeme
+          # ... check https://www.keycloak.org/server/all-config
+        st_keycloak_cadvisor_enabled: true

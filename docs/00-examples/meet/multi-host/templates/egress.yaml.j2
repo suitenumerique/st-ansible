@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+
+redis:
+    address: {{ redis_host }}
+    username: "{{ redis_username }}"
+    password: "{{ redis_password }}"
+    db: 0
+    use_tls: false
+api_key: "{{ st_meet_livekit_api_key }}"
+api_secret: "{{ st_meet_livekit_api_secret }}"
+ws_url: "wss://{{ st_meet_livekit_domain }}"

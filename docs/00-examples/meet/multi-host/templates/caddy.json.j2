@@ -1,0 +1,111 @@
+{
+    "logging": {
+        "logs": {
+            "default": {
+                "level": "INFO"
+            }
+        }
+    },
+    "storage": {
+        "module": "redis",
+        "address": ["{{ redis_host }}"],
+        "username": "{{ redis_username }}",
+        "password": "{{ redis_password }}"
+    },
+    "apps": {
+        "tls": {
+            "automation": {
+                "policies": [
+                    {
+                        "subjects": [
+                            "{{ st_meet_livekit_domain }}",
+                            "{{ st_meet_livekit_turn_domain }}"
+                        ],
+                        "issuers": [
+                            {
+                                "module": "acme",
+                                "challenges": {
+                                    "dns": {
+                                        "ttl": "5m",
+                                        "propagation_delay": "5m",
+                                        "propagation_timeout": "30m",
+                                        "provider": {
+                                            "name": "scaleway",
+                                            "secret_key": "{{ scaleway_secret_key }}",
+                                            "organization_id": "{{ scaleway_organisation_id }}"
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+            "certificates": {
+                "automate": [
+                    "{{ st_meet_livekit_domain }}",
+                    "{{ st_meet_livekit_turn_domain }}"
+                ]
+            }
+        },
+        "layer4": {
+            "servers": {
+                "main": {
+                    "listen": [":443"],
+                    "routes": [
+                        {
+                            "match": [
+                                {
+                                    "tls": {
+                                        "sni": ["{{ st_meet_livekit_turn_domain }}"]
+                                    }
+                                }
+                            ],
+                            "handle": [
+                                {
+                                    "handler": "tls"
+                                },
+                                {
+                                    "handler": "proxy",
+                                    "upstreams": [
+                                        {
+                                            "dial": ["{{ public_ip }}:5349"]
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "match": [
+                                {
+                                    "tls": {
+                                        "sni": ["{{ st_meet_livekit_domain }}"]
+                                    }
+                                }
+                            ],
+                            "handle": [
+                                {
+                                    "handler": "tls",
+                                    "connection_policies": [
+                                        {
+                                            "alpn": ["http/1.1"]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "handler": "proxy",
+                                    "upstreams": [
+                                        {
+                                            "dial": ["localhost:7880"]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+}
+

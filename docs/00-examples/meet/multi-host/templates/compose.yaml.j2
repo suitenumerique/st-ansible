@@ -1,0 +1,27 @@
+---
+{{ ansible_managed | comment }}
+services:
+  caddy:
+    container_name: caddy
+    build:
+      context: caddy/
+      dockerfile: Dockerfile
+    network_mode: "host"
+    command: "/bin/caddy run --config /etc/caddy.json"
+    volumes:
+      - ./caddy/caddy.json:/etc/caddy.json
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS --resolve {{ st_meet_livekit_domain }}:443:127.0.0.1 https://{{ st_meet_livekit_domain }} | grep 'OK'"]
+      interval: 10s
+      timeout: 1s
+  livekit:
+    container_name: livekit
+    image: docker.io/livekit/livekit-server:{{ st_meet_livekit_tag }}
+    command: --config /etc/livekit.yaml
+    network_mode: "host"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    healthcheck:
+      test: wget -q --spider http://localhost:7880
+      interval: 10s
+      timeout: 1s

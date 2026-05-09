@@ -1,0 +1,15 @@
+---
+{{ ansible_managed | comment }}
+services:
+  # NOTE: egress requires CAP_SYS_ADMIN for screen recording.
+  # Make sure the host allows this capability (e.g. via podman --cap-add SYS_ADMIN).
+  egress:
+    container_name: egress
+    image: docker.io/livekit/egress:{{ st_meet_livekit_egress_tag }}
+    environment:
+      - EGRESS_CONFIG_FILE=/etc/egress.yaml
+    network_mode: "host"
+    volumes:
+      - ./egress.yaml:/etc/egress.yaml
+    cap_add:
+      - CAP_SYS_ADMIN

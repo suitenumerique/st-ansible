@@ -1,0 +1,5 @@
+---
+collections:
+  - name: https://github.com/suitenumerique/st-ansible.git
+    type: git
+    version: "1"
