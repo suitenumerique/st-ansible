@@ -8,7 +8,7 @@ services:
     image: ghcr.io/suitenumerique/messages-frontend:{{ st_messages_tag }}
     env_file: ./frontend_env
     ports:
-      - "8080:8080"
+      - "{{ st_messages_port }}:8080"
     depends_on:
       backend:
         condition: service_healthy

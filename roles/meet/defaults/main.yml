@@ -8,6 +8,8 @@ st_meet_gid: '{{ st_meet_uid }}'
 st_meet_enabled: false
 # Remote path to the base directory for meet app.
 st_meet_dir: /opt/meet/meet
+# The host published port for the meet frontend.
+st_meet_port: '50080'
 # Tag of the meet docker image to deploy.
 st_meet_tag: latest
 # Local path to the custom template to use for meet env file.

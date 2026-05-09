@@ -8,7 +8,7 @@ services:
     image: docker.io/lasuite/meet-frontend:{{ st_meet_tag }}
     env_file: ./frontend_env
     ports:
-      - "8080:8080"
+      - "{{ st_meet_port }}:8080"
     depends_on:
       backend:
         condition: service_healthy

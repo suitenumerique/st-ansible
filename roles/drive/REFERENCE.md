@@ -28,6 +28,7 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 | st_drive_tag | Tag of the drive docker images to deploy. | str | no | main |
 | st_drive_enabled | Triggers the installation of the drive application. | bool | no | False |
 | st_drive_dir | Remote path to the base directory for drive app. | str | no | /opt/drive/drive |
+| st_drive_port | The host published port for the drive frontend. | str | no | 50080 |
 | st_drive_rollback_enabled | Whether or not to trigger the rollback tasks if the drive deployment fails. | bool | no | False |
 | st_drive_nginx_template | Local path to the custom template to use for drive nginx configuration file. | str | no | drive/nginx.conf.j2 |
 | st_drive_s3_protocol | The S3 compatible storage protocol used for media storage. | str | no | https |
@@ -51,7 +52,7 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 | st_drive_collabora_env | Content of the default collabora_env_template, not used if st_drive_collabora_env_template is defined. | str | no |  |
 | st_drive_collabora_rollback_enabled | Whether or not to trigger the rollback tasks if the collabora deployment fails. | bool | no | False |
 | st_drive_collabora_compose_template | Local path to the custom template to use for collabora compose file. | str | no | collabora/compose.yaml.j2 |
-| st_drive_collabora_port | The port to open on the host, redirecting to port 9980 in the container. It can also specify the ip address, something like 127.0.0.1:9980. | str | no | 9980 |
+| st_drive_collabora_port | The port to open on the host, redirecting to port 9980 in the container. It can also specify the ip address, something like 127.0.0.1:9980. | str | no | 50080 |
 | st_drive_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
 | st_drive_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:58080 |
 

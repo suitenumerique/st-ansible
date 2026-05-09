@@ -26,6 +26,7 @@ Installs and configures the meet application from La Suite Territoriale on Debia
 | st_meet_registries | Optional private container registries to login the `meet` user onto. | list of 'dict' | no |  |
 | st_meet_enabled | Triggers the installation of meet. | bool | no | False |
 | st_meet_dir | Remote path to the base directory for meet app. | str | no | /opt/meet/meet |
+| st_meet_port | The host published port for the meet frontend. | str | no | 50080 |
 | st_meet_tag | Tag of the meet docker image to deploy. | str | no | latest |
 | st_meet_backend_env_template | Local path to the custom template to use for meet env file. | str | no | meet/backend_env.j2 |
 | st_meet_backend_env | Content of the default backend_env_template, not used if st_meet_backend_env_template is defined. | str | no |  |

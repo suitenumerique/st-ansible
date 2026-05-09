@@ -25,7 +25,7 @@ services:
       - unbound
       - valkey
     ports:
-      - "11334:11334"
+      - "{{ st_messages_mpa_rspamd_controller_port }}:11334"
     volumes:
       - {{ st_messages_mpa_dir }}/rspamd_data:/var/lib/rspamd
       - {{ st_messages_mpa_dir }}/rspamd_config:/etc/rspamd

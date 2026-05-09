@@ -13,7 +13,7 @@ st_keycloak_env_template: keycloak/env.j2
 # Local path to the custom template to use for keycloak compose file.
 st_keycloak_compose_template: keycloak/compose.yaml.j2
 # The port to open on the host, redirecting to port 8080 in the container. It can also specify the ip address, something like 127.0.0.1:8080.
-st_keycloak_port: '8080'
+st_keycloak_port: '50080'
 # When using the default compose template, specify the `command` to use to start keycloak.
 st_keycloak_start_command: start --optimized
 # Whether or not to trigger the rollback tasks if the keycloak deployment fails.

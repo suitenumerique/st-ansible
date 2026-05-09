@@ -27,6 +27,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_tag | Tag of the messages docker images to deploy. | str | no | main |
 | st_messages_enabled | Triggers the installation of the messages application. | bool | no | False |
 | st_messages_dir | Remote path to the base directory for messages app. | str | no | /opt/messages/messages |
+| st_messages_port | The host published port for the messages frontend. | str | no | 50080 |
 | st_messages_rollback_enabled | Whether or not to trigger the rollback tasks if the messages deployment fails. | bool | no | False |
 | st_messages_compose_template | Local path to the custom template to use for messages compose file. | str | no | messages/compose.yaml.j2 |
 | st_messages_backend_env_template | Local path to the custom template to use for messages env file. | str | no | messages/backend_env.j2 |
@@ -43,6 +44,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mta_in_enabled | Triggers the installation of the mta-in. | bool | no | False |
 | st_messages_mta_in_tag | Tag of the mta-in docker image to deploy. | str | no | main |
 | st_messages_mta_in_dir | Remote path to the base directory for mta-in app. | str | no | /opt/messages/mta-in |
+| st_messages_mta_in_port | The host published port for the mta-in SMTP endpoint. | str | no | 50025 |
 | st_messages_mta_in_env_template | Local path to the custom template to use for mta-in env file. | str | no | mta_in/env.j2 |
 | st_messages_mta_in_env | Content of the default mta_in_env_template, not used if st_messages_mta_in_env_template is defined. | str | no |  |
 | st_messages_mta_in_starttls_certificate_path | Path of the starttls certificate on the remote host. The certificate must be in the smtpd_tls_chain_files format, see https://www.postfix.org/postconf.5.html#smtpd_tls_chain_files. The file must be accessible by the `messages` user. | str | no |  |
@@ -63,6 +65,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mpa_caddy_healthcheck_port | The host published port for the caddy /healthcheck endpoint. | str | no | 50090 |
 | st_messages_mpa_rspamd_tag | The tag of the rspamd docker image to use. See https://hub.docker.com/r/rspamd/rspamd/tags. | str | no | 4 |
 | st_messages_mpa_rspamd_controller_password | Password of the rspamd controller webui. | str | no |  |
+| st_messages_mpa_rspamd_controller_port | The host published port for the rspamd controller/webui. | str | no | 11334 |
 | st_messages_mpa_blacklist_domains | Domains to blacklist via rspamd multimap. | list of 'str' | no | [] |
 | st_messages_mpa_blacklist_ips | IPs or CIDRs to blacklist via rspamd multimap. | list of 'str' | no | [] |
 | st_messages_mpa_whitelist_domains | Domains to whitelist via rspamd multimap. | list of 'str' | no | [] |

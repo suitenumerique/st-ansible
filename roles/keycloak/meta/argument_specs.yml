@@ -37,7 +37,7 @@ argument_specs:
       st_keycloak_port:
         type: "str"
         description: "The port to open on the host, redirecting to port 8080 in the container. It can also specify the ip address, something like 127.0.0.1:8080."
-        default: "8080"
+        default: "50080"
       st_keycloak_start_command:
         type: "str"
         description: "When using the default compose template, specify the `command` to use to start keycloak."

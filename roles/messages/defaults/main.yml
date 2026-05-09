@@ -10,6 +10,8 @@ st_messages_tag: main
 st_messages_enabled: false
 # Remote path to the base directory for messages app.
 st_messages_dir: /opt/messages/messages
+# The host published port for the messages frontend.
+st_messages_port: '50080'
 # Whether or not to trigger the rollback tasks if the messages deployment fails.
 st_messages_rollback_enabled: false
 # Local path to the custom template to use for messages compose file.
@@ -42,6 +44,8 @@ st_messages_mta_in_enabled: false
 st_messages_mta_in_tag: main
 # Remote path to the base directory for mta-in app.
 st_messages_mta_in_dir: /opt/messages/mta-in
+# The host published port for the mta-in SMTP endpoint.
+st_messages_mta_in_port: '50025'
 # Local path to the custom template to use for mta-in env file.
 st_messages_mta_in_env_template: mta_in/env.j2
 # Local path to the custom template to use for mta-in compose file.
@@ -74,6 +78,8 @@ st_messages_mpa_caddy_healthcheck_port: '50090'
 # The tag of the rspamd docker image to use.
 # See https://hub.docker.com/r/rspamd/rspamd/tags.
 st_messages_mpa_rspamd_tag: '4'
+# The host published port for the rspamd controller/webui.
+st_messages_mpa_rspamd_controller_port: '11334'
 # Domains to blacklist via rspamd multimap.
 st_messages_mpa_blacklist_domains: []
 # IPs or CIDRs to blacklist via rspamd multimap.
