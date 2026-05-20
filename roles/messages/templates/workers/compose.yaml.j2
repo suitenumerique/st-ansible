@@ -7,7 +7,7 @@ services:
     container_name: messages-worker
     image: ghcr.io/suitenumerique/messages-backend:{{ st_messages_tag }}
     env_file: ./env
-    command: celery -A messages.celery_app worker --task-events --beat -l INFO -c $CELERY_CONCURRENCY -Q celery,default
+    command: python worker.py --concurrency={{ ansible_processor_nproc }}
     healthcheck:
       test: ["CMD-SHELL", "celery -A messages.celery_app inspect ping"]
       interval: 1m
