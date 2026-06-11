@@ -7,7 +7,7 @@
     st_podman_uid: "{{ st_meet_uid }}"
     st_podman_gid: "{{ st_meet_gid }}"
     st_podman_registries: "{{ st_meet_registries | default([]) }}"
-    st_podman_unprivileged_port_start: "443"
+    st_podman_unprivileged_port_start: "80"
 
 - name: "Deploy meet."
   ansible.builtin.import_tasks: deploy.yml

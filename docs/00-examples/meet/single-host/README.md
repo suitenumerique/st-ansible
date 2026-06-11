@@ -27,6 +27,14 @@ ansible-galaxy collection install -r galaxy-requirements.yml --force
 
 # Deploy livekit
 ansible-playbook -i hosts playbook_livekit_single.yml
+
+# Check the logs (needs to be connected into the VM)
+sudo -iu meet
+journalctl --user -u livekit
+
+# Restart livekit (needs to be connected into the VM)
+sudo -iu meet
+systemctl --user restart livekit
 ```
 
 ## Key Variables
