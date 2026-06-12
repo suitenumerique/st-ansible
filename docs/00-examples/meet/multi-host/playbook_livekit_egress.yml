@@ -18,7 +18,8 @@
         tasks_from: deploy.yml
       vars:
         st_meet_livekit_enabled: true
-        st_meet_livekit_rollback_enabled: true
+        # TODO: Enable after first successful deployment
+        # st_meet_livekit_rollback_enabled: true
         st_meet_livekit_egress_tag: vx.y.z # check https://hub.docker.com/r/livekit/egress/tags
 
         st_meet_livekit_domain: livekit.suite.anct.gouv.fr

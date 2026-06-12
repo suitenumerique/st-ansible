@@ -19,7 +19,8 @@
       vars:
         st_meet_livekit_enabled: true
         st_meet_cadvisor_enabled: true
-        st_meet_livekit_rollback_enabled: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+        # TODO: Enable after first successful deployment
+        # st_meet_livekit_rollback_enabled: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
         st_meet_livekit_tag: vx.y.z # check https://hub.docker.com/r/livekit/livekit-server/tags
         st_meet_livekit_egress_tag: vx.y.z # check https://hub.docker.com/r/livekit/egress/tags
         st_meet_livekit_valkey_tag: x.y.z # check https://hub.docker.com/r/valkey/valkey/tags

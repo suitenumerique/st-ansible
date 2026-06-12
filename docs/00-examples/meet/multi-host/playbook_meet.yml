@@ -19,7 +19,8 @@
         tasks_from: deploy.yml
       vars:
         st_meet_enabled: true
-        st_meet_rollback_enabled: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+        # TODO: Enable after first successful deployment
+        # st_meet_rollback_enabled: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
         st_meet_backend_run_migrations: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
         st_meet_tag: vx.y.z # check https://github.com/suitenumerique/meet/releases
         st_meet_frontend_env: |
