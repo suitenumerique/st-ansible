@@ -6,6 +6,7 @@ services:
   frontend:
     container_name: meet-frontend
     image: docker.io/lasuite/meet-frontend:{{ st_meet_tag }}
+    user: 1001:127
     env_file: ./frontend_env
     ports:
       - "{{ st_meet_port }}:8080"
@@ -16,6 +17,7 @@ services:
   backend:
     container_name: meet-backend
     image: docker.io/lasuite/meet-backend:{{ st_meet_tag }}
+    user: 1001:127
     env_file: ./backend_env
     healthcheck:
       test: ["CMD", "python", "manage.py", "check"]
