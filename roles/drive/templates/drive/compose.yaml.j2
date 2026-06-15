@@ -16,6 +16,10 @@ services:
       interval: 1s
       timeout: 5s
       retries: 3
+    depends_on:
+      backend:
+        condition: service_healthy
+
   backend:
     container_name: drive-backend
     image: docker.io/lasuite/drive-backend:{{ st_drive_tag }}

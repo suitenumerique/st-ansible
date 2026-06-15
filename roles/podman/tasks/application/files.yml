@@ -3,12 +3,30 @@
 # st_podman_application_files:
 #   - src: foo.j2
 #     dest: config/foo
-#     mode: "0660"         # default
-#     container_uid: 999   # will set the owner to uid 999 inside the container
-#     container_gid: 0     # will set the group to root inside the container (st_podman_user on host - default)
+#     mode: "0660"           # default
+#     template: true         # default; false = copy src verbatim (binary/read-only assets, e.g. fonts)
+#     container_uid: 999     # will set the owner to uid 999 inside the container
+#     container_gid: 0       # will set the group to root inside the container (st_podman_user on host - default)
 #     when: "{{ foo_enabled }}"
+#
+# NOTE: `template: false` copies src verbatim (no Jinja), required for binary files the template
+# module cannot decode/render (e.g. .ttf/.otf). The ownership reconciliation below applies to
+# copied files too. It is SINGLE-PATH: src must be a FILE — for directories use
+# st_podman_application_directories (recursive, setgid + ACL aware).
 - name: "Deploy {{ st_podman_application_name }} file {{ item.dest }}."
+  when: item.template | default(true)
   ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ st_podman_application_dir }}/{{ item.dest }}"
+    mode: "{{ item.mode | default('0660') }}"
+  notify:
+    - "systemctl --user restart {{ st_podman_application_name }}"
+
+# Copy verbatim DOES NOT support directory mode. You need to go through ./directories.yml to create
+# directories with correct ownership.
+- name: "Copy {{ st_podman_application_name }} file {{ item.dest }} verbatim."
+  when: not (item.template | default(true))
+  ansible.builtin.copy:
     src: "{{ item.src }}"
     dest: "{{ st_podman_application_dir }}/{{ item.dest }}"
     mode: "{{ item.mode | default('0660') }}"
@@ -17,9 +35,8 @@
 
 # NOTE: On first run, Ansible owns the file and sets the initial mode.
 # On subsequent runs, the file can be owned by the container UID if container_uid is set,
-# so Ansible cannot chmod it directly.
-# We check the current state (mode|ownership) via podman unshare, then fix both
-# in one shot if drift is detected.
+# so Ansible cannot chmod it directly. We check the current state (mode|ownership) via
+# podman unshare, then fix both in one shot if drift is detected. Applies to templated AND copied files.
 
 # NOTE: We use `podman unshare` CLI directly instead of the podman_unshare Ansible become method
 # because we can't control which user Ansible connects as via SSH — it may not be st_podman_user.

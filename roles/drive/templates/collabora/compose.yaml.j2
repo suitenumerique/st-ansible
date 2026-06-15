@@ -14,3 +14,10 @@ services:
       interval: 1m
       timeout: 3s
       start_period: 10s
+{% if st_drive_collabora_fonts_src is defined and st_drive_collabora_fonts_src | length > 0 %}
+    # Custom fonts staged on the host by the drive role. Supports
+    # LibreOffice rootful and rootless modes.
+    volumes:
+      - ./fonts:/usr/share/fonts/truetype/more/:ro
+      - ./fonts:/opt/cool/systemplate/usr/share/fonts/truetype/more/:ro
+{% endif %}
