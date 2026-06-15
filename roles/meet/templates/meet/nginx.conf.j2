@@ -1,0 +1,66 @@
+{{ ansible_managed | comment }}
+
+upstream backend {
+    server meet-backend:8000 fail_timeout=0;
+}
+
+server {
+    listen       8080;
+    server_name  _;
+    server_tokens off;
+    charset utf-8;
+
+    root /usr/share/nginx/html;
+
+    # Backend-proxied routes (mirror production default.conf.template)
+    location /api {
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_redirect off;
+        proxy_pass http://backend;
+    }
+
+    location /admin {
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_redirect off;
+        proxy_pass http://backend;
+    }
+
+    location /static {
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_redirect off;
+        proxy_pass http://backend;
+    }
+
+    # Long-lived caching for built frontend assets (mirror src/frontend/default.conf)
+    location ~* ^/assets/.*\.(css|js|json|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000";
+    }
+
+    # Frontend SPA
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires 0;
+    }
+
+    error_page 404 =200 /index.html;
+}
+
+server {
+    listen       127.0.0.1:3000;
+    server_name  _;
+
+    location /healthcheck {
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+        access_log off;
+    }
+}

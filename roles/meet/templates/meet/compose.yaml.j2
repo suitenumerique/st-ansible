@@ -8,8 +8,15 @@ services:
     image: docker.io/lasuite/meet-frontend:{{ st_meet_tag }}
     user: 1001:127
     env_file: ./frontend_env
+    volumes:
+      - {{ st_meet_dir }}/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "{{ st_meet_port }}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/healthcheck"]
+      interval: 1s
+      timeout: 5s
+      retries: 3
     depends_on:
       backend:
         condition: service_healthy

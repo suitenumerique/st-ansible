@@ -14,6 +14,9 @@
         dest: "backend_env"
       - src: "{{ st_meet_frontend_env_template }}"
         dest: "frontend_env"
+      - src: "meet/nginx.conf.j2"
+        dest: "nginx.conf"
+        container_uid: 1001
 
 - name: "Play meet migrations."
   become: true
