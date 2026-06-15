@@ -1,0 +1,23 @@
+---
+# INFO: Example list:
+# st_podman_application_copy_files:
+#   - src: fonts/            # local file or directory on the controller
+#     dest: fonts/           # path relative to the application directory
+#     mode: "0644"           # default, applied to copied files
+#     directory_mode: "0755" # applied to directories (defaults to the umask)
+#     when: "{{ foo_enabled }}"
+#
+# Unlike st_podman_application_files, sources are copied verbatim (no Jinja
+# templating), so this is the mechanism to use for binary, read-only assets such
+# as fonts, images or archives. `src` may be a file or a directory. Files are
+# world-readable by default so the container process can read them through a
+# read-only bind mount regardless of the rootless user namespace mapping. For
+# files that must be owned/written by the container, use st_podman_application_files.
+- name: "Copy {{ st_podman_application_name }} file(s) {{ item.dest }}."
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ st_podman_application_dir }}/{{ item.dest }}"
+    mode: "{{ item.mode | default('0644') }}"
+    directory_mode: "{{ item.directory_mode | default(omit) }}"
+  notify:
+    - "systemctl --user restart {{ st_podman_application_name }}"

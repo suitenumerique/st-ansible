@@ -36,6 +36,7 @@ Installs and configures the podman rootless base for La Suite Territoriale appli
 | st_podman_application_dir_mode | The permissions to apply to the base directory to deploy the application compose to. | str | no | 0750 |
 | st_podman_application_directories | Additional directories for files needed for deployment. Will be used to put `st_podman_application_files` inside. | list of 'dict' | no |  |
 | st_podman_application_files | Additional files needed for deployment. Could be an env file, a configuration file mounted in the container or anything else. If in a subdirectory, the directory has to be created with `st_podman_application_directories` first | list of 'dict' | no |  |
+| st_podman_application_copy_files | Additional files copied verbatim (no templating) into the application directory. Use this for binary, read-only assets such as fonts, images or archives. Sources can be a file or a directory on the controller; files are world-readable by default. | list of 'dict' | no |  |
 | st_podman_application_compose_template | Local path to the docker compose template for the application. | str | no |  |
 | st_podman_application_restart_policy | The restart policy to apply to the systemd unit of the application. | str | no | on-abnormal |
 | st_podman_application_rollback_enabled | Whether or not to trigger the rollback tasks if the deployment fails. | bool | no | False |

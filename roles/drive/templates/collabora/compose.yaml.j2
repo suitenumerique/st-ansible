@@ -14,3 +14,11 @@ services:
       interval: 1m
       timeout: 3s
       start_period: 10s
+{% if st_drive_collabora_fonts_src | length > 0 %}
+    # Custom fonts staged on the host by the drive role. Any subdirectory of
+    # /usr/share/fonts is picked up by fontconfig on (re)start. Single mount is
+    # enough in rootless mode where the chroot jail is disabled.
+    volumes:
+      - ./fonts:/usr/share/fonts/truetype/more/:ro,Z
+      - ./fonts:/opt/cool/systemplate/usr/share/fonts/truetype/more/:ro,Z
+{% endif %}

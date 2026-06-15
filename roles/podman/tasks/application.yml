@@ -92,6 +92,16 @@
       notify:
         - "systemctl --user restart {{ st_podman_application_name }}"
 
+    - name: "Ensure {{ st_podman_application_name }} application copied files"
+      ansible.builtin.include_tasks: application/copy_files.yml
+      loop: "{{ st_podman_application_copy_files }}"
+      loop_control:
+        label: "{{ item.dest }}"
+      when:
+        - st_podman_application_copy_files is defined
+        - st_podman_application_copy_files | length > 0
+        - item.when | default(true)
+
     - name: "Flush handlers."
       ansible.builtin.meta: flush_handlers
 

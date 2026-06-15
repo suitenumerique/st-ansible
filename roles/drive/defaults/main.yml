@@ -58,6 +58,8 @@ st_drive_collabora_rollback_enabled: false
 st_drive_collabora_compose_template: collabora/compose.yaml.j2
 # The port to open on the host, redirecting to port 9980 in the container. It can also specify the ip address, something like 127.0.0.1:9980.
 st_drive_collabora_port: '50080'
+# Local path (on the Ansible controller) to a directory containing extra font files (.ttf/.otf) to make available in Collabora. Empty disables custom fonts.
+st_drive_collabora_fonts_src: ''
 # Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool.
 st_drive_cadvisor_enabled: false
 # The host published port of the cadvisor container.

@@ -12,3 +12,11 @@
     st_podman_application_files:
       - src: "{{ st_drive_collabora_env_template }}"
         dest: "env"
+    # Custom fonts are binary, so they go through copy_files (verbatim copy)
+    # and never through st_podman_application_files (which templates its sources).
+    st_podman_application_copy_files:
+      - src: "{{ st_drive_collabora_fonts_src }}/"
+        dest: "fonts/"
+        mode: "0644"
+        directory_mode: "0755"
+        when: "{{ st_drive_collabora_fonts_src | length > 0 }}"

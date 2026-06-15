@@ -129,6 +129,10 @@ argument_specs:
         type: "str"
         description: "The port to open on the host, redirecting to port 9980 in the container. It can also specify the ip address, something like 127.0.0.1:9980."
         default: "50080"
+      st_drive_collabora_fonts_src:
+        type: "str"
+        description: "Local path (on the Ansible controller) to a directory containing extra font files (.ttf/.otf) to make available in Collabora. Empty disables custom fonts."
+        default: ""
       st_drive_cadvisor_enabled:
         type: "bool"
         description: "Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool."
