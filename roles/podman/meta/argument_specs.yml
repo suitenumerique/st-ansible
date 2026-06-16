@@ -68,13 +68,6 @@ argument_specs:
           - "Additional files needed for deployment."
           - "Could be an env file, a configuration file mounted in the container or anything else."
           - "If in a subdirectory, the directory has to be created with `st_podman_application_directories` first"
-      st_podman_application_copy_files:
-        type: "list"
-        elements: "dict"
-        description:
-          - "Additional files copied verbatim (no templating) into the application directory."
-          - "Use this for binary, read-only assets such as fonts, images or archives."
-          - "Sources can be a file or a directory on the controller; files are world-readable by default."
       st_podman_application_compose_template:
         type: "str"
         description: "Local path to the docker compose template for the application."

@@ -53,7 +53,6 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 | st_drive_collabora_rollback_enabled | Whether or not to trigger the rollback tasks if the collabora deployment fails. | bool | no | False |
 | st_drive_collabora_compose_template | Local path to the custom template to use for collabora compose file. | str | no | collabora/compose.yaml.j2 |
 | st_drive_collabora_port | The port to open on the host, redirecting to port 9980 in the container. It can also specify the ip address, something like 127.0.0.1:9980. | str | no | 50080 |
-| st_drive_collabora_fonts_src | Local path (on the Ansible controller) to a directory containing extra font files (.ttf/.otf) to make available in Collabora. Empty disables custom fonts. | str | no |  |
 | st_drive_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
 | st_drive_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:58080 |
 
