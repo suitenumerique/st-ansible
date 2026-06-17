@@ -62,3 +62,5 @@ st_drive_collabora_port: '50080'
 st_drive_cadvisor_enabled: false
 # The host published port of the cadvisor container.
 st_drive_cadvisor_port: '127.0.0.1:58080'
+# Local path to a directory containing ttf / otf fonts to install on the collabora instance
+st_drive_collabora_fonts_src: ''
