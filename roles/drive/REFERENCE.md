@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.drive
-Version: 0.0.18
+Version: 0.0.19
 
 This role deploys the Drive applications from La Suite Territoriale on a rootless podman base on Debian systems.
 

@@ -31,7 +31,7 @@
       - name: "fonts"
         container_uid: 1001
         container_gid: 0
-        when: "{{ st_drive_collabora_fonts_src | length > 0 }}"
+        when: st_drive_collabora_fonts_src | length > 0
     st_podman_application_files: >-
       {{
         [{'src': st_drive_collabora_env_template, 'dest': 'env'}]

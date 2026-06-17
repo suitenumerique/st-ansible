@@ -3,7 +3,7 @@
 # st_podman_application_files:
 #   - src: foo.j2
 #     dest: config/foo
-#     mode: "0660"           # default (0644 when template: false)
+#     mode: "0660"           # default
 #     template: true         # default; false = copy src verbatim (binary/read-only assets, e.g. fonts)
 #     container_uid: 999     # will set the owner to uid 999 inside the container
 #     container_gid: 0       # will set the group to root inside the container (st_podman_user on host - default)
