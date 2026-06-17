@@ -7,7 +7,7 @@
           'src': item,
           'dest': 'fonts/' ~ (item | basename),
           'template': false,
-          'mode': '0640',
+          'mode': '0660',
           'container_uid': 1001,
           'container_gid': 0
         }]
