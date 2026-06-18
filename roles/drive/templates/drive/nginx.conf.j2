@@ -63,7 +63,6 @@ server {
         add_header Content-Disposition "attachment";
     }
 
-
     location /media/preview/ {
         # Auth request configuration
         auth_request /media-auth;
@@ -82,13 +81,24 @@ server {
         add_header Content-Security-Policy "default-src 'none'" always;
     }
 
-
     location ~ "^/explorer/items/files/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/?$" {
         try_files $uri /explorer/items/files/[id].html;
     }
 
     location ~ "^/explorer/items/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/?$" {
         try_files $uri /explorer/items/[id].html;
+    }
+
+    location ~ "^/explorer/items/(favorites|my-files|recent|shared-with-me)/?$" {
+        try_files $uri /explorer/items/$1.html;
+    }
+
+    location ~ "^/wopi/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/?$" {
+        try_files $uri /wopi/[id].html;
+    }
+
+    location ~ "^/user-reconciliations/(active|inactive)/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/?$" {
+        try_files $uri /user-reconciliations/$1/[id].html;
     }
 
     location ~ "^/sdk/explorer/?$" {
@@ -113,6 +123,13 @@ server {
 
     location = /404.html {
         internal;
+    }
+
+    # Without this, .mjs files are served as application/octet-stream
+    # which breaks ES modules
+    location ~* \.mjs$ {
+        types { application/javascript mjs; }
+        try_files $uri =404;
     }
 
     # Frontend export
