@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.messages
-Version: 0.0.19
+Version: 0.0.20
 
 This role deploys the Messages applications from La Suite Territoriale on a rootless podman base on Debian systems.
 
@@ -66,6 +66,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mpa_rspamd_tag | The tag of the rspamd docker image to use. See https://hub.docker.com/r/rspamd/rspamd/tags. | str | no | 4 |
 | st_messages_mpa_rspamd_controller_password | Password of the rspamd controller webui. | str | no |  |
 | st_messages_mpa_rspamd_controller_port | The host published port for the rspamd controller/webui. | str | no | 11334 |
+| st_messages_mpa_rspamd_reject_score | The score triggering the spam threshold on Messages. | str | no | 9 |
 | st_messages_mpa_blacklist_domains | Domains to blacklist via rspamd multimap. | list of 'str' | no | [] |
 | st_messages_mpa_blacklist_ips | IPs or CIDRs to blacklist via rspamd multimap. | list of 'str' | no | [] |
 | st_messages_mpa_whitelist_domains | Domains to whitelist via rspamd multimap. | list of 'str' | no | [] |

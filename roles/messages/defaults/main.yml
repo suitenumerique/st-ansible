@@ -80,6 +80,8 @@ st_messages_mpa_caddy_healthcheck_port: '50090'
 st_messages_mpa_rspamd_tag: '4'
 # The host published port for the rspamd controller/webui.
 st_messages_mpa_rspamd_controller_port: '11334'
+# The score triggering the spam threshold on Messages.
+st_messages_mpa_rspamd_reject_score: '9'
 # Domains to blacklist via rspamd multimap.
 st_messages_mpa_blacklist_domains: []
 # IPs or CIDRs to blacklist via rspamd multimap.

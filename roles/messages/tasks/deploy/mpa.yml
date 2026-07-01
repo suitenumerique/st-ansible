@@ -6,7 +6,9 @@
       - { src: mpa/rspamd/worker-proxy.inc.j2, dest: rspamd_config/override.d/worker-proxy.inc, container_uid: "11333" }
       - { src: mpa/rspamd/options.inc.j2, dest: rspamd_config/local.d/options.inc, container_uid: "11333" }
       - { src: mpa/rspamd/logging.inc.j2, dest: rspamd_config/local.d/logging.inc, container_uid: "11333" }
+      - { src: mpa/rspamd/actions.conf.j2, dest: rspamd_config/local.d/actions.conf, container_uid: "11333" }
       - { src: mpa/rspamd/antivirus.conf.j2, dest: rspamd_config/local.d/antivirus.conf, container_uid: "11333" }
+      - { src: mpa/rspamd/dkim_signing.conf.j2, dest: rspamd_config/local.d/dkim_signing.conf, container_uid: "11333" }
       - { src: mpa/rspamd/multimap.conf.j2, dest: rspamd_config/local.d/multimap.conf, container_uid: "11333" }
       - { src: mpa/rspamd/phishing.conf.j2, dest: rspamd_config/local.d/phishing.conf, container_uid: "11333" }
       - { src: mpa/rspamd/mime_types.conf.j2, dest: rspamd_config/local.d/mime_types.conf, container_uid: "11333" }

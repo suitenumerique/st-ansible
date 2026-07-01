@@ -191,6 +191,10 @@ argument_specs:
         type: "str"
         description: "The host published port for the rspamd controller/webui."
         default: "11334"
+      st_messages_mpa_rspamd_reject_score:
+        type: "str"
+        description: "The score triggering the spam threshold on Messages."
+        default: "9"
       st_messages_mpa_blacklist_domains:
         type: "list"
         elements: "str"
