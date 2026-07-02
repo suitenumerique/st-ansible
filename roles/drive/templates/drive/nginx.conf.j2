@@ -21,6 +21,10 @@ server {
         proxy_pass http://backend;
     }
 
+    location /admin {
+        return 301 https://$host/admin/;
+    }
+
     location ^~ /admin/ {
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header Host $http_host;
@@ -29,6 +33,15 @@ server {
         proxy_redirect off;
 		proxy_pass http://backend;
 	}
+
+    # Django statics
+    location ^~ /static/ {
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_redirect off;
+        proxy_pass http://backend;
+    }
 
     location /media-auth {
         proxy_pass http://backend/api/v1.0/items/media-auth/;
@@ -62,6 +75,7 @@ server {
         add_header Content-Security-Policy "default-src 'none'" always;
         add_header Content-Disposition "attachment";
     }
+
 
     location /media/preview/ {
         # Auth request configuration
@@ -134,7 +148,7 @@ server {
 
     # Frontend export
     location / {
-        try_files $uri $uri/ /index.html =404;
+        try_files $uri index.html $uri/ =404;
     }
 }
 
@@ -143,8 +157,8 @@ server {
     server_name  _;
 
     location /healthcheck {
-        add_header Content-Type text/plain;
         return 200 "ok\n";
+        add_header Content-Type text/plain;
         access_log off;
     }
 }

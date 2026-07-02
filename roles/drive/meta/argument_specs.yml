@@ -49,11 +49,9 @@ argument_specs:
       st_drive_s3_host:
         type: "str"
         description: "The S3 compatible storage host used for media storage."
-        default: "s3.amazonaws.com"
       st_drive_s3_bucket:
         type: "str"
         description: "The S3 compatible storage bucket used for media storage."
-        default: "drive-media"
       st_drive_compose_template:
         type: "str"
         description: "Local path to the custom template to use for drive compose file."
@@ -74,6 +72,10 @@ argument_specs:
         type: "str"
         description: "Local path to the custom template to use for drive frontend env file."
         default: "drive/frontend_env.j2"
+      st_drive_frontend_env:
+        type: "str"
+        description: "Content of the default frotnend_env_template, not used if st_drive_frotnend_env_template is defined."
+        default: ''
       st_drive_workers_enabled:
         type: "bool"
         description: "Triggers the installation of the drive workers"
