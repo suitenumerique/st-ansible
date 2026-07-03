@@ -1,0 +1,19 @@
+---
+app: keycloak
+env_docs_url: "https://www.keycloak.org/server/all-config"
+arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/02-keycloak"
+components:
+  - key: keycloak
+    role: suitenumerique.st.keycloak
+    user: keycloak
+    app_name: keycloak
+    dir_var: st_keycloak_dir      # role defines none; CLI falls back to /opt/keycloak/keycloak
+    enabled_var: st_keycloak_enabled
+    deploy_order: 10
+    is_core: true
+    env_render:
+      backend:
+        blob_var: st_keycloak_env
+        templates:
+          - keycloak.env.j2
+dependencies: []

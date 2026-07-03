@@ -1,0 +1,15 @@
+[defaults]
+collections_path = {{ collections_path }}
+retry_files_enabled = False
+{% if use_vault %}
+vault_password_file = {{ vault_password_file }}
+{% endif %}
+{% if ssh_user %}
+remote_user = {{ ssh_user }}
+{% endif %}
+stdout_callback = default
+result_format = yaml
+display_skipped_hosts = False
+
+[ssh_connection]
+pipelining = True

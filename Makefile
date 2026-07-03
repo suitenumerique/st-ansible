@@ -1,8 +1,13 @@
 .SILENT:
 
 .PHONY: lint
-lint:
-	ansible-lint -v
+lint: lint.cli
+	ansible-lint -v --exclude cli/
+
+# Lint + format-check the st-cli (ruff), matching CI (cli-tests.yml).
+.PHONY: lint.cli
+lint.cli:
+	cd cli && ruff check . && ruff format --check .
 
 .PHONY: test.sanity
 test.sanity: clean
@@ -44,3 +49,15 @@ endif
 .PHONY: build
 build: clean
 	ansible-galaxy collection build --output-path build --force
+
+# Bump the collection + CLI version everywhere: make version version=0.0.23
+.PHONY: version
+version:
+ifndef version
+	$(error version is required, e.g. make version version=0.0.23)
+endif
+	@echo "$(version)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || { echo "ERROR: version must be semver X.Y.Z (got '$(version)')"; exit 1; }
+	sed -i -E 's/^version: .*/version: $(version)/' galaxy.yml
+	sed -i -E 's/^version = ".*"/version = "$(version)"/' cli/pyproject.toml
+	sed -i -E 's/^__version__ = ".*"/__version__ = "$(version)"/' cli/st_cli/__init__.py
+	$(MAKE) docs

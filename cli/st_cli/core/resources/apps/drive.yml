@@ -1,0 +1,63 @@
+---
+app: drive
+env_docs_url: "https://github.com/suitenumerique/drive/blob/main/docs/env.md"
+arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/01-drive"
+components:
+  - key: drive
+    role: suitenumerique.st.drive
+    user: drive
+    app_name: drive
+    dir_var: st_drive_dir
+    enabled_var: st_drive_enabled
+    deploy_order: 20
+    is_core: true
+    # component-level ansible vars derived from questionnaire answers ({DOMAIN} etc.)
+    vars:
+      st_drive_public_host: "{DOMAIN}"   # required by the drive role (healthcheck Host header)
+      # nginx S3 media proxy (derived from the S3 answers in bootstrap._ask_core)
+      st_drive_s3_protocol: "{S3_PROTOCOL}"
+      st_drive_s3_host: "{S3_HOST}"
+      st_drive_s3_bucket: "{S3_BUCKET}"
+      # Run DB migrations only once across a multi-host deploy. Plays are serial:1,
+      # so the role's run_once migrations task fires on every host — gate it to the
+      # first play host. Braces are quadrupled so str.format emits literal {{ }}.
+      st_drive_backend_run_migrations: "{{{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}}}"
+    env_render:
+      backend:
+        blob_var: st_drive_backend_env
+        templates:
+          - drive.backend.env.j2
+  - key: collabora
+    role: suitenumerique.st.drive
+    user: drive
+    app_name: collabora
+    dir_var: st_drive_collabora_dir
+    enabled_var: st_drive_collabora_enabled
+    deploy_order: 10
+    is_core: false
+    vars:
+      # required by the drive role; {COLLABORA_DOMAIN} comes from the dependency prompt
+      st_drive_collabora_env: |
+        DONT_GEN_SSL_CERT=true
+        server_name="{COLLABORA_DOMAIN}"
+        extra_params="--o:ssl.enable=false --o:ssl.termination=true --o:security.enable_metrics_unauthenticated=true"
+  - key: workers
+    role: suitenumerique.st.drive
+    user: drive
+    app_name: workers          # role systemd --user unit + /opt/drive/workers
+    dir_var: st_drive_workers_dir
+    enabled_var: st_drive_workers_enabled
+    deploy_order: 30
+    is_core: false
+    is_worker: true
+dependencies:
+  - of: drive
+    on: collabora
+    shared:
+      # one prompt (the collabora domain) → the collabora env (server_name, via
+      # the component var above) AND drive's WOPI discovery URL.
+      - prompt: domain
+        label: "Collabora domain (e.g. collabora.example.org)"
+        answer_key: COLLABORA_DOMAIN
+        consumer_env_key: WOPI_COLLABORA_DISCOVERY_URL
+        consumer_format: "https://{value}/hosting/discovery"

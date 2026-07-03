@@ -1,0 +1,15 @@
+---
+collections:
+{% if collection_source %}
+  - name: {{ collection_source }}
+{% if collection_source_type %}
+    type: {{ collection_source_type }}
+{% endif %}
+{% else %}
+  - name: {{ collection_repo }}
+    type: git
+    version: "{{ collection_version }}"
+{% endif %}
+{% if hashi_vault %}
+  - name: community.hashi_vault
+{% endif %}

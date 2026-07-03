@@ -10,7 +10,7 @@ services:
     ports:
       - "{{ st_drive_collabora_port }}:9980"
     healthcheck:
-      test: curl -fsS -o /dev/null http://localhost:9980/hosting/discovery
+      test: bash -c 'exec 3<>/dev/tcp/localhost/9980'
       interval: 1m
       timeout: 3s
       start_period: 10s

@@ -24,17 +24,17 @@ ansible-galaxy collection install -r galaxy-requirements.yml
 
 You can find the documentation of the collection under the [docs/](docs/) directory.
 
-- **[01-fundamentals/](docs/01-fundamentals/)** architecture, podman base role, deployment, upgrade guide
-- **[02-messages/](docs/02-messages/)** messages app, workers, mta-in, socks-proxy, mpa
-- **[03-drive/](docs/03-drive/)**  drive app, workers, collabora
-- **[04-keycloak/](docs/04-keycloak/)** keycloak identity provider
-- **[05-meet/](docs/05-meet/)** meet app, livekit
-- **[06-monitoring.md](docs/06-monitoring.md)** cAdvisor + Grafana Alloy
-- **[07-backup.md](docs/07-backup.md)** Restic backup
-- **[08-troubleshooting.md](docs/08-troubleshooting.md)** common issues and debug commands
-- **[00-examples/](docs/00-examples/)** playbook examples:
-  - [full-high-availability](docs/00-examples/full-high-availability/)
-  - [meet](docs/00-examples/meet/)
+- **[00-getting-started/](docs/00-getting-started/)** st-cli, ansible-galaxy install, architecture, podman base role
+- **[01-drive/](docs/01-drive/)** drive app, workers, collabora
+- **[02-keycloak/](docs/02-keycloak/)** keycloak identity provider
+- **[03-meet/](docs/03-meet/)** meet app, livekit
+- **[04-messages/](docs/04-messages/)** messages app, workers, mta-in, socks-proxy, mpa
+- **[monitoring.md](docs/monitoring.md)** cAdvisor + Grafana Alloy
+- **[backup.md](docs/backup.md)** Restic backup
+- **[troubleshooting.md](docs/troubleshooting.md)** common issues and debug commands
+- **[99-examples/](docs/99-examples/)** playbook examples:
+  - [full-high-availability](docs/99-examples/full-high-availability/)
+  - [meet](docs/99-examples/meet/)
 
 ## Roles
 

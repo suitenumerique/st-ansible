@@ -1,0 +1,90 @@
+---
+app: messages
+env_docs_url: "https://github.com/suitenumerique/messages/blob/main/docs/env.md"
+arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/04-messages"
+components:
+  - key: messages
+    role: suitenumerique.st.messages
+    user: messages
+    app_name: messages
+    dir_var: st_messages_dir
+    enabled_var: st_messages_enabled
+    deploy_order: 40
+    is_core: true
+    vars:
+      # Run DB migrations only once across a multi-host deploy. Plays are serial:1,
+      # so the role's run_once migrations task fires on every host — gate it to the
+      # first play host. Braces are quadrupled so str.format emits literal {{ }}.
+      st_messages_backend_run_migrations: "{{{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}}}"
+    env_render:
+      backend:
+        blob_var: st_messages_backend_env
+        templates:
+          - messages.backend.env.j2
+      frontend:
+        blob_var: st_messages_frontend_env
+        templates:
+          - messages.frontend.env.j2
+  - key: mta-in
+    role: suitenumerique.st.messages
+    user: messages
+    app_name: mta-in
+    dir_var: st_messages_mta_in_dir
+    enabled_var: st_messages_mta_in_enabled
+    deploy_order: 10
+    is_core: false
+    vars:
+      st_messages_mta_in_env: |
+        MDA_API_SECRET={MDA_API_SECRET}
+        MDA_API_BASE_URL=https://{DOMAIN}/api/v1.0/
+        MYHOSTNAME={MYHOSTNAME}
+  - key: mpa
+    role: suitenumerique.st.messages
+    user: messages
+    app_name: mpa
+    dir_var: st_messages_mpa_dir
+    enabled_var: st_messages_mpa_enabled
+    deploy_order: 20
+    is_core: false
+  - key: socks-proxy
+    role: suitenumerique.st.messages
+    user: messages
+    app_name: socks-proxy
+    dir_var: st_messages_socks_proxy_dir
+    enabled_var: st_messages_socks_proxy_enabled
+    deploy_order: 30
+    is_core: false
+    vars:
+      st_messages_socks_proxy_env: |
+        PROXY_EXTERNAL={PROXY_EXTERNAL}
+        PROXY_INTERNAL_PORT={PROXY_INTERNAL_PORT}
+        PROXY_USERS={PROXY_USERS}
+  - key: workers
+    role: suitenumerique.st.messages
+    user: messages
+    app_name: workers          # role systemd --user unit + /opt/messages/workers
+    dir_var: st_messages_workers_dir
+    enabled_var: st_messages_workers_enabled
+    deploy_order: 50
+    is_core: false
+    is_worker: true
+dependencies:
+  - of: messages
+    on: mta-in
+    # MDA_API_SECRET is owned by the messages core (generated in _ask_core) and
+    # mirrored into mta-in's vault at deploy — not originated here.
+    shared: []
+  - of: messages
+    on: mpa
+    optional: true
+    shared:
+      - var: st_messages_mpa_auth_bearer
+        vault_key: vault_mpa_auth_bearer
+        generate: token
+      - var: st_messages_mpa_rspamd_controller_password
+        vault_key: vault_mpa_rspamd_controller_password
+        generate: secret
+  - of: messages
+    on: socks-proxy
+    optional: true
+    shared: []

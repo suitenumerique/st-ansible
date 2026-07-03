@@ -1,0 +1,57 @@
+---
+app: meet
+env_docs_url: "https://github.com/suitenumerique/meet"
+arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/03-meet"
+components:
+  - key: meet
+    role: suitenumerique.st.meet
+    user: meet
+    app_name: meet
+    dir_var: st_meet_dir
+    enabled_var: st_meet_enabled
+    deploy_order: 20
+    is_core: true
+    vars:
+      # Run DB migrations only once across a multi-host deploy. Plays are serial:1,
+      # so the role's run_once migrations task fires on every host — gate it to the
+      # first play host. Braces are quadrupled so str.format emits literal {{ }}.
+      st_meet_backend_run_migrations: "{{{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}}}"
+    env_render:
+      backend:
+        blob_var: st_meet_backend_env
+        templates:
+          - meet.backend.env.j2
+  - key: livekit
+    role: suitenumerique.st.meet
+    user: meet
+    app_name: livekit
+    dir_var: st_meet_livekit_dir
+    enabled_var: st_meet_livekit_enabled
+    deploy_order: 10
+    is_core: false
+  - key: workers
+    role: suitenumerique.st.meet
+    user: meet
+    app_name: workers          # role systemd --user unit + /opt/meet/workers
+    dir_var: st_meet_workers_dir
+    enabled_var: st_meet_workers_enabled
+    deploy_order: 30
+    is_core: false
+    is_worker: true
+    implemented: false         # roles/meet has no workers implementation yet
+dependencies:
+  - of: meet
+    on: livekit
+    shared:
+      - consumer_env_key: LIVEKIT_API_KEY
+        var: st_meet_livekit_api_key
+        generate: token
+      - consumer_env_key: LIVEKIT_API_SECRET
+        var: st_meet_livekit_api_secret
+        generate: secret
+      - var: st_meet_livekit_domain
+        consumer_env_key: LIVEKIT_API_URL
+        consumer_format: "wss://{value}"
+        label: "LiveKit domain (e.g. livekit.example.org)"
+      - var: st_meet_livekit_turn_domain
+        label: "LiveKit TURN domain (e.g. turn.example.org)"

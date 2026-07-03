@@ -1,0 +1,86 @@
+---
+name: Ansible
+permissions:
+  contents: read
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    - cron: "0 6 * * *"
+
+concurrency:
+  group: >-
+    ${{ github.workflow }}-${{
+      github.event.pull_request.number || github.sha
+    }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-lint
+
+      - name: Run ansible-lint
+        run: |
+          ansible-lint --exclude cli/
+
+  sanity:
+    name: Sanity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Perform sanity testing
+        uses: ansible-community/ansible-test-gh-action@6ded727edb598e670ac056a8e680ca4050bac0a3  # release/v1
+        with:
+          ansible-core-version: stable-2.20
+          testing-type: sanity
+          pull-request-change-detection: false
+          # cli/ is a standalone Python subproject, not part of the collection
+          # payload (see build_ignore in galaxy.yml). Drop it from the ephemeral
+          # test checkout so ansible-test sanity doesn't lint it.
+          pre-test-cmd: rm -rf cli/
+
+  molecule:
+    name: Molecule
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+
+      - name: "Set up Lima"
+        uses: lima-vm/lima-actions/setup@55627e31b78637bf254a8b2a14da8ea7d12564e5  # v1
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core molecule -e ./extensions/lima-driver/
+
+      - name: Install collection
+        run: |
+          mkdir -p ~/.ansible/collections/ansible_collections/suitenumerique
+          ln -s $GITHUB_WORKSPACE ~/.ansible/collections/ansible_collections/suitenumerique/st
+
+      - name: Run Molecule tests
+        run: |
+          molecule create --all
+          molecule test --all --workers cpus
+          molecule destroy --all
