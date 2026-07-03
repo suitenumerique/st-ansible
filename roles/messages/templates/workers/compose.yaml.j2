@@ -5,7 +5,7 @@ name: messages
 services:
   worker:
     container_name: messages-worker
-    image: ghcr.io/suitenumerique/messages-backend:{{ st_messages_tag }}
+    image: "{{ st_messages_backend_image }}:{{ st_messages_tag }}"
     env_file: ./env
     command: python worker.py --concurrency={{ ansible_processor_nproc }}
     healthcheck:

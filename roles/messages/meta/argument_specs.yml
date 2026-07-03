@@ -6,7 +6,7 @@ argument_specs:
       st_messages_uid:
         type: "int"
         description: "UID of the `messages` user, used for the podman role."
-        default: 1100
+        default: 1104
       st_messages_gid:
         type: "int"
         description: "GID of the `messages` group, used for the podman role."
@@ -15,10 +15,18 @@ argument_specs:
         type: "list"
         elements: "dict"
         description: "Optional private container registries to login the `messages` user onto."
+      st_messages_frontend_image:
+        type: "str"
+        description: "Image repository for the messages frontend."
+        default: "ghcr.io/suitenumerique/messages-frontend"
+      st_messages_backend_image:
+        type: "str"
+        description: "Image repository for the messages backend."
+        default: "ghcr.io/suitenumerique/messages-backend"
       st_messages_tag:
         type: "str"
         description: "Tag of the messages docker images to deploy."
-        default: "main"
+        default: "0.5.0"
       st_messages_enabled:
         type: "bool"
         description: "Triggers the installation of the messages application."
@@ -30,7 +38,7 @@ argument_specs:
       st_messages_port:
         type: "str"
         description: "The host published port for the messages frontend."
-        default: "50080"
+        default: "50400"
       st_messages_rollback_enabled:
         type: "bool"
         description: "Whether or not to trigger the rollback tasks if the messages deployment fails."
@@ -91,10 +99,14 @@ argument_specs:
         type: "bool"
         description: "Triggers the installation of the mta-in."
         default: false
+      st_messages_mta_in_image:
+        type: "str"
+        description: "Image repository for mta-in."
+        default: "ghcr.io/suitenumerique/messages-mta-in"
       st_messages_mta_in_tag:
         type: "str"
         description: "Tag of the mta-in docker image to deploy."
-        default: "main"
+        default: "0.5.0"
       st_messages_mta_in_dir:
         type: "str"
         description: "Remote path to the base directory for mta-in app."
@@ -102,7 +114,7 @@ argument_specs:
       st_messages_mta_in_port:
         type: "str"
         description: "The host published port for the mta-in SMTP endpoint."
-        default: "50025"
+        default: "50425"
       st_messages_mta_in_env_template:
         type: "str"
         description: "Local path to the custom template to use for mta-in env file."
@@ -128,10 +140,14 @@ argument_specs:
         type: "bool"
         description: "Triggers the installation of the socks-proxy."
         default: false
+      st_messages_socks_proxy_image:
+        type: "str"
+        description: "Image repository for socks-proxy."
+        default: "ghcr.io/suitenumerique/messages-socks-proxy"
       st_messages_socks_proxy_tag:
         type: "str"
         description: "Tag of the socks-proxy docker image to deploy."
-        default: "main"
+        default: "0.5.0"
       st_messages_socks_proxy_dir:
         type: "str"
         description: "Remote path to the base directory for socks-proxy app."
@@ -164,26 +180,34 @@ argument_specs:
         description:
           - "Add a caddy container in front of the rspamd worker with a simple authorization check."
           - "The value of this variable should then be used as a Bearer token when calling the /checkv2 rspamd endpoint."
+      st_messages_mpa_caddy_image:
+        type: "str"
+        description: "Image repository for the mpa caddy."
+        default: "docker.io/caddy"
       st_messages_mpa_caddy_tag:
         type: "str"
         description:
           - "The tag of the caddy docker image to use."
           - "See https://hub.docker.com/_/caddy/tags."
-        default: "2-alpine"
+        default: "2.11.4-alpine"
       st_messages_mpa_caddy_port:
         type: "str"
         description: "The host published port for the caddy /checkv2 endpoint."
-        default: "50080"
+        default: "50402"
       st_messages_mpa_caddy_healthcheck_port:
         type: "str"
         description: "The host published port for the caddy /healthcheck endpoint."
-        default: "50090"
+        default: "50403"
+      st_messages_mpa_rspamd_image:
+        type: "str"
+        description: "Image repository for the mpa rspamd."
+        default: "docker.io/rspamd/rspamd"
       st_messages_mpa_rspamd_tag:
         type: "str"
         description:
           - "The tag of the rspamd docker image to use."
           - "See https://hub.docker.com/r/rspamd/rspamd/tags."
-        default: "4"
+        default: "4.1.1"
       st_messages_mpa_rspamd_controller_password:
         type: "str"
         description: "Password of the rspamd controller webui."
@@ -241,26 +265,42 @@ argument_specs:
         elements: "dict"
         description: "List of rspamd configs to deploy, merged with the default configuration list."
         default: []
+      st_messages_mpa_unbound_image:
+        type: "str"
+        description: "Image repository for the mpa unbound."
+        default: "docker.io/alpinelinux/unbound"
+      st_messages_mpa_unbound_tag:
+        type: "str"
+        description: "Tag of the unbound docker image to use. alpinelinux/unbound publishes no versioned tags, only latest."
+        default: "latest"
       st_messages_mpa_unbound_config_template:
         type: "str"
         description: "Local path to the unbound.conf template."
         default: "mpa/unbound.conf.j2"
+      st_messages_mpa_clamav_image:
+        type: "str"
+        description: "Image repository for the mpa clamav."
+        default: "docker.io/clamav/clamav"
       st_messages_mpa_clamav_tag:
         type: "str"
         description:
           - "The tag of the clamav docker image to use."
           - "See https://hub.docker.com/r/clamav/clamav/tags."
-        default: "1.5"
+        default: "1.5.3"
       st_messages_mpa_clamav_config_template:
         type: "str"
         description: "Local path to the clamd.conf template."
         default: "mpa/clamd.conf.j2"
+      st_messages_mpa_valkey_image:
+        type: "str"
+        description: "Image repository for the mpa valkey."
+        default: "docker.io/valkey/valkey"
       st_messages_mpa_valkey_tag:
         type: "str"
         description:
           - "The tag of the valkey docker image to use."
           - "See https://hub.docker.com/r/valkey/valkey/tags."
-        default: "9"
+        default: "9.0.4"
       st_messages_mpa_rollback_enabled:
         type: "bool"
         description: "Whether or not to trigger the rollback tasks if the mpa deployment fails."
@@ -273,7 +313,15 @@ argument_specs:
         type: "bool"
         description: "Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool."
         default: false
+      st_messages_cadvisor_image:
+        type: "str"
+        description: "Image repository for the cadvisor container."
+        default: "ghcr.io/google/cadvisor"
+      st_messages_cadvisor_tag:
+        type: "str"
+        description: "Tag of the cadvisor docker image to deploy."
+        default: "v0.60.3"
       st_messages_cadvisor_port:
         type: "str"
         description: "The host published port of the cadvisor container."
-        default: "127.0.0.1:58080"
+        default: "127.0.0.1:50499"

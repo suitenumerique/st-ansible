@@ -27,9 +27,9 @@ See [roles/drive/REFERENCE.md](../../roles/drive/REFERENCE.md) for the complete 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `st_drive_collabora_enabled` | Enable Collabora | `false` |
-| `st_drive_collabora_tag` | Docker image tag | `latest` |
+| `st_drive_collabora_tag` | Docker image tag | see REFERENCE.md |
 | `st_drive_collabora_dir` | Application directory | `/opt/drive/collabora` |
-| `st_drive_collabora_port` | Host port (maps to container 9980) | `50080` |
+| `st_drive_collabora_port` | Host port (maps to container 9980) | `50101` |
 | `st_drive_collabora_env` | Environment content | _(empty)_ |
 | `st_drive_collabora_rollback_enabled` | Rollback on failure | `false` |
 
@@ -37,7 +37,7 @@ See [roles/drive/REFERENCE.md](../../roles/drive/REFERENCE.md) for the complete 
 
 | Variable | Default | Container port |
 |----------|---------|---------------|
-| `st_drive_collabora_port` | `50080` | 9980 |
+| `st_drive_collabora_port` | `50101` | 9980 |
 
 ## Data & Volumes
 

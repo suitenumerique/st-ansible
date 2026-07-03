@@ -6,7 +6,7 @@ argument_specs:
       st_meet_uid:
         type: "int"
         description: "UID of the `meet` user, used for the podman role."
-        default: 1100
+        default: 1103
       st_meet_gid:
         type: "int"
         description: "GID of the `meet` group, used for the podman role."
@@ -26,11 +26,19 @@ argument_specs:
       st_meet_port:
         type: "str"
         description: "The host published port for the meet frontend."
-        default: "50080"
+        default: "50300"
+      st_meet_frontend_image:
+        type: "str"
+        description: "Image repository for the meet frontend."
+        default: "docker.io/lasuite/meet-frontend"
+      st_meet_backend_image:
+        type: "str"
+        description: "Image repository for the meet backend."
+        default: "docker.io/lasuite/meet-backend"
       st_meet_tag:
         type: "str"
         description: "Tag of the meet docker image to deploy."
-        default: "latest"
+        default: "v1.21.0"
       st_meet_backend_env_template:
         type: "str"
         description: "Local path to the custom template to use for meet env file."
@@ -59,22 +67,38 @@ argument_specs:
         type: "bool"
         description: "Whether or not to trigger the rollback tasks if the meet deployment fails."
         default: false
+      st_meet_livekit_caddyl4_image:
+        type: "str"
+        description: "Image repository for livekit caddyl4."
+        default: "docker.io/livekit/caddyl4"
+      st_meet_livekit_image:
+        type: "str"
+        description: "Image repository for the livekit server."
+        default: "docker.io/livekit/livekit-server"
+      st_meet_livekit_egress_image:
+        type: "str"
+        description: "Image repository for livekit egress."
+        default: "docker.io/livekit/egress"
+      st_meet_livekit_valkey_image:
+        type: "str"
+        description: "Image repository for the livekit valkey."
+        default: "docker.io/valkey/valkey"
       st_meet_livekit_tag:
         type: "str"
         description: "Tag of the livekit docker image to deploy."
-        default: "latest"
+        default: "v1.13.2"
       st_meet_livekit_egress_tag:
         type: "str"
         description: "Tag of the livekit egress docker image to deploy."
-        default: "latest"
+        default: "v1.13.0"
       st_meet_livekit_caddyl4_tag:
         type: "str"
         description: "Tag of the livekit caddyl4 docker image to deploy."
-        default: "latest"
+        default: "v2.11.3"
       st_meet_livekit_valkey_tag:
         type: "str"
         description: "Tag of the valkey docker image to deploy for livekit when using the full compose template."
-        default: "latest"
+        default: "9.0.4"
       st_meet_livekit_enabled:
         type: "bool"
         description: "Triggers the installation of livekit."
@@ -126,6 +150,14 @@ argument_specs:
           - { name: "caddy_data" }
           - { name: "valkey_data", container_uid: "999" }
           - { name: "valkey_config" }
+      st_meet_cadvisor_image:
+        type: "str"
+        description: "Image repository for the cadvisor container."
+        default: "ghcr.io/google/cadvisor"
+      st_meet_cadvisor_tag:
+        type: "str"
+        description: "Tag of the cadvisor docker image to deploy."
+        default: "v0.60.3"
       st_meet_cadvisor_enabled:
         type: "bool"
         description: "Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server."
@@ -133,4 +165,4 @@ argument_specs:
       st_meet_cadvisor_port:
         type: "str"
         description: "The host published port of the cadvisor container."
-        default: "127.0.0.1:58080"
+        default: "127.0.0.1:50399"

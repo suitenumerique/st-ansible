@@ -22,13 +22,15 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 |Option|Description|Type|Required|Default|
 |---|---|---|---|---|
 | st_drive_public_host | The public hostname used to access the drive application. | str | no |  |
-| st_drive_uid | UID of the `drive` user, used for the podman role. | int | no | 1100 |
+| st_drive_uid | UID of the `drive` user, used for the podman role. | int | no | 1101 |
 | st_drive_gid | GID of the `drive` group, used for the podman role. | int | no | {{ st_drive_uid }} |
 | st_drive_registries | Optional private container registries to login the `drive` user onto. | list of 'dict' | no |  |
-| st_drive_tag | Tag of the drive docker images to deploy. | str | no | main |
+| st_drive_frontend_image | Image repository for the drive frontend. | str | no | docker.io/lasuite/drive-frontend |
+| st_drive_backend_image | Image repository for the drive backend. | str | no | docker.io/lasuite/drive-backend |
+| st_drive_tag | Tag of the drive docker images to deploy. | str | no | v0.19.0 |
 | st_drive_enabled | Triggers the installation of the drive application. | bool | no | False |
 | st_drive_dir | Remote path to the base directory for drive app. | str | no | /opt/drive/drive |
-| st_drive_port | The host published port for the drive frontend. | str | no | 50080 |
+| st_drive_port | The host published port for the drive frontend. | str | no | 50100 |
 | st_drive_rollback_enabled | Whether or not to trigger the rollback tasks if the drive deployment fails. | bool | no | False |
 | st_drive_nginx_template | Local path to the custom template to use for drive nginx configuration file. | str | no | drive/nginx.conf.j2 |
 | st_drive_s3_protocol | The S3 compatible storage protocol used for media storage. | str | no | https |
@@ -47,15 +49,18 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 | st_drive_workers_rollback_enabled | Whether or not to trigger the rollback tasks if the workers deployment fails. | bool | no | False |
 | st_drive_workers_compose_template | Local path to the custom template to use for workers compose file. | str | no | workers/compose.yaml.j2 |
 | st_drive_collabora_enabled | Triggers the installation of collabora. | bool | no | False |
-| st_drive_collabora_tag | Tag of the collabora docker image to deploy. | str | no | latest |
+| st_drive_collabora_image | Image repository for collabora. | str | no | docker.io/collabora/code |
+| st_drive_collabora_tag | Tag of the collabora docker image to deploy. | str | no | 26.04.2.1.1 |
 | st_drive_collabora_dir | Remote path to the base directory for collabora app. | str | no | /opt/drive/collabora |
 | st_drive_collabora_env_template | Local path to the custom template to use for collabora env file. | str | no | collabora/env.j2 |
 | st_drive_collabora_env | Content of the default collabora_env_template, not used if st_drive_collabora_env_template is defined. | str | no |  |
 | st_drive_collabora_rollback_enabled | Whether or not to trigger the rollback tasks if the collabora deployment fails. | bool | no | False |
 | st_drive_collabora_compose_template | Local path to the custom template to use for collabora compose file. | str | no | collabora/compose.yaml.j2 |
-| st_drive_collabora_port | The port to open on the host, redirecting to port 9980 in the container. It can also specify the ip address, something like 127.0.0.1:9980. | str | no | 50080 |
+| st_drive_collabora_port | The port to open on the host, redirecting to port 9980 in the container. It can also specify the ip address, something like 127.0.0.1:9980. | str | no | 50101 |
 | st_drive_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
-| st_drive_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:58080 |
+| st_drive_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
+| st_drive_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.3 |
+| st_drive_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:50199 |
 | st_drive_collabora_fonts_src | Local path to a directory containing ttf / otf fonts to install on the collabora instance | str | no |  |
 
 

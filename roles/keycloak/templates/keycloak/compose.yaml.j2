@@ -5,7 +5,7 @@ name: keycloak
 services:
   keycloak:
     container_name: keycloak
-    image: ghcr.io/suitenumerique/messages-keycloak:{{ st_keycloak_tag }}
+    image: "{{ st_keycloak_image }}:{{ st_keycloak_tag }}"
     env_file: ./env
     environment:
       - KC_HTTP_PORT={{ st_keycloak_port }}

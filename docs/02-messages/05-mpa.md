@@ -40,9 +40,9 @@ See [roles/messages/REFERENCE.md](../../roles/messages/REFERENCE.md) for the com
 | `st_messages_mpa_dir` | Application directory | `/opt/messages/mpa` |
 | `st_messages_mpa_auth_bearer` | Bearer token for Caddy auth | _(required)_ |
 | `st_messages_mpa_rspamd_controller_password` | Rspamd webui password | _(required)_ |
-| `st_messages_mpa_caddy_port` | Host port for `/checkv2` | `50080` |
-| `st_messages_mpa_caddy_healthcheck_port` | Host port for `/healthcheck` | `50090` |
-| `st_messages_mpa_rspamd_controller_port` | Host port for rspamd controller | `11334` |
+| `st_messages_mpa_caddy_port` | Host port for `/checkv2` | `50402` |
+| `st_messages_mpa_caddy_healthcheck_port` | Host port for `/healthcheck` | `50403` |
+| `st_messages_mpa_rspamd_controller_port` | Host port for rspamd controller | `50404` |
 | `st_messages_mpa_blacklist_domains` | Domains to blacklist | `[]` |
 | `st_messages_mpa_blacklist_ips` | IPs/CIDRs to blacklist | `[]` |
 | `st_messages_mpa_whitelist_domains` | Domains to whitelist | `[]` |
@@ -52,9 +52,9 @@ See [roles/messages/REFERENCE.md](../../roles/messages/REFERENCE.md) for the com
 
 | Variable | Default | Container port |
 |----------|---------|---------------|
-| `st_messages_mpa_caddy_port` | `50080` | 80 |
-| `st_messages_mpa_caddy_healthcheck_port` | `50090` | 90 |
-| `st_messages_mpa_rspamd_controller_port` | `11334` | 11334 |
+| `st_messages_mpa_caddy_port` | `50402` | 80 |
+| `st_messages_mpa_caddy_healthcheck_port` | `50403` | 90 |
+| `st_messages_mpa_rspamd_controller_port` | `50404` | 11334 |
 
 Rspamd's worker port (11333) is **internal-only** and not published to the host. All inter-service
 communication uses DNS-resolvable container names via the Podman bridge network.

@@ -3,6 +3,6 @@ name: messages
 services:
   socks-proxy:
     container_name: socks-proxy
-    image: ghcr.io/suitenumerique/messages-socks-proxy:{{ st_messages_socks_proxy_tag }}
+    image: "{{ st_messages_socks_proxy_image }}:{{ st_messages_socks_proxy_tag }}"
     network_mode: host
     env_file: ./env

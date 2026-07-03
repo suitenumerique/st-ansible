@@ -21,19 +21,22 @@ Installs and configures the keycloak application from La Suite Territoriale on D
 
 |Option|Description|Type|Required|Default|
 |---|---|---|---|---|
-| st_keycloak_uid | UID of the `keycloak` user, used for the podman role. | int | no | 1100 |
+| st_keycloak_uid | UID of the `keycloak` user, used for the podman role. | int | no | 1102 |
 | st_keycloak_gid | GID of the `keycloak` group, used for the podman role. | int | no | {{ st_keycloak_uid }} |
 | st_keycloak_registries | Optional private container registries to login the `keycloak` user onto. | list of 'dict' | no |  |
 | st_keycloak_enabled | Triggers the installation of keycloak. | bool | no | False |
-| st_keycloak_tag | Tag of the keycloak docker image to deploy. | str | no | latest |
+| st_keycloak_image | Image repository for keycloak. | str | no | ghcr.io/suitenumerique/messages-keycloak |
+| st_keycloak_tag | Tag of the keycloak docker image to deploy. | str | no | 0.5.0 |
 | st_keycloak_env_template | Local path to the custom template to use for keycloak env file. | str | no | keycloak/env.j2 |
 | st_keycloak_env | Content of the default keycloak_env_template, not used if st_keycloak_env_template is defined. | str | no |  |
 | st_keycloak_compose_template | Local path to the custom template to use for keycloak compose file. | str | no | keycloak/compose.yaml.j2 |
-| st_keycloak_port | The port to open on the host, redirecting to port 8080 in the container. It can also specify the ip address, something like 127.0.0.1:8080. | str | no | 50080 |
+| st_keycloak_port | Host port Keycloak listens on when running with network_mode: host. | str | no | 50200 |
 | st_keycloak_start_command | When using the default compose template, specify the `command` to use to start keycloak. | str | no | start --optimized |
 | st_keycloak_rollback_enabled | Whether or not to trigger the rollback tasks if the keycloak deployment fails. | bool | no | False |
 | st_keycloak_cadvisor_enabled | Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server. | bool | no | False |
-| st_keycloak_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:58080 |
+| st_keycloak_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
+| st_keycloak_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.3 |
+| st_keycloak_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:50299 |
 
 
 

@@ -28,9 +28,9 @@ See [roles/messages/REFERENCE.md](../../roles/messages/REFERENCE.md) for the com
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `st_messages_mta_in_enabled` | Enable mta-in | `false` |
-| `st_messages_mta_in_tag` | Docker image tag | `main` |
+| `st_messages_mta_in_tag` | Docker image tag | see REFERENCE.md |
 | `st_messages_mta_in_dir` | Application directory | `/opt/messages/mta-in` |
-| `st_messages_mta_in_port` | Host port for SMTP | `50025` |
+| `st_messages_mta_in_port` | Host port for SMTP | `50425` |
 | `st_messages_mta_in_starttls_certificate_path` | Path to STARTTLS cert on host | _(not set)_ |
 | `st_messages_mta_in_rollback_enabled` | Rollback on failure | `false` |
 
@@ -38,7 +38,7 @@ See [roles/messages/REFERENCE.md](../../roles/messages/REFERENCE.md) for the com
 
 | Variable | Default | Container port |
 |----------|---------|---------------|
-| `st_messages_mta_in_port` | `50025` | 25 |
+| `st_messages_mta_in_port` | `50425` | 25 |
 
 ## STARTTLS
 

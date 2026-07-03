@@ -51,10 +51,10 @@ See [roles/messages/REFERENCE.md](../../roles/messages/REFERENCE.md) for the com
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `st_messages_enabled` | Enable the messages app | `false` |
-| `st_messages_tag` | Docker image tag | `main` |
+| `st_messages_tag` | Docker image tag | see REFERENCE.md |
 | `st_messages_dir` | Application directory | `/opt/messages/messages` |
-| `st_messages_uid` | Unix UID for the messages user | `1100` |
-| `st_messages_port` | Host port for frontend | `50080` |
+| `st_messages_uid` | Unix UID for the messages user | `1104` |
+| `st_messages_port` | Host port for frontend | `50400` |
 | `st_messages_backend_env` | Backend environment content | _(empty)_ |
 | `st_messages_frontend_env` | Frontend environment content | _(empty)_ |
 | `st_messages_backend_run_migrations` | Run Django migrations on deploy | `true` |
@@ -64,7 +64,7 @@ See [roles/messages/REFERENCE.md](../../roles/messages/REFERENCE.md) for the com
 
 | Variable | Default | Container port |
 |----------|---------|---------------|
-| `st_messages_port` | `50080` | 8080 |
+| `st_messages_port` | `50400` | 8080 |
 
 The backend is not published to the host. It's only reachable from the frontend via the Podman
 bridge network.

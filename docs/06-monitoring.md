@@ -13,21 +13,30 @@ The collection provides two monitoring components:
 ## cAdvisor
 
 cAdvisor is a container monitoring tool that exposes resource usage and performance metrics for running containers.
-It is available as an optional add-on for the `messages`, `drive`, and `keycloak` roles.
+It is available as an optional add-on for the `messages`, `drive`, `meet` and `keycloak` roles.
 
 ### Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `st_<role>_cadvisor_enabled` | Enable cAdvisor for this role | `false` |
-| `st_<role>_cadvisor_port` | Host published port | `127.0.0.1:58080` |
+| `st_<role>_cadvisor_port` | Host published port | per-role, see below |
 
-Replace `<role>` with `messages`, `drive`, or `keycloak`.
+Replace `<role>` with `drive`, `keycloak`, `meet`, or `messages`. Each role binds cAdvisor
+on a distinct localhost port by default so several roles can co-exist on one host:
+
+| Role | `st_<role>_cadvisor_port` default |
+|------|-----------------------------------|
+| `drive` | `127.0.0.1:50199` |
+| `keycloak` | `127.0.0.1:50299` |
+| `meet` | `127.0.0.1:50399` |
+| `messages` | `127.0.0.1:50499` |
 
 ### Network & Ports
 
-By default, cAdvisor binds to `127.0.0.1:58080` (localhost only). Change `st_<role>_cadvisor_port` to expose it
-(e.g. `0.0.0.0:58080`) if your Prometheus or Alloy scraper is on a different host.
+By default, cAdvisor binds to localhost only (e.g. `127.0.0.1:50199` for drive). Change
+`st_<role>_cadvisor_port` to expose it (e.g. `0.0.0.0:50199`) if your Prometheus or Alloy
+scraper is on a different host.
 
 ### Deployed as a Separate Unit
 

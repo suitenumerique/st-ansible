@@ -51,21 +51,21 @@ See [roles/drive/REFERENCE.md](../../roles/drive/REFERENCE.md) for the complete 
 |----------|-------------|---------|
 | `st_drive_enabled` | Enable the drive app | `false` |
 | `st_drive_public_host` | Public hostname for the app | **(required)** |
-| `st_drive_tag` | Docker image tag | `main` |
+| `st_drive_tag` | Docker image tag | see REFERENCE.md |
 | `st_drive_dir` | Application directory | `/opt/drive/drive` |
-| `st_drive_uid` | Unix UID for the drive user | `1100` |
-| `st_drive_port` | Host port for frontend | `50080` |
+| `st_drive_uid` | Unix UID for the drive user | `1101` |
+| `st_drive_port` | Host port for frontend | `50100` |
 | `st_drive_backend_env` | Backend environment content | _(empty)_ |
 | `st_drive_s3_protocol` | S3 storage protocol | `https` |
-| `st_drive_s3_host` | S3 storage host | `s3.amazonaws.com` |
-| `st_drive_s3_bucket` | S3 storage bucket | `drive-media` |
+| `st_drive_s3_host` | S3 storage host | **(required)** |
+| `st_drive_s3_bucket` | S3 storage bucket | **(required)** |
 | `st_drive_backend_run_migrations` | Run Django migrations on deploy | `true` |
 
 ## Network & Ports
 
 | Variable | Default | Container port |
 |----------|---------|---------------|
-| `st_drive_port` | `50080` | 3000 |
+| `st_drive_port` | `50100` | 3000 |
 
 The backend is not published to the host. It's only reachable from the frontend via the Podman bridge network.
 

@@ -6,7 +6,7 @@ argument_specs:
       st_keycloak_uid:
         type: "int"
         description: "UID of the `keycloak` user, used for the podman role."
-        default: 1100
+        default: 1102
       st_keycloak_gid:
         type: "int"
         description: "GID of the `keycloak` group, used for the podman role."
@@ -19,10 +19,14 @@ argument_specs:
         type: "bool"
         description: "Triggers the installation of keycloak."
         default: false
+      st_keycloak_image:
+        type: "str"
+        description: "Image repository for keycloak."
+        default: "ghcr.io/suitenumerique/messages-keycloak"
       st_keycloak_tag:
         type: "str"
         description: "Tag of the keycloak docker image to deploy."
-        default: "latest"
+        default: "0.5.0"
       st_keycloak_env_template:
         type: "str"
         description: "Local path to the custom template to use for keycloak env file."
@@ -36,8 +40,8 @@ argument_specs:
         default: keycloak/compose.yaml.j2
       st_keycloak_port:
         type: "str"
-        description: "The port to open on the host, redirecting to port 8080 in the container. It can also specify the ip address, something like 127.0.0.1:8080."
-        default: "50080"
+        description: "Host port Keycloak listens on when running with network_mode: host."
+        default: "50200"
       st_keycloak_start_command:
         type: "str"
         description: "When using the default compose template, specify the `command` to use to start keycloak."
@@ -50,7 +54,15 @@ argument_specs:
         type: "bool"
         description: "Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server."
         default: false
+      st_keycloak_cadvisor_image:
+        type: "str"
+        description: "Image repository for the cadvisor container."
+        default: "ghcr.io/google/cadvisor"
+      st_keycloak_cadvisor_tag:
+        type: "str"
+        description: "Tag of the cadvisor docker image to deploy."
+        default: "v0.60.3"
       st_keycloak_cadvisor_port:
         type: "str"
         description: "The host published port of the cadvisor container."
-        default: "127.0.0.1:58080"
+        default: "127.0.0.1:50299"

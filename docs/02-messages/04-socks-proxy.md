@@ -35,7 +35,7 @@ See [roles/messages/REFERENCE.md](../../roles/messages/REFERENCE.md) for the com
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `st_messages_socks_proxy_enabled` | Enable the proxy | `false` |
-| `st_messages_socks_proxy_tag` | Docker image tag | `main` |
+| `st_messages_socks_proxy_tag` | Docker image tag | see REFERENCE.md |
 | `st_messages_socks_proxy_dir` | Application directory | `/opt/messages/socks-proxy` |
 | `st_messages_socks_proxy_rollback_enabled` | Rollback on failure | `false` |
 

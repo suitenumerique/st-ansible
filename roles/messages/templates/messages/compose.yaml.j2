@@ -5,7 +5,7 @@ name: messages
 services:
   frontend:
     container_name: messages-frontend
-    image: ghcr.io/suitenumerique/messages-frontend:{{ st_messages_tag }}
+    image: "{{ st_messages_frontend_image }}:{{ st_messages_tag }}"
     env_file: ./frontend_env
     ports:
       - "{{ st_messages_port }}:8080"
@@ -15,5 +15,5 @@ services:
 
   backend:
     container_name: messages-backend
-    image: ghcr.io/suitenumerique/messages-backend:{{ st_messages_tag }}
+    image: "{{ st_messages_backend_image }}:{{ st_messages_tag }}"
     env_file: ./backend_env

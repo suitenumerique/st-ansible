@@ -3,7 +3,7 @@ name: messages
 services:
   caddy:
     container_name: caddy
-    image: docker.io/caddy:{{ st_messages_mpa_caddy_tag }}
+    image: "{{ st_messages_mpa_caddy_image }}:{{ st_messages_mpa_caddy_tag }}"
     depends_on:
       - rspamd
     ports:
@@ -19,7 +19,7 @@ services:
 
   rspamd:
     container_name: rspamd
-    image: docker.io/rspamd/rspamd:{{ st_messages_mpa_rspamd_tag }}
+    image: "{{ st_messages_mpa_rspamd_image }}:{{ st_messages_mpa_rspamd_tag }}"
     depends_on:
       - clamav
       - unbound
@@ -37,7 +37,7 @@ services:
 
   clamav:
     container_name: clamav
-    image: docker.io/clamav/clamav:{{ st_messages_mpa_clamav_tag }}
+    image: "{{ st_messages_mpa_clamav_image }}:{{ st_messages_mpa_clamav_tag }}"
     volumes:
       - {{ st_messages_mpa_dir }}/clamav_config/clamd.conf:/etc/clamav/clamd.conf
     healthcheck:
@@ -48,7 +48,7 @@ services:
 
   unbound:
     container_name: unbound
-    image: docker.io/alpinelinux/unbound:latest
+    image: "{{ st_messages_mpa_unbound_image }}:{{ st_messages_mpa_unbound_tag }}"
     entrypoint:
       - /bin/sh
       - -c
@@ -64,7 +64,7 @@ services:
 
   valkey:
     container_name: valkey
-    image: docker.io/valkey/valkey:{{ st_messages_mpa_valkey_tag }}
+    image: "{{ st_messages_mpa_valkey_image }}:{{ st_messages_mpa_valkey_tag }}"
     command: "valkey-server --save 60 1 --loglevel warning"
     volumes:
       - {{ st_messages_mpa_dir }}/valkey_data:/data

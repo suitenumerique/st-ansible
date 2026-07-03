@@ -47,9 +47,9 @@ See [roles/meet/REFERENCE.md](../../roles/meet/REFERENCE.md) for the complete va
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `st_meet_enabled` | Enable the meet app | `false` |
-| `st_meet_tag` | Docker image tag | `latest` |
+| `st_meet_tag` | Docker image tag | see REFERENCE.md |
 | `st_meet_dir` | Application directory | `/opt/meet/meet` |
-| `st_meet_uid` | Unix UID for the meet user | `1100` |
+| `st_meet_uid` | Unix UID for the meet user | `1103` |
 | `st_meet_backend_env` | Backend environment content | _(empty)_ |
 | `st_meet_frontend_env` | Frontend environment content | _(empty)_ |
 | `st_meet_backend_run_migrations` | Run Django migrations on deploy | `true` |
@@ -59,7 +59,7 @@ See [roles/meet/REFERENCE.md](../../roles/meet/REFERENCE.md) for the complete va
 
 | Variable | Default | Container port |
 |----------|---------|---------------|
-| `st_meet_port` | `50080` | 8080 |
+| `st_meet_port` | `50300` | 8080 |
 
 The backend is not published to the host. It's only reachable from the frontend via the Podman
 bridge network.

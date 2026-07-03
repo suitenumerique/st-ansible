@@ -41,10 +41,10 @@ See [roles/meet/REFERENCE.md](../../roles/meet/REFERENCE.md) for the complete va
 | `st_meet_livekit_api_key` | LiveKit API key | **(required)** |
 | `st_meet_livekit_api_secret` | LiveKit API secret | **(required)** |
 | `st_meet_livekit_dir` | Application directory | `/opt/meet/livekit` |
-| `st_meet_livekit_tag` | livekit-server image tag | `latest` |
-| `st_meet_livekit_egress_tag` | egress image tag | `latest` |
-| `st_meet_livekit_caddyl4_tag` | caddy-l4 image tag | `latest` |
-| `st_meet_livekit_valkey_tag` | valkey image tag | `latest` |
+| `st_meet_livekit_tag` | livekit-server image tag | see REFERENCE.md |
+| `st_meet_livekit_egress_tag` | egress image tag | see REFERENCE.md |
+| `st_meet_livekit_caddyl4_tag` | caddy-l4 image tag | see REFERENCE.md |
+| `st_meet_livekit_valkey_tag` | valkey image tag | see REFERENCE.md |
 | `st_meet_livekit_rollback_enabled` | Rollback on failure | `false` |
 | `st_meet_livekit_files` | List of config files to deploy | _(defaults)_ |
 | `st_meet_livekit_directories` | List of directories to create | _(defaults)_ |

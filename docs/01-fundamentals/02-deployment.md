@@ -93,23 +93,34 @@ See [docs/00-examples/full-high-availability](docs/00-examples/full-high-availab
 
 ### Ports and UID Conflicts
 
-Each role creates a Unix user with UID 1100 by default. When running multiple roles **on the same host**,
-assign different UIDs:
+Each role creates its Unix user and binds its host ports on a **distinct default** so that
+multiple roles can run **on the same host** without conflicting. The defaults are:
+
+| Role | UID / GID | Frontend port |
+|------|-----------|---------------|
+| `drive` | `1101` | `50100` |
+| `keycloak` | `1102` | `50200` |
+| `meet` | `1103` | `50300` |
+| `messages` | `1104` | `50400` |
+
+Each role owns a `50<n>00`–`50<n>99` port block (where `<n>` is the role's index — drive
+`1`, keycloak `2`, meet `3`, messages `4`). The frontend sits at `50<n>00`, auxiliary
+services increment from there (e.g. `messages` mpa/rspamd on `50402`–`50404`, mta-in on
+`50425`), and cAdvisor is
+pinned at `50<n>99`. This layout leaves room to grow: an 11th–20th role would carry into
+`51<n>00` (and UIDs into `111<n>`). You can still override any `st_<role>_uid` or
+`st_<role>_port` to fit your own numbering scheme:
 
 ```yaml
-st_keycloak_uid: 1100
-st_messages_uid: 1101
-st_drive_uid: 1102
+st_keycloak_uid: 1102
+st_keycloak_port: 50200
 ```
 
-The messages, drive and keycloak roles will bind the 50080 port by default. When running multiple roles **on the same host**,
-assign different ports.
-
-```yaml
-st_keycloak_port: 50080
-st_messages_port: 50081
-st_drive_port: 50082
-```
+> [!NOTE]
+> **Exception — LiveKit:** the `livekit` sub-app of `meet` does **not** follow this scheme.
+> It runs with `network_mode: host` and binds fixed ports (7880/7881/5349/3478 and UDP
+> 50000-60000) directly on the host, so it must run on a dedicated host with a dedicated
+> public IP. See [../05-meet/02-livekit.md](../05-meet/02-livekit.md).
 
 ## Customizing Deployments
 

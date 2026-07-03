@@ -35,9 +35,9 @@ See [roles/keycloak/REFERENCE.md](../../roles/keycloak/REFERENCE.md) for the com
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `st_keycloak_enabled` | Enable Keycloak | `false` |
-| `st_keycloak_tag` | Docker image tag | `latest` |
-| `st_keycloak_port` | Host port (maps to container 8080) | `50080` |
-| `st_keycloak_uid` | Unix UID for the keycloak user | `1100` |
+| `st_keycloak_tag` | Docker image tag | see REFERENCE.md |
+| `st_keycloak_port` | Host port (maps to container 8080) | `50200` |
+| `st_keycloak_uid` | Unix UID for the keycloak user | `1102` |
 | `st_keycloak_env` | Environment content | _(empty)_ |
 | `st_keycloak_start_command` | Keycloak start command | `start --optimized` |
 | `st_keycloak_rollback_enabled` | Rollback on failure | `false` |
@@ -46,7 +46,7 @@ See [roles/keycloak/REFERENCE.md](../../roles/keycloak/REFERENCE.md) for the com
 
 | Variable | Default | Container port |
 |----------|---------|---------------|
-| `st_keycloak_port` | `50080` | 8080 |
+| `st_keycloak_port` | `50200` | 8080 |
 
 ## Data & Volumes
 
