@@ -1,3 +1,6 @@
 {{ ansible_managed | comment }}
 
+greylist = null;
+add_header = {{ st_messages_mpa_rspamd_add_header_score }};
+rewrite_subject = {{ st_messages_mpa_rspamd_rewrite_subject_score }};
 reject = {{ st_messages_mpa_rspamd_reject_score }};

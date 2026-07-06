@@ -191,9 +191,17 @@ argument_specs:
         type: "str"
         description: "The host published port for the rspamd controller/webui."
         default: "11334"
+      st_messages_mpa_rspamd_add_header_score:
+        type: "str"
+        description: "The score triggering the add_header action on Messages."
+        default: "4"
+      st_messages_mpa_rspamd_rewrite_subject_score:
+        type: "str"
+        description: "The score triggering the rewrite_subject action on Messages."
+        default: "6"
       st_messages_mpa_rspamd_reject_score:
         type: "str"
-        description: "The score triggering the spam threshold on Messages."
+        description: "The score triggering the reject action on Messages."
         default: "9"
       st_messages_mpa_blacklist_domains:
         type: "list"
