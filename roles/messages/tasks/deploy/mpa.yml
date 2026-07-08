@@ -15,6 +15,7 @@
       - { src: mpa/rspamd/history_redis.conf.j2, dest: rspamd_config/local.d/history_redis.conf, container_uid: "11333" }
       - { src: mpa/rspamd/redis.conf.j2, dest: rspamd_config/local.d/redis.conf, container_uid: "11333" }
       - { src: mpa/rspamd/greylist.conf.j2, dest: rspamd_config/local.d/greylist.conf, container_uid: "11333" }
+      - { src: mpa/rspamd/redirectors.inc.j2, dest: rspamd_config/local.d/redirectors.inc, container_uid: "11333" }
       - { src: mpa/rspamd/blacklist_domains.map.j2, dest: rspamd_data/blacklist_domains.map, mode: "0644" }
       - { src: mpa/rspamd/blacklist_ips.map.j2, dest: rspamd_data/blacklist_ips.map, mode: "0644" }
       - { src: mpa/rspamd/whitelist_domains.map.j2, dest: rspamd_data/whitelist_domains.map, mode: "0644" }

@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.meet
-Version: 0.0.21
+Version: 0.0.22
 
 This role deploys a Meet instance from La Suite Territoriale on a rootless podman base on Debian systems.
 

@@ -1,4 +1,4 @@
 {{ ansible_managed | comment }}
 
-expire = 604800; # Expire in seconds for inactive keys, 7 days
-nrows = 2000; # rows limit
+key_prefix = "rs_history_lst" # needed because the default one depends on the hostname, which is random in the container
+nrows  = {{ st_messages_mpa_rspamd_history_nrows }};  # max number of rows for the index file, trying to keep between 2 weeks and 1 month

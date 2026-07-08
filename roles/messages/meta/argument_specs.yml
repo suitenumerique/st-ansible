@@ -203,6 +203,19 @@ argument_specs:
         type: "str"
         description: "The score triggering the reject action on Messages."
         default: "9"
+      st_messages_mpa_rspamd_redirectors:
+        type: "list"
+        elements: "str"
+        description: >
+          The list of domains that should be checked by URL redirector
+          in addition to the default ones.
+        default: []
+      st_messages_mpa_rspamd_history_nrows:
+        type: "str"
+        description: >
+          The maximum rows of the redis history index, before old history lines
+          get removed. Good idea to try to keep this between 2 weeks and 1 month.
+        default: "100000"
       st_messages_mpa_blacklist_domains:
         type: "list"
         elements: "str"

@@ -86,6 +86,10 @@ st_messages_mpa_rspamd_add_header_score: '4'
 st_messages_mpa_rspamd_rewrite_subject_score: '6'
 # The score triggering the reject action on Messages.
 st_messages_mpa_rspamd_reject_score: '9'
+# The list of domains that should be checked by URL redirector in addition to the default ones.
+st_messages_mpa_rspamd_redirectors: []
+# The maximum rows of the redis history index, before old history lines get removed. Good idea to try to keep this between 2 weeks and 1 month.
+st_messages_mpa_rspamd_history_nrows: '100000'
 # Domains to blacklist via rspamd multimap.
 st_messages_mpa_blacklist_domains: []
 # IPs or CIDRs to blacklist via rspamd multimap.

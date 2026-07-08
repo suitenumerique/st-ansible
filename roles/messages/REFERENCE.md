@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.messages
-Version: 0.0.21
+Version: 0.0.22
 
 This role deploys the Messages applications from La Suite Territoriale on a rootless podman base on Debian systems.
 
@@ -69,6 +69,8 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mpa_rspamd_add_header_score | The score triggering the add_header action on Messages. | str | no | 4 |
 | st_messages_mpa_rspamd_rewrite_subject_score | The score triggering the rewrite_subject action on Messages. | str | no | 6 |
 | st_messages_mpa_rspamd_reject_score | The score triggering the reject action on Messages. | str | no | 9 |
+| st_messages_mpa_rspamd_redirectors | The list of domains that should be checked by URL redirector in addition to the default ones. | list of 'str' | no | [] |
+| st_messages_mpa_rspamd_history_nrows | The maximum rows of the redis history index, before old history lines get removed. Good idea to try to keep this between 2 weeks and 1 month. | str | no | 100000 |
 | st_messages_mpa_blacklist_domains | Domains to blacklist via rspamd multimap. | list of 'str' | no | [] |
 | st_messages_mpa_blacklist_ips | IPs or CIDRs to blacklist via rspamd multimap. | list of 'str' | no | [] |
 | st_messages_mpa_whitelist_domains | Domains to whitelist via rspamd multimap. | list of 'str' | no | [] |
