@@ -214,7 +214,7 @@ argument_specs:
       st_messages_mpa_rspamd_controller_port:
         type: "str"
         description: "The host published port for the rspamd controller/webui."
-        default: "11334"
+        default: "50404"
       st_messages_mpa_rspamd_add_header_score:
         type: "str"
         description: "The score triggering the add_header action on Messages."

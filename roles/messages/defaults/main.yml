@@ -91,7 +91,7 @@ st_messages_mpa_rspamd_image: docker.io/rspamd/rspamd
 # See https://hub.docker.com/r/rspamd/rspamd/tags.
 st_messages_mpa_rspamd_tag: 4.1.1
 # The host published port for the rspamd controller/webui.
-st_messages_mpa_rspamd_controller_port: '11334'
+st_messages_mpa_rspamd_controller_port: '50404'
 # The score triggering the add_header action on Messages.
 st_messages_mpa_rspamd_add_header_score: '4'
 # The score triggering the rewrite_subject action on Messages.
