@@ -38,6 +38,7 @@ argument_specs:
       st_meet_tag:
         type: "str"
         description: "Tag of the meet docker image to deploy."
+        # renovate: datasource=github-releases depName=suitenumerique/meet versioning=semver
         default: "v1.21.0"
       st_meet_backend_env_template:
         type: "str"
@@ -86,18 +87,22 @@ argument_specs:
       st_meet_livekit_tag:
         type: "str"
         description: "Tag of the livekit docker image to deploy."
+        # renovate: datasource=docker depName=docker.io/livekit/livekit-server
         default: "v1.13.2"
       st_meet_livekit_egress_tag:
         type: "str"
         description: "Tag of the livekit egress docker image to deploy."
+        # renovate: datasource=docker depName=docker.io/livekit/egress
         default: "v1.13.0"
       st_meet_livekit_caddyl4_tag:
         type: "str"
         description: "Tag of the livekit caddyl4 docker image to deploy."
+        # renovate: datasource=docker depName=docker.io/livekit/caddyl4
         default: "v2.11.3"
       st_meet_livekit_valkey_tag:
         type: "str"
         description: "Tag of the valkey docker image to deploy for livekit when using the full compose template."
+        # renovate: datasource=docker depName=docker.io/valkey/valkey
         default: "9.0.4"
       st_meet_livekit_enabled:
         type: "bool"
@@ -157,6 +162,7 @@ argument_specs:
       st_meet_cadvisor_tag:
         type: "str"
         description: "Tag of the cadvisor docker image to deploy."
+        # renovate: datasource=docker depName=ghcr.io/google/cadvisor
         default: "v0.60.3"
       st_meet_cadvisor_enabled:
         type: "bool"

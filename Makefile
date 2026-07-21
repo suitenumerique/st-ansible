@@ -97,3 +97,33 @@ changelog.lint:
 .PHONY: changelog.release
 changelog.release:
 	antsibull-changelog release
+
+# Integrate one or more Renovate PRs into the CURRENT branch (branch off main first):
+#   make renovate pr=10
+#   make renovate pr=21,22,23
+# For each PR (comma-separated), fetches its head via refs/pull/<N>/head (plain git,
+# no gh CLI / token needed), cherry-picks it staged-but-uncommitted, and scaffolds a
+# per-PR changelog fragment from the Renovate commit subject. Regenerates defaults with
+# `make docs` once at the end. Review, then commit. A cherry-pick conflict stops the run.
+.PHONY: renovate
+renovate:
+ifndef pr
+	$(error pr is required, e.g. make renovate pr=10 or pr=21,22,23)
+endif
+	@set -e; \
+	for n in $$(echo "$(pr)" | tr ',' ' '); do \
+	  echo ">> Integrating PR #$$n"; \
+	  git fetch origin "pull/$$n/head"; \
+	  subject=$$(git log -1 --format=%s FETCH_HEAD); \
+	  git cherry-pick -n FETCH_HEAD; \
+	  f="changelogs/fragments/renovate-pr-$$n.yml"; \
+	  if [ -e "$$f" ]; then \
+	    echo "   $$f already exists — keeping it (edit or delete it to regenerate)."; \
+	  else \
+	    esc=$$(printf '%s' "$$subject" | sed 's/\\/\\\\/g; s/"/\\"/g'); \
+	    printf 'minor_changes:\n  - "%s"\n' "$$esc" > "$$f"; \
+	  fi; \
+	done
+	$(MAKE) docs
+	@echo "Prepared fragment(s) for PR(s) $(pr) + regenerated defaults."
+	@echo "Review 'git status', then commit, push, and open/merge the PR(s)."

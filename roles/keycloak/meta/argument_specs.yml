@@ -26,6 +26,7 @@ argument_specs:
       st_keycloak_tag:
         type: "str"
         description: "Tag of the keycloak docker image to deploy."
+        # renovate: datasource=github-releases depName=suitenumerique/messages versioning=semver extractVersion=^v(?<version>.+)$
         default: "0.5.0"
       st_keycloak_env_template:
         type: "str"
@@ -61,6 +62,7 @@ argument_specs:
       st_keycloak_cadvisor_tag:
         type: "str"
         description: "Tag of the cadvisor docker image to deploy."
+        # renovate: datasource=docker depName=ghcr.io/google/cadvisor
         default: "v0.60.3"
       st_keycloak_cadvisor_port:
         type: "str"

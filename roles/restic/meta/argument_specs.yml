@@ -37,6 +37,7 @@ argument_specs:
       restic_version:
         type: "str"
         description: "Version of restic to install."
+        # renovate: datasource=github-releases depName=restic/restic versioning=semver extractVersion=^v(?<version>.+)$
         default: "0.18.0"
       restic_config_dir:
         type: "str"

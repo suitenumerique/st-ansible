@@ -1,0 +1,67 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended"],
+  dependencyDashboard: true,
+  labels: ["dependencies"],
+
+  // Hold every update until the release is 7 days old, to avoid pulling
+  // brand-new (and occasionally broken or yanked) versions. `strict` makes
+  // the age a hard gate rather than advisory.
+  minimumReleaseAge: "7 days",
+  internalChecksFilter: "strict",
+
+  // Security fast-path: bypass the 7-day age for updates that fix a known
+  // advisory. NOTE this only fires where Renovate has advisory data (the
+  // pep621/PyPI deps). Docker tags and the restic github-release have no
+  // security feed, so those always wait the full 7 days.
+  osvVulnerabilityAlerts: true,
+  vulnerabilityAlerts: {
+    minimumReleaseAge: "0",
+    labels: ["dependencies", "security"],
+  },
+
+  packageRules: [
+    // pyproject deps are pinned with `==`; keep replacing the exact pin.
+    {
+      matchManagers: ["pep621"],
+      rangeStrategy: "pin",
+    },
+    // cadvisor is pinned in 4 roles and valkey in 2 — collapse each into a
+    // single grouped PR instead of one per file.
+    {
+      matchDatasources: ["docker"],
+      matchPackageNames: ["ghcr.io/google/cadvisor"],
+      groupName: "cadvisor",
+    },
+    {
+      matchDatasources: ["docker"],
+      matchPackageNames: ["docker.io/valkey/valkey"],
+      groupName: "valkey",
+    },
+  ],
+
+  // The role image tags / restic version live in each role's generated
+  // defaults, whose source of truth is meta/argument_specs.yml. We annotate
+  // the `default:` there with a `# renovate:` comment so Renovate can manage
+  // it without parsing the generated files; `make renovate` then regenerates
+  // the defaults via `make docs`.
+  // (galaxy.yml's `dependencies:` map is picked up natively by the built-in
+  // ansible-galaxy manager, so it needs no custom manager here.)
+  customManagers: [
+    {
+      customType: "regex",
+      description: "Ansible role default versions annotated in meta/argument_specs.yml",
+      managerFilePatterns: ["/roles/[^/]+/meta/argument_specs\\.yml$/"],
+      // Matches a `# renovate: datasource=… depName=… [versioning=…] [extractVersion=…]`
+      // comment immediately followed by the `default: "<value>"` line it annotates.
+      matchStrings: [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*default: \"?(?<currentValue>[^\"\\n]+)\"?",
+      ],
+      // Most annotated deps are Docker tags (e.g. `2.11.4-alpine`, `26.04.2.1.1`)
+      // which the semver default mishandles, so default to `docker` versioning.
+      // An explicit `versioning=…` in the annotation wins (collabora uses `loose`,
+      // the restic github-release uses `semver`).
+      versioningTemplate: "{{#if versioning}}{{{versioning}}}{{else}}docker{{/if}}",
+    },
+  ],
+}

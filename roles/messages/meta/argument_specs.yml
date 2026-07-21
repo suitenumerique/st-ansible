@@ -26,6 +26,7 @@ argument_specs:
       st_messages_tag:
         type: "str"
         description: "Tag of the messages docker images to deploy."
+        # renovate: datasource=github-releases depName=suitenumerique/messages versioning=semver extractVersion=^v(?<version>.+)$
         default: "0.5.0"
       st_messages_enabled:
         type: "bool"
@@ -106,6 +107,7 @@ argument_specs:
       st_messages_mta_in_tag:
         type: "str"
         description: "Tag of the mta-in docker image to deploy."
+        # renovate: datasource=github-releases depName=suitenumerique/messages versioning=semver extractVersion=^v(?<version>.+)$
         default: "0.5.0"
       st_messages_mta_in_dir:
         type: "str"
@@ -147,6 +149,7 @@ argument_specs:
       st_messages_socks_proxy_tag:
         type: "str"
         description: "Tag of the socks-proxy docker image to deploy."
+        # renovate: datasource=github-releases depName=suitenumerique/messages versioning=semver extractVersion=^v(?<version>.+)$
         default: "0.5.0"
       st_messages_socks_proxy_dir:
         type: "str"
@@ -189,6 +192,7 @@ argument_specs:
         description:
           - "The tag of the caddy docker image to use."
           - "See https://hub.docker.com/_/caddy/tags."
+        # renovate: datasource=docker depName=docker.io/caddy
         default: "2.11.4-alpine"
       st_messages_mpa_caddy_port:
         type: "str"
@@ -207,6 +211,7 @@ argument_specs:
         description:
           - "The tag of the rspamd docker image to use."
           - "See https://hub.docker.com/r/rspamd/rspamd/tags."
+        # renovate: datasource=docker depName=docker.io/rspamd/rspamd
         default: "4.1.1"
       st_messages_mpa_rspamd_controller_password:
         type: "str"
@@ -286,6 +291,7 @@ argument_specs:
         description:
           - "The tag of the clamav docker image to use."
           - "See https://hub.docker.com/r/clamav/clamav/tags."
+        # renovate: datasource=docker depName=docker.io/clamav/clamav
         default: "1.5.3"
       st_messages_mpa_clamav_config_template:
         type: "str"
@@ -300,6 +306,7 @@ argument_specs:
         description:
           - "The tag of the valkey docker image to use."
           - "See https://hub.docker.com/r/valkey/valkey/tags."
+        # renovate: datasource=docker depName=docker.io/valkey/valkey
         default: "9.0.4"
       st_messages_mpa_rollback_enabled:
         type: "bool"
@@ -320,6 +327,7 @@ argument_specs:
       st_messages_cadvisor_tag:
         type: "str"
         description: "Tag of the cadvisor docker image to deploy."
+        # renovate: datasource=docker depName=ghcr.io/google/cadvisor
         default: "v0.60.3"
       st_messages_cadvisor_port:
         type: "str"

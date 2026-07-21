@@ -162,7 +162,7 @@ and `tests/helpers.py` (config-tree seeders + `ScriptedQuestionary`). The lone
 network test (`test_syntax_check_after_galaxy_install`) is `@pytest.mark.network`,
 deselected via `addopts = "-m 'not network'"`. Deps: `typer`, `questionary`,
 `ruamel.yaml`, `jinja2`, `rich`; dev `pytest`, `pytest-mock`; build hatchling;
-Python ≥ 3.10.
+Python ≥ 3.12.
 
 ### Developing against a local collection build
 

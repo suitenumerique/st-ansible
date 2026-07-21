@@ -93,6 +93,26 @@ A GitHub Actions "Changelog" workflow runs on every pull request: it lints the f
 
 Maintainers roll the fragments into `CHANGELOG.md` at release time with `make changelog.release` (this consumes and deletes the fragments) — contributors do not run this.
 
+## Dependency updates (Renovate)
+
+Third-party versions are kept up to date by [Renovate](https://docs.renovatebot.com/) (configured in `renovate.json5`). It watches the container image tags and the restic release (annotated with `# renovate:` comments in each role's `meta/argument_specs.yml`), the Ansible collection dependencies in `galaxy.yml`, the `st-cli` / `molecule-lima` Python dependencies in the `pyproject.toml` files, and the base image in `cli/Dockerfile`. Every update is held for a **7-day minimum release age** before it is proposed (security fixes with advisory data are exempt); nothing is auto-merged.
+
+Renovate only edits the **source of truth** — never the generated `roles/*/defaults/main.yml`. Its pull requests are therefore an *inbox*: you don't merge them directly, you integrate them onto your own branch, which regenerates the defaults and adds the changelog fragment. Branch off `main`, then :
+
+```bash
+make renovate pr=42            # one PR
+make renovate pr=21,22,23      # several at once
+```
+
+For each PR this fetches its head (plain `git`, no `gh` CLI or token needed), cherry-picks it staged-but-uncommitted, scaffolds a `changelogs/fragments/renovate-pr-<N>.yml` fragment from the Renovate commit message, and regenerates the role defaults with `make docs`. Review `git status`, then commit, push, and open/merge your PR; Renovate closes its own PR once the dependency is up to date. (Renovate's inbox PRs skip the changelog-fragment check, since the fragment is created at integration time.)
+
+To make Renovate track a **new** hand-pinned version, add an annotation comment directly above its `default:` in `meta/argument_specs.yml`, for example :
+
+```yaml
+        # renovate: datasource=docker depName=docker.io/caddy
+        default: "2.11.4-alpine"
+```
+
 ## Build
 
 You can build the collection with the Makefile :
