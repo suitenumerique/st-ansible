@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.podman
-Version: 0.1.0
+Version: 0.1.1
 
 This role deploys a rootless podman base for La Suite Territoriale applications.
 

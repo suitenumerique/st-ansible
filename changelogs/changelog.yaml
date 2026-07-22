@@ -20,3 +20,28 @@ releases:
     - refactor-single-host-deployments.yml
     - release_summary.yml
     release_date: '2026-07-21'
+  0.1.1:
+    changes:
+      bugfixes:
+      - Fixed restic install task for upgrade workflow
+      minor_changes:
+      - Added Renovate configuration (``renovate.json5``) and renovate Makefile target
+      - Pinned the st-cli and molecule-lima Python dependencies to exact versions
+      - Update actions/checkout action to v7
+      - Update dependency restic/restic to v0.19.1
+      - Update docker/build-push-action action to v7
+      - Update docker/login-action action to v4
+      - Update docker/metadata-action action to v6
+      - Update docker/setup-buildx-action action to v4
+      - Update docker/setup-qemu-action action to v4
+    fragments:
+    - add-renovate.yml
+    - fix-restic-upgrade.yml
+    - renovate-pr-33.yml
+    - renovate-pr-34.yml
+    - renovate-pr-35.yml
+    - renovate-pr-36.yml
+    - renovate-pr-37.yml
+    - renovate-pr-38.yml
+    - renovate-pr-42.yml
+    release_date: '2026-07-22'
