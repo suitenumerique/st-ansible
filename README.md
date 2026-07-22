@@ -1,24 +1,20 @@
 # La Suite Territoriale Ansible Collection
 
 Ansible collection for deploying La Suite Territoriale applications on Debian systems
-using rootless Podman containers managed by systemd user units.
+using rootless Podman containers managed by systemd user units, with the
+[st-cli](cli/README.md) wrapper to bootstrap and operate deployments.
+
+## st-cli
+
+[st-cli](cli/README.md) is a Python wrapper around this collection. It bootstraps a
+versionable config tree (with `ansible-vault`-encrypted secrets), generates the
+throwaway Ansible scaffolding, and drives deploy (ansible) plus restart / ps / one-off
+/ reset / logs (ssh). It ships as a container image and via `pipx`, see the
+[getting-started](/docs/00-getting-started/01-st-cli.md) for install and usage.
 
 ## Installing the Collection
 
-Add a `galaxy-requirements.yml` file:
-
-```yaml
-collections:
-  - name: https://github.com/suitenumerique/st-ansible.git
-    type: git
-    version: "1"
-```
-
-Then install:
-
-```bash
-ansible-galaxy collection install -r galaxy-requirements.yml
-```
+See the [getting-started](/docs/00-getting-started/02-ansible-galaxy.md) for install and usage.
 
 ## Documentation
 
