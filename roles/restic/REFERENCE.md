@@ -28,7 +28,7 @@ Install and configure a restic instance on Debian systems.
 | restic_files | A list containing the files to backup on the system. | list of 'str' | yes |  |
 | restic_binary_path | Path to the restic binary. | str | no | /usr/local/bin/restic |
 | restic_force_install | Force the installation of restic even if the binary already exists. | bool | no | False |
-| restic_version | Version of restic to install. | str | no | 0.18.0 |
+| restic_version | Version of restic to install. | str | no | 0.19.1 |
 | restic_config_dir | Path to the configuration directory of restic. | str | no | /etc/restic |
 | restic_cache_dir | Path to the cache directory of restic. | str | no | /var/cache/restic |
 | restic_backup_precmd | Command to add to the ExecStartPre field of the restic-backup systemd unit. | str | no |  |

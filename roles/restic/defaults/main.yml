@@ -5,7 +5,7 @@ restic_binary_path: /usr/local/bin/restic
 # Force the installation of restic even if the binary already exists.
 restic_force_install: false
 # Version of restic to install.
-restic_version: 0.18.0
+restic_version: 0.19.1
 # Path to the configuration directory of restic.
 restic_config_dir: /etc/restic
 # Path to the cache directory of restic.

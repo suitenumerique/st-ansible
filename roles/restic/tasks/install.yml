@@ -32,7 +32,7 @@
         mv restic_{{ restic_version }}_linux_amd64 {{ restic_binary_path }}
       args:
         executable: /bin/bash
-        creates: "{{ restic_binary_path }}"
+      changed_when: true
 
     - name: "Ensure restic binary permissions."
       ansible.builtin.file:

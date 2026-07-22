@@ -4,9 +4,24 @@
     path: "{{ restic_binary_path }}"
   register: restic_binary
 
+- name: "Get the currently installed restic version."
+  ansible.builtin.command: "{{ restic_binary_path }} version"
+  register: restic_installed_version
+  changed_when: false
+  failed_when: false
+  when: restic_binary.stat.exists
+
 - name: "Import install.yml."
   ansible.builtin.import_tasks: "install.yml"
-  when: not restic_binary.stat.exists or restic_force_install
+  # Reinstall when the binary is missing, forced, unable to run (broken/corrupt so
+  # `restic version` exited non-zero or produced no output), or reports a version
+  # other than the configured one.
+  when: >
+    not restic_binary.stat.exists
+    or restic_force_install
+    or restic_installed_version.rc | default(1) != 0
+    or restic_installed_version.stdout | default('') | length == 0
+    or restic_installed_version.stdout.split()[1] != restic_version | string
   tags: ["restic_install"]
 
 - name: "Import user.yml."
