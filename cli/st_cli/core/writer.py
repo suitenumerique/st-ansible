@@ -105,6 +105,24 @@ def apply_component_vars(data, meta, comp, answers: dict) -> None:
         data[name] = LiteralScalarString(rendered) if "\n" in rendered else rendered
 
 
+def expand_var_markers(data, backend: SecretBackend) -> None:
+    """Expand inline @openbao()/@vault() markers in every string leaf of a
+    component's vars map (env blobs + st_* scalars) via the backend.
+
+    No-op for ansible-vault (its expand_markers returns the value unchanged);
+    idempotent for hashi_vault (already-rendered lookup refs carry no marker).
+    Multi-line values are re-wrapped as LiteralScalarString to preserve the
+    readable `|` block style.
+    """
+    for name, val in list(data.items()):
+        if isinstance(val, str):
+            rendered = backend.expand_markers(val)
+            if rendered != val:
+                data[name] = (
+                    LiteralScalarString(rendered) if "\n" in rendered else rendered
+                )
+
+
 def write_vault(app: str, env: str, component: str, backend: SecretBackend) -> None:
     """Write + ansible-vault encrypt a unit's ``vault.yml`` (no-op if empty).
 
@@ -176,6 +194,7 @@ def write_core(
         data[blob_var] = LiteralScalarString(
             text
         )  # readable `|` block, with {{ vault_* }} refs
+    expand_var_markers(data, backend)
     data.yaml_set_start_comment(vars_header(app, meta, core))
     tree.save_vars(app, env, core.key, data)
     write_vault(app, env, core.key, backend)

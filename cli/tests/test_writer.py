@@ -5,9 +5,15 @@ from __future__ import annotations
 import stat
 
 from ruamel.yaml.comments import CommentedMap
+from ruamel.yaml.scalarstring import LiteralScalarString
 
 from st_cli.core import appmeta, paths, writer
-from st_cli.core.secretbackend import SecretBackend
+from st_cli.core.secretbackend import (
+    AnsibleVaultBackend,
+    HashiVaultBackend,
+    SecretBackend,
+    hashi_lookup_ref,
+)
 
 
 def test_drive_public_host_from_domain():
@@ -148,3 +154,55 @@ def test_write_vault_is_noop_when_no_secrets(repo):
     writer.write_vault("meet", "prod", "livekit", backend)
 
     assert not paths.vault_path("meet", "prod", "livekit").exists()
+
+
+# --------------------------------------------------------------------------- expand_var_markers
+
+
+def _sample_map() -> CommentedMap:
+    data = CommentedMap()
+    data["st_x_host"] = "db-@openbao(kv/data/x:host)"
+    data["st_x_env"] = LiteralScalarString(
+        "PLAIN=1\nKEY=@openbao(kv/data/x:pw)\nOTHER=2\n"
+    )
+    data["st_x_ref"] = (
+        "{{ lookup('community.hashi_vault.hashi_vault', 'kv/data/x:tok') }}"
+    )
+    data["st_x_flag"] = True
+    return data
+
+
+def test_expand_var_markers_hashi_vault_expands_every_string_leaf():
+    """expand_var_markers walks every string leaf (non-secret scalars AND
+    multi-line env blobs) and expands @openbao()/@vault() markers via the
+    backend; already-rendered refs and non-string leaves are left untouched."""
+    data = _sample_map()
+    backend = HashiVaultBackend("x")
+
+    writer.expand_var_markers(data, backend)
+
+    assert data["st_x_host"] == "db-" + hashi_lookup_ref("kv/data/x:host")
+    # multi-line value stays a LiteralScalarString (readable `|` block preserved)
+    assert isinstance(data["st_x_env"], LiteralScalarString)
+    assert "KEY=" + hashi_lookup_ref("kv/data/x:pw") in str(data["st_x_env"])
+    assert "PLAIN=1" in str(data["st_x_env"])
+    assert "OTHER=2" in str(data["st_x_env"])
+    # already-rendered lookup ref carries no marker → unchanged
+    assert data["st_x_ref"] == (
+        "{{ lookup('community.hashi_vault.hashi_vault', 'kv/data/x:tok') }}"
+    )
+    # non-string leaf is untouched
+    assert data["st_x_flag"] is True
+
+
+def test_expand_var_markers_ansible_vault_is_noop():
+    """ansible-vault has no OpenBao: expand_var_markers must leave the map
+    completely unchanged (markers preserved literally, byte-for-byte)."""
+    data = _sample_map()
+    before = {k: str(v) for k, v in data.items()}
+    backend = AnsibleVaultBackend()
+
+    writer.expand_var_markers(data, backend)
+
+    assert {k: str(v) for k, v in data.items()} == before
+    assert isinstance(data["st_x_env"], LiteralScalarString)

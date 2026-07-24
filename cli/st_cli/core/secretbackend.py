@@ -116,6 +116,14 @@ class SecretBackend:
     def prompts_values(self) -> bool:
         raise NotImplementedError
 
+    def expand_markers(self, value: str) -> str:
+        """Expand inline @openbao()/@vault() markers in a non-secret value.
+
+        Default no-op: only the hashi_vault backend recognizes markers (ansible-vault
+        has no OpenBao). Kept on the base so writers can call it backend-agnostically.
+        """
+        return value
+
     def env_secret(
         self, answers: dict, env_key: str, component: str, *, value=None
     ) -> None:
@@ -200,6 +208,11 @@ class HashiVaultBackend(SecretBackend):
     def __init__(self, app: str) -> None:
         # app name seeds the pre-filled @openbao(kv/data/<app>:<VAR>) default hint.
         self._app = app
+
+    def expand_markers(self, value: str) -> str:
+        # reference-only: turn any inline @openbao()/@vault() marker in a non-secret
+        # value into a lookup ref (a value with no marker is returned unchanged).
+        return hashi_render(value)
 
     # -- prompts (deferred to bootstrap so the strategy stays TTY-free) ------- #
     def _prompt_term(self, label: str) -> str:
@@ -324,7 +337,9 @@ def setup_backend(m, app: str, env: str) -> SecretBackend:
             "  [bold]@openbao(kv/data/<app>:<VAR>)[/bold]\n"
             "press Enter to accept it, or edit the path/field.\n\n"
             "Only [bold]@openbao(...)[/bold] / [bold]@vault(...)[/bold] markers become a "
-            "lookup ref.\n\n"
+            "lookup ref — and this isn't limited to secret prompts: a marker works in "
+            "ANY field (including non-secret env values and provider vars), turning it "
+            "or an embedded segment into a lookup.\n\n"
             "To mix literal text with a lookup, embed an inline marker anywhere:\n"
             "  redis://user1:[bold]@openbao(kv/data/messages:redis_pw)[/bold]@redis:6379",
             title="hashi_vault",
