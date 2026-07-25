@@ -1,9 +1,9 @@
 {{ ansible_managed | comment }}
 
 redis:
-    address: 127.0.0.1:6379
-    username: ""
-    password: ""
+    address: {{ st_meet_livekit_redis_address }}
+    username: "{{ st_meet_livekit_redis_username }}"
+    password: "{{ st_meet_livekit_redis_password }}"
     db: 0
     use_tls: false
     sentinel_master_name: ""

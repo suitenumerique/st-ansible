@@ -104,6 +104,45 @@ def test_generate_keycloak_two_phase_playbook(repo):
     )
 
 
+def test_generate_egress_two_phase_playbook(repo):
+    """A meet/prod/egress unit renders a two-phase playbook importing the meet role
+    (same role + user as livekit/meet core), targets `hosts: egress` (the egress
+    inventory group), loads meet/prod/egress/vars.yml, and sets
+    `st_meet_egress_enabled: true` ONLY on the deploy (app-user) task — so the base
+    task stays base-only. egress is its own unit (NOT a worker → it owns its own
+    vars/hosts, unlike the workers component which reuses the core's files)."""
+    seed_creds(repo)
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.19",
+            "0.0.19",
+            [UnitState("meet", "prod", "egress", "managed")],
+        )
+    )
+    data = tree.load_vars("meet", "prod", "egress")
+    data["st_meet_livekit_domain"] = "livekit.example.org"
+    data["st_meet_livekit_redis_address"] = "127.0.0.1:6379"
+    tree.save_vars("meet", "prod", "egress", data)
+    tree.write_hosts("meet", "prod", "egress", "egress", ["10.0.0.3"])
+
+    generate.generate_all("meet", "prod")
+    pb = generate.playbook_path("meet", "prod", "egress").read_text()
+    # same role + user as livekit/meet core (egress is a meet component)
+    assert "suitenumerique.st.meet" in pb
+    assert "become_user: root" in pb  # base task
+    assert "become_user: meet" in pb  # deploy task (egress runs as the meet user)
+    assert "serial: 1" in pb
+    # targets the egress inventory group (egress owns its own hosts file)
+    assert "hosts: egress" in pb
+    # loads the egress unit's vars.yml
+    assert str(paths.vars_path("meet", "prod", "egress").resolve()) in pb
+    # enabled flag injected ONLY on the deploy task — base stays base-only
+    assert "st_meet_egress_enabled: true" in pb
+    assert (
+        "st_meet_egress_enabled" not in (repo / "meet/prod/egress/vars.yml").read_text()
+    )
+
+
 # --------------------------------------------------------------------------- galaxy-requirements overrides
 
 

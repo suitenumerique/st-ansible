@@ -23,11 +23,19 @@
         st_meet_livekit_enabled: true
         st_meet_livekit_rollback_enabled: true
         st_meet_livekit_tag: vx.y.z # check https://hub.docker.com/r/livekit/livekit-server/tags
-        st_meet_livekit_egress_tag: vx.y.z # check https://hub.docker.com/r/livekit/egress/tags
-        st_meet_livekit_valkey_tag: x.y.z # check https://hub.docker.com/r/valkey/valkey/tags
         st_meet_livekit_caddyl4_tag: vx.y.z # check https://hub.docker.com/r/livekit/caddyl4/tags
-        st_meet_livekit_domain: meet.example.com
+        st_meet_livekit_domain: livekit.example.com
         st_meet_livekit_turn_domain: turn.example.com
         st_meet_livekit_api_key: changeme
         st_meet_livekit_api_secret: changeme
+        # egress runs on its own host in this example, so it cannot reach a valkey
+        # co-located with livekit: disable it and share an external redis instead.
+        # See docs/03-meet/03-egress.md.
+        st_meet_livekit_valkey_enabled: false
+        st_meet_livekit_redis_address: redis.example.com:6379
+        st_meet_livekit_redis_username: livekit
+        st_meet_livekit_redis_password: changeme
+        # required for the recording webhook: without it livekit never notifies the
+        # meet backend and recordings are never marked ready.
+        st_meet_public_host: meet.example.com
         st_meet_cadvisor_enabled: true

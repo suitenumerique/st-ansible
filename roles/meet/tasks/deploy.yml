@@ -9,6 +9,11 @@
   when: st_meet_livekit_enabled
   tags: ['meet_livekit']
 
+- name: "Deploy egress."
+  ansible.builtin.import_tasks: deploy/egress.yml
+  when: st_meet_egress_enabled
+  tags: ['meet_egress']
+
 - name: "Create cadvisor application."
   when: st_meet_cadvisor_enabled
   tags: ['meet_cadvisor']

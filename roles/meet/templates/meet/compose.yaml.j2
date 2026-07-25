@@ -3,23 +3,40 @@
 
 name: meet
 services:
-  frontend:
-    container_name: meet-frontend
-    image: "{{ st_meet_frontend_image }}:{{ st_meet_tag }}"
-    user: 1001:127
-    env_file: ./frontend_env
+  caddy:
+    container_name: meet-caddy
+    image: "{{ st_meet_caddy_image }}:{{ st_meet_caddy_tag }}"
+    env_file: ./caddy_env
     volumes:
-      - {{ st_meet_dir }}/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - {{ st_meet_dir }}/Caddyfile:/etc/caddy/Caddyfile:ro
     ports:
-      - "{{ st_meet_port }}:8080"
+      - "{{ st_meet_port }}:50300"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/healthcheck"]
-      interval: 1s
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:50300/__lbheartbeat__"]
+      interval: 10s
       timeout: 5s
       retries: 3
     depends_on:
       backend:
         condition: service_healthy
+      frontend:
+        condition: service_healthy
+
+  frontend:
+    container_name: meet-frontend
+    image: "{{ st_meet_frontend_image }}:{{ st_meet_tag }}"
+    user: 1001:127
+    env_file: ./frontend_env
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+{% if st_meet_frontend_logo_src is defined and st_meet_frontend_logo_src | length > 0 %}
+    # Custom logo staged on the host by the meet role.
+    volumes:
+      - {{ st_meet_dir }}/logo.svg:/usr/share/nginx/html/assets/logo.svg:ro
+{% endif %}
 
   backend:
     container_name: meet-backend
@@ -28,7 +45,7 @@ services:
     env_file: ./backend_env
     healthcheck:
       test: ["CMD", "python", "manage.py", "check"]
-      interval: 15s
-      timeout: 30s
-      retries: 20
+      interval: 30s
+      timeout: 15s
+      retries: 3
       start_period: 10s

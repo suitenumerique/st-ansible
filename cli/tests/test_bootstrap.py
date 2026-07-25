@@ -106,23 +106,42 @@ def test_ask_default_prefills_editable_value_enter_accepts(monkeypatch):
 
 
 def test_bootstrap_component_livekit_deploys_provider_only(repo, monkeypatch):
-    """`bootstrap -c livekit` writes only the livekit provider unit; the core
-    meet/vars.yml is NOT written and no meet unit is registered. The "Deploy
-    livekit now?" select is NOT asked — the user explicitly asked to bootstrap
-    that provider, so the deploy path is taken directly."""
+    """`bootstrap -c livekit` writes the livekit provider unit AND bundles the
+    egress unit into the livekit step (egress hosts co-located on the livekit host →
+    local valkey: ``st_meet_livekit_valkey_enabled=True`` and both redis addresses
+    ``127.0.0.1:6379``); the core meet/vars.yml is NOT written and no meet unit is
+    registered. The "Bootstrap livekit now?" select is NOT asked — the user
+    explicitly asked to bootstrap that provider, so the deploy path is taken directly.
+    Livekit's generated api key/secret are mirrored into egress's own vault (raw under
+    the ``st_meet_livekit_api_key``/``st_meet_livekit_api_secret`` var names, reusing
+    livekit's own names — the role reads them directly from vault.yml). Both livekit
+    and egress register as managed."""
     seed_creds(repo)  # writes .vault-pass (skips the vault prompt)
     sq = script_questionary(
         monkeypatch,
         [
             ("select", "Secret backend:", "ansible-vault"),
             ("text", "livekit host(s)", "10.0.0.1"),
+            # egress hosts (bundled into the livekit step) are now asked right after
+            # the livekit hosts, BEFORE the LiveKit domain/TURN prompts: blank →
+            # co-locate on 10.0.0.1
+            ("text", "egress (leave blank", ""),
             (
                 "text",
                 "LiveKit domain (e.g. livekit.example.org)",
                 "livekit.example.org",
             ),
             ("text", "LiveKit TURN domain (e.g. turn.example.org)", "turn.example.org"),
-            ("confirm", "cadvisor", True),
+            # standalone `bootstrap -c livekit` → answers is empty, so
+            # _ensure_meet_domain prompts DOMAIN for the livekit unit's vars.yml
+            # (single source of truth — the role derives the webhook URL from it).
+            (
+                "text",
+                "Public domain for meet (for the LiveKit recording webhook)",
+                "meet.example.org",
+            ),
+            ("confirm", "livekit", True),  # livekit cadvisor
+            ("confirm", "egress", True),  # egress cadvisor (single co-located → valkey)
         ],
     )
 
@@ -133,12 +152,33 @@ def test_bootstrap_component_livekit_deploys_provider_only(repo, monkeypatch):
     lv = tree.load_vars("meet", "prod", "livekit")
     assert lv["st_meet_livekit_domain"] == "livekit.example.org"
     assert lv["st_meet_livekit_turn_domain"] == "turn.example.org"
+    # the livekit unit's st_meet_public_host is derived from DOMAIN in
+    # apply_component_vars (single source of truth — the role derives the
+    # LiveKit recording webhook URL from it, no CLI-side webhook URL var).
+    assert lv["st_meet_public_host"] == "meet.example.org"
     assert lv["st_meet_cadvisor_enabled"] is True  # cadvisor prompt → real YAML bool
+    # bundled redis topology (single co-located node → local valkey)
+    assert lv["st_meet_livekit_valkey_enabled"] is True
+    assert lv["st_meet_livekit_redis_address"] == "127.0.0.1:6379"
     assert vault.is_encrypted(paths.vault_path("meet", "prod", "livekit"))
     lvault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "livekit"))
     assert "st_meet_livekit_api_key" in lvault
     assert "st_meet_livekit_api_secret" in lvault
     assert "10.0.0.1" in (repo / "meet/prod/livekit/hosts").read_text()
+
+    # egress unit written (bundled) — co-located on the livekit host
+    assert paths.vars_path("meet", "prod", "egress").exists()
+    ev = tree.load_vars("meet", "prod", "egress")
+    assert ev["st_meet_livekit_domain"] == "livekit.example.org"
+    assert ev["st_meet_livekit_redis_address"] == "127.0.0.1:6379"
+    assert ev["st_meet_cadvisor_enabled"] is True
+    # co-located: egress hosts == livekit hosts
+    assert "10.0.0.1" in (repo / "meet/prod/egress/hosts").read_text()
+    # creds mirrored from livekit's vault into egress's vault (EQUAL to livekit's)
+    assert vault.is_encrypted(paths.vault_path("meet", "prod", "egress"))
+    evault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "egress"))
+    assert evault["st_meet_livekit_api_key"] == lvault["st_meet_livekit_api_key"]
+    assert evault["st_meet_livekit_api_secret"] == lvault["st_meet_livekit_api_secret"]
 
     # the "Bootstrap livekit now?" select was NOT asked (assume_deploy)
     assert not any("Bootstrap livekit now?" in msg for msg, _ in sq.select_calls)
@@ -146,8 +186,255 @@ def test_bootstrap_component_livekit_deploys_provider_only(repo, monkeypatch):
     # core NOT written / NOT registered
     assert not paths.vars_path("meet", "prod", "meet").exists()
     m = manifest.load_manifest()
-    assert [u.component for u in m.units] == ["livekit"]
-    assert m.units[0].mode == "managed"
+    by_comp = {u.component: u for u in m.units}
+    assert "livekit" in by_comp and by_comp["livekit"].mode == "managed"
+    assert "egress" in by_comp and by_comp["egress"].mode == "managed"
+    assert "meet" not in by_comp
+
+
+def test_bootstrap_livekit_external_redis(repo, monkeypatch):
+    """`bootstrap meet prod` (full) with livekit and egress on DIFFERENT hosts: the
+    single-co-located-node test fails (`sorted(livekit_hosts) != sorted(egress_hosts)`)
+    so ``st_meet_livekit_valkey_enabled=False`` and the "Redis address shared by
+    livekit and egress (host:port)" prompt fires, followed by the redis username +
+    password prompts. Any non-empty string is accepted VERBATIM with NO host:port
+    validation (per the topology rule), so a clearly non-host:port value
+    (``whatever-redis``) is stored VERBATIM in BOTH the livekit unit's and the
+    egress unit's ``st_meet_livekit_redis_address`` var (egress reuses the same
+    livekit var) — guaranteeing they share one redis. Egress hosts are prompted explicitly
+    (NOT blank) so the co-location short-circuit does not fire. The redis username is
+    adopted verbatim by egress (plaintext); the password is mirrored (encrypted)
+    into egress's own vault alongside the api key/secret."""
+    seed_creds(repo)
+    sq = script_questionary(
+        monkeypatch,
+        [
+            ("select", "Secret backend:", "ansible-vault"),
+            ("text", "meet host(s)", "10.0.0.5"),
+            # _ask_core for meet
+            ("text", "Public domain for meet", "meet.example.org"),
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("text", "DATABASE_URL", "postgres://meet"),
+            ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
+            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
+            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
+            ("text", "AWS_STORAGE_BUCKET_NAME", "meet-media"),
+            ("text", "AWS_S3_REGION_NAME (optional)", ""),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "meet-client-id"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", False),
+            ("confirm", "cadvisor", True),  # meet core cadvisor
+            # deps loop — livekit: deploy
+            ("select", "Bootstrap livekit now?", "Yes — bootstrap now"),
+            ("text", "livekit host(s)", "10.0.0.1"),
+            # egress hosts asked right after livekit hosts, BEFORE LiveKit
+            # domain/TURN; on a DIFFERENT host → co-location does not fire
+            ("text", "egress (leave blank", "10.0.0.2"),
+            (
+                "text",
+                "LiveKit domain (e.g. livekit.example.org)",
+                "livekit.example.org",
+            ),
+            ("text", "LiveKit TURN domain (e.g. turn.example.org)", "turn.example.org"),
+            # NO "Public domain for meet" — _ensure_meet_domain sees DOMAIN set
+            ("confirm", "livekit", True),  # livekit cadvisor
+            # the topology check fails → the "Redis address …" prompt fires (after
+            # the livekit cadvisor confirm), followed by username + password; feed
+            # a non-host:port string to pin the no-validation rule (stored verbatim).
+            ("text", "Redis address shared by livekit and egress", "whatever-redis"),
+            ("text", "Redis username shared by livekit and egress", "redisuser"),
+            ("password", "Redis password shared by livekit and egress", "redispass123"),
+            ("confirm", "egress", True),  # egress cadvisor
+        ],
+    )
+
+    bootstrap.bootstrap("meet", "prod")
+
+    # livekit: valkey DISABLED, the external redis address stored VERBATIM (no
+    # host:port validation — a clearly non-host:port string is accepted as-is);
+    # the redis username is stored in plaintext.
+    lv = tree.load_vars("meet", "prod", "livekit")
+    assert lv["st_meet_livekit_valkey_enabled"] is False
+    assert lv["st_meet_livekit_redis_address"] == "whatever-redis"
+    assert lv["st_meet_livekit_redis_username"] == "redisuser"
+    # egress: adopts the SAME redis address + username (guaranteed to share one
+    # redis with livekit)
+    ev = tree.load_vars("meet", "prod", "egress")
+    assert ev["st_meet_livekit_redis_address"] == "whatever-redis"
+    assert ev["st_meet_livekit_redis_username"] == "redisuser"
+    assert ev["st_meet_livekit_domain"] == "livekit.example.org"
+    # egress NOT co-located: it has its own hosts file with 10.0.0.2
+    assert "10.0.0.2" in (repo / "meet/prod/egress/hosts").read_text()
+    assert "10.0.0.2" not in (repo / "meet/prod/livekit/hosts").read_text()
+
+    # the redis password is mirrored (encrypted) into egress's own vault, equal
+    # to the livekit-side value (livekit vault.yml holds it too).
+    lvault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "livekit"))
+    evault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "egress"))
+    assert lvault["st_meet_livekit_redis_password"] == "redispass123"
+    assert (
+        evault["st_meet_livekit_redis_password"]
+        == lvault["st_meet_livekit_redis_password"]
+    )
+
+    # every scripted answer was consumed — including the "Redis address …"
+    # prompt (the topology prompt fired; no leftover script means no extra prompt
+    # and no missing prompt). Regression guard for both the prompt-fires path
+    # and the no-validation rule (a non-host:port string was accepted as-is).
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+
+    # meet + livekit + egress all registered as managed
+    m = manifest.load_manifest()
+    by_comp = {u.component: u for u in m.units}
+    assert by_comp["meet"].mode == "managed"
+    assert by_comp["livekit"].mode == "managed"
+    assert by_comp["egress"].mode == "managed"
+
+
+def test_bootstrap_component_livekit_external_redis_blank_auth(repo, monkeypatch):
+    """`bootstrap -c livekit` with egress on a DIFFERENT host (so the co-location
+    short-circuit does not fire, exactly like ``test_bootstrap_livekit_external_redis``)
+    but the redis username AND password left BLANK — legal for an unauthenticated
+    external redis (``_ask``/``_password`` are called with ``required=False`` for
+    both). A blank username is dropped entirely: ``if username:`` in
+    ``_bundle_egress`` is a truthiness check, so ``""`` never lands in either the
+    livekit or the egress vars.yml. A blank password is a different story: it is
+    ALWAYS stored via ``backend.var_secret(...)`` (unconditional, no truthiness
+    guard) and then mirrored into egress's own vault by
+    ``_mirror_livekit_creds_to_egress``, whose guard is ``val is None`` — NOT
+    falsiness — precisely so an intentionally-blank password survives the mirror
+    instead of being (mis)treated as "missing". This pins that an empty string is
+    carried through both vaults verbatim rather than silently dropped."""
+    seed_creds(repo)
+    sq = script_questionary(
+        monkeypatch,
+        [
+            ("select", "Secret backend:", "ansible-vault"),
+            ("text", "livekit host(s)", "10.0.0.1"),
+            # egress on a DIFFERENT host — co-location short-circuit does not
+            # fire, so the external-redis address/username/password prompts fire.
+            ("text", "egress (leave blank", "10.0.0.2"),
+            (
+                "text",
+                "LiveKit domain (e.g. livekit.example.org)",
+                "livekit.example.org",
+            ),
+            ("text", "LiveKit TURN domain (e.g. turn.example.org)", "turn.example.org"),
+            (
+                "text",
+                "Public domain for meet (for the LiveKit recording webhook)",
+                "meet.example.org",
+            ),
+            ("confirm", "livekit", True),  # livekit cadvisor
+            # the topology check fails → the "Redis address …" prompt fires
+            # (after the livekit cadvisor confirm), followed by a BLANK username
+            # and a BLANK password — both legal for an unauthenticated redis.
+            (
+                "text",
+                "Redis address shared by livekit and egress",
+                "redis.example.org:6379",
+            ),
+            ("text", "Redis username shared by livekit and egress", ""),
+            ("password", "Redis password shared by livekit and egress", ""),
+            ("confirm", "egress", True),  # egress cadvisor
+        ],
+    )
+
+    bootstrap.bootstrap("meet", "prod", component="livekit")
+
+    # livekit: valkey DISABLED, the external redis address stored; the blank
+    # username omits the var entirely (truthiness check in _bundle_egress).
+    lv = tree.load_vars("meet", "prod", "livekit")
+    assert lv["st_meet_livekit_valkey_enabled"] is False
+    assert lv["st_meet_livekit_redis_address"] == "redis.example.org:6379"
+    assert "st_meet_livekit_redis_username" not in lv
+
+    # egress: same blank-username omission (it reuses the same truthiness check
+    # when building its own vars.yml).
+    ev = tree.load_vars("meet", "prod", "egress")
+    assert "st_meet_livekit_redis_username" not in ev
+
+    # the blank password IS stored (unconditional backend.var_secret call) in
+    # livekit's own vault, and mirrored — still empty, not dropped — into
+    # egress's own vault (the mirror guard is `is None`, not truthiness).
+    lvault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "livekit"))
+    assert lvault["st_meet_livekit_redis_password"] == ""
+    evault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "egress"))
+    assert (
+        evault["st_meet_livekit_redis_password"]
+        == lvault["st_meet_livekit_redis_password"]
+    )
+
+    # every scripted answer was consumed — including both blank prompts.
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+
+
+def test_bootstrap_component_egress_standalone(repo, monkeypatch):
+    """`bootstrap meet prod -c egress` with a livekit unit ALREADY on disk: egress
+    ADOPTS livekit's already-decided domain + redis address (it does NOT re-prompt or
+    re-decide topology — guaranteed to share the same redis the livekit unit was
+    bootstrapped with). Livekit's api key/secret are mirrored from livekit's ON-DISK
+    vault into egress's own vault (equal to livekit's). The "Bootstrap egress now?"
+    select is NOT asked (assume_deploy — the user explicitly asked to bootstrap
+    egress). ONLY egress is registered (livekit was already registered by the seed)."""
+    seed_livekit_provider(repo)  # seeds livekit vars (incl. redis addr) + vault + hosts
+    lk_vars_before = (repo / "meet/prod/livekit/vars.yml").read_text()
+    lk_vault_before = (repo / "meet/prod/livekit/vault.yml").read_bytes()
+
+    sq = script_questionary(
+        monkeypatch,
+        [
+            # setup_backend reuses the persisted ansible-vault choice silently
+            # (the seed registered a livekit unit) — no "Secret backend:" select.
+            ("text", "egress host(s)", "10.0.0.3"),
+            # egress db/db are never prompted — egress has no vars/env_render block
+            # NO "Redis address" prompt (topology is ADOPTED, not re-decided)
+            ("confirm", "cadvisor", True),  # egress cadvisor
+        ],
+    )
+
+    bootstrap.bootstrap("meet", "prod", component="egress")
+
+    # egress unit written, ADOPTING the on-disk livekit unit's domain + redis address
+    assert paths.vars_path("meet", "prod", "egress").exists()
+    ev = tree.load_vars("meet", "prod", "egress")
+    assert ev["st_meet_livekit_domain"] == "livekit.example.org"
+    assert ev["st_meet_livekit_redis_address"] == "livekit-redis.example:6379"
+    assert ev["st_meet_cadvisor_enabled"] is True
+    # egress hosts written (not adopted — the deploy tail writes them from _ask_hosts)
+    assert "10.0.0.3" in (repo / "meet/prod/egress/hosts").read_text()
+
+    # creds mirrored from livekit's ON-DISK vault into egress's own vault
+    lvault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "livekit"))
+    evault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "egress"))
+    assert evault["st_meet_livekit_api_key"] == lvault["st_meet_livekit_api_key"]
+    assert evault["st_meet_livekit_api_secret"] == lvault["st_meet_livekit_api_secret"]
+    assert evault["st_meet_livekit_api_key"] == "real-token"
+    assert evault["st_meet_livekit_api_secret"] == "real-secret"
+    # external redis (valkey disabled) → the redis password is mirrored too
+    assert evault["st_meet_livekit_redis_password"] == "real-redis-pass"
+
+    # the "Bootstrap egress now?" select was NOT asked (assume_deploy)
+    assert not any("Bootstrap egress now?" in msg for msg, _ in sq.select_calls)
+    # no "Redis address …" prompt (topology adopted, not re-decided)
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+
+    # livekit unit/files NOT modified by the standalone egress run
+    assert (repo / "meet/prod/livekit/vars.yml").read_text() == lk_vars_before
+    assert (repo / "meet/prod/livekit/vault.yml").read_bytes() == lk_vault_before
+
+    # manifest: the livekit unit was ALREADY registered by the seed; egress is added.
+    # ONLY egress is registered by THIS bootstrap call (livekit's unit is preserved).
+    m = manifest.load_manifest()
+    by_comp = {u.component: u for u in m.units}
+    assert "egress" in by_comp and by_comp["egress"].mode == "managed"
+    assert "livekit" in by_comp and by_comp["livekit"].mode == "managed"
+    # the core was NOT bootstrapped in a standalone -c egress run
+    assert "meet" not in by_comp
 
 
 def test_bootstrap_component_core_wires_deps_only(repo, monkeypatch):
@@ -204,6 +491,10 @@ def test_bootstrap_component_core_wires_deps_only(repo, monkeypatch):
     assert "CELERY_BROKER_URL={{ vault_redis_url }}" in core_vars
     assert cvault["vault_redis_url"] == "redis://redis:6379/0"
 
+    # recording is always on now (no confirm) → RECORDING_* lines are always
+    # present in the meet backend env
+    assert "RECORDING_ENABLE=True" in core_vars
+
     # livekit unit/files NOT modified
     assert (repo / "meet/prod/livekit/vars.yml").read_text() == livekit_vars_before
     assert (repo / "meet/prod/livekit/vault.yml").read_bytes() == livekit_vault_before
@@ -218,6 +509,229 @@ def test_bootstrap_component_core_wires_deps_only(repo, monkeypatch):
     by_comp = {u.component: u for u in m.units}
     assert "meet" in by_comp and by_comp["meet"].mode == "managed"
     assert "livekit" in by_comp and by_comp["livekit"].mode == "managed"
+
+
+def test_bootstrap_meet_full_reuse_livekit_bundles_egress(repo, monkeypatch):
+    """Full `bootstrap meet prod` (no -c) where livekit ALREADY exists and the
+    operator picks "Reuse existing": the reused livekit keeps egress in the
+    deployment. Egress has no tree yet, so `_reuse_egress` creates it from
+    livekit's on-disk redis topology (external redis: valkey disabled), co-located
+    on the livekit hosts, and meet + livekit + egress all register as managed."""
+    seed_livekit_provider(repo)
+    sq = script_questionary(
+        monkeypatch,
+        [
+            ("text", "meet host(s)", "10.0.0.5"),
+            ("text", "Public domain for meet", "meet.example.org"),
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("text", "DATABASE_URL", "postgres://meet"),
+            ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
+            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
+            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
+            ("text", "AWS_STORAGE_BUCKET_NAME", "meet-media"),
+            ("text", "AWS_S3_REGION_NAME (optional)", ""),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "meet-client-id"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", False),
+            ("confirm", "cadvisor", True),  # meet core cadvisor
+            # deps loop — livekit exists: reuse it (still deployed)
+            ("select", "Bootstrap livekit now?", "Reuse existing in the repo"),
+            ("confirm", "egress", True),  # egress cadvisor (created on reuse)
+        ],
+    )
+
+    bootstrap.bootstrap("meet", "prod")
+
+    # egress unit created on the reuse path, adopting livekit's on-disk topology
+    assert paths.vars_path("meet", "prod", "egress").exists()
+    ev = tree.load_vars("meet", "prod", "egress")
+    assert ev["st_meet_livekit_domain"] == "livekit.example.org"
+    assert ev["st_meet_livekit_redis_address"] == "livekit-redis.example:6379"
+    assert ev["st_meet_cadvisor_enabled"] is True
+    # co-located on the livekit hosts (no egress-hosts prompt on the reuse path)
+    assert "10.0.0.1" in (repo / "meet/prod/egress/hosts").read_text()
+    # livekit's creds mirrored (incl. the external-redis password) into egress vault
+    evault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "egress"))
+    assert evault["st_meet_livekit_api_key"] == "real-token"
+    assert evault["st_meet_livekit_api_secret"] == "real-secret"
+    assert evault["st_meet_livekit_redis_password"] == "real-redis-pass"
+    # no unconsumed scripts (reuse path prompts nothing beyond egress cadvisor)
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+
+    # meet + livekit + egress all registered as managed
+    m = manifest.load_manifest()
+    by_comp = {u.component: u for u in m.units}
+    assert by_comp["meet"].mode == "managed"
+    assert by_comp["livekit"].mode == "managed"
+    assert by_comp["egress"].mode == "managed"
+
+
+def test_bootstrap_meet_full_deploys_livekit_with_public_host(repo, monkeypatch):
+    """Full `bootstrap meet prod` (no -c): `_ask_core` collects DOMAIN BEFORE the
+    deps loop, so the livekit dep's deploy path runs `_ensure_meet_domain`, sees
+    answers["DOMAIN"] already set, and does NOT re-prompt — ScriptedQuestionary
+    would error on any unscripted "Public domain for meet" prompt. The livekit
+    dep's deploy path BUNDLES egress (egress hosts co-located on the livekit host →
+    local valkey: ``st_meet_livekit_valkey_enabled=True`` and both redis addresses
+    ``127.0.0.1:6379``); livekit's generated api creds are mirrored into egress's
+    own vault. Only the livekit vars.yml (and the meet core env blob) carry
+    `st_meet_public_host == "meet.example.org"` (single source of truth — the role
+    derives every public-facing URL, incl. the LiveKit recording webhook, from it) —
+    egress has no `vars` block of its own, so its vars.yml carries no such key. The
+    core backend env blob carries the verbatim ``{{ st_meet_public_host }}`` ref for
+    DJANGO_ALLOWED_HOSTS / LOGIN_REDIRECT_URL, recording is always on (RECORDING_*
+    env is always emitted, never prompted), and meet + livekit + egress all
+    register as managed."""
+    seed_creds(repo)
+    sq = script_questionary(
+        monkeypatch,
+        [
+            ("select", "Secret backend:", "ansible-vault"),
+            ("text", "meet host(s)", "10.0.0.5"),
+            # _ask_core for meet
+            ("text", "Public domain for meet", "meet.example.org"),
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("text", "DATABASE_URL", "postgres://meet"),
+            ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
+            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
+            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
+            ("text", "AWS_STORAGE_BUCKET_NAME", "meet-media"),
+            ("text", "AWS_S3_REGION_NAME (optional)", ""),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "meet-client-id"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", False),
+            ("confirm", "cadvisor", True),  # meet core cadvisor
+            # deps loop — livekit (no existing tree): take the deploy path
+            ("select", "Bootstrap livekit now?", "Yes — bootstrap now"),
+            ("text", "livekit host(s)", "10.0.0.1"),
+            # egress hosts (bundled into the livekit step) asked right after the
+            # livekit hosts, BEFORE LiveKit domain/TURN: blank → co-locate
+            ("text", "egress (leave blank", ""),
+            (
+                "text",
+                "LiveKit domain (e.g. livekit.example.org)",
+                "livekit.example.org",
+            ),
+            ("text", "LiveKit TURN domain (e.g. turn.example.org)", "turn.example.org"),
+            # NO "Public domain for meet" — _ensure_meet_domain sees DOMAIN set
+            ("confirm", "livekit", True),  # livekit cadvisor
+            ("confirm", "egress", True),  # egress cadvisor (single co-located → valkey)
+        ],
+    )
+
+    bootstrap.bootstrap("meet", "prod")
+
+    # livekit vars.yml: st_meet_public_host derived from DOMAIN (no extra prompt)
+    lv = tree.load_vars("meet", "prod", "livekit")
+    assert lv["st_meet_livekit_domain"] == "livekit.example.org"
+    assert lv["st_meet_livekit_turn_domain"] == "turn.example.org"
+    assert lv["st_meet_public_host"] == "meet.example.org"
+    assert lv["st_meet_cadvisor_enabled"] is True
+    # bundled redis topology (single co-located node → local valkey)
+    assert lv["st_meet_livekit_valkey_enabled"] is True
+    assert lv["st_meet_livekit_redis_address"] == "127.0.0.1:6379"
+
+    # egress vars.yml + vault.yml written (bundled into the livekit step): egress
+    # adopts the livekit ws domain + the local valkey address (single co-located
+    # node); livekit's generated api creds are mirrored into egress's own vault.
+    assert paths.vars_path("meet", "prod", "egress").exists()
+    ev = tree.load_vars("meet", "prod", "egress")
+    assert ev["st_meet_livekit_domain"] == "livekit.example.org"
+    assert ev["st_meet_livekit_redis_address"] == "127.0.0.1:6379"
+    assert ev["st_meet_cadvisor_enabled"] is True
+    lvault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "livekit"))
+    evault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "egress"))
+    assert evault["st_meet_livekit_api_key"] == lvault["st_meet_livekit_api_key"]
+    assert evault["st_meet_livekit_api_secret"] == lvault["st_meet_livekit_api_secret"]
+
+    # meet core: single source of truth (st_meet_public_host — written into the
+    # core vars.yml from DOMAIN) + LIVEKIT_* refs pulled from the livekit secrets;
+    # recording is unconditionally enabled (no prompt — see _set_meet_recording).
+    # The env blob carries the verbatim {{ st_meet_public_host }} ref (the {{ }}
+    # travels through the answer value; ANSIBLE resolves it at deploy).
+    core_data = tree.load_vars("meet", "prod", "meet")
+    assert core_data["st_meet_public_host"] == "meet.example.org"
+    core_vars = (repo / "meet/prod/meet/vars.yml").read_text()
+    assert "LIVEKIT_API_KEY={{ vault_livekit_api_key }}" in core_vars
+    assert "LIVEKIT_API_URL=wss://livekit.example.org" in core_vars
+    assert "DJANGO_ALLOWED_HOSTS={{ st_meet_public_host }}" in core_vars
+    assert "LOGIN_REDIRECT_URL=https://{{ st_meet_public_host }}/" in core_vars
+    assert "RECORDING_ENABLE=True" in core_vars
+
+    # the _ensure_meet_domain prompt did NOT fire (DOMAIN already set by _ask_core)
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+
+    # meet + livekit + egress all registered as managed
+    m = manifest.load_manifest()
+    by_comp = {u.component: u for u in m.units}
+    assert by_comp["meet"].mode == "managed"
+    assert by_comp["livekit"].mode == "managed"
+    assert by_comp["egress"].mode == "managed"
+
+
+def test_ask_core_meet_always_sets_recording_env(monkeypatch):
+    """`_ask_core` for meet no longer asks anything about recording — it is always
+    on. This test's script contains NOTHING recording-related (no confirm, no
+    RECORDING_OUTPUT_FOLDER text prompt): if a recording prompt is ever
+    reintroduced, ``ScriptedQuestionary`` raises AssertionError on the unexpected
+    prompt and this test fails. That makes it the regression test for the whole
+    "remove both recording prompts" change.
+
+    The answers still carry RECORDING_ENABLE=True, RECORDING_OUTPUT_FOLDER=
+    recordings (now hardcoded, not asked) and RECORDING_DOWNLOAD_BASE_URL pointing
+    at the st_meet_public_host ansible var (single source of truth — same var
+    DJANGO_ALLOWED_HOSTS / the redirects reference; the {{ }} travels verbatim
+    through the answer into the env blob). The rendered meet backend env contains
+    the full RECORDING_* block — incl. RECORDING_STORAGE_EVENT_ENABLE=False
+    (pinning the LiveKit webhook completion path). S3 is reused from the existing
+    _ask_core prompts."""
+    script_questionary(
+        monkeypatch,
+        [
+            ("text", "Public domain for meet", "meet.example.org"),
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("text", "DATABASE_URL", "postgres://meet"),
+            ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
+            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
+            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
+            ("text", "AWS_STORAGE_BUCKET_NAME", "meet-media"),
+            ("text", "AWS_S3_REGION_NAME (optional)", ""),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "meet-client-id"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", False),
+        ],
+    )
+    meta = appmeta.load_app("meet")
+    answers = bootstrap._ask_core(meta, AnsibleVaultBackend())
+
+    assert answers["RECORDING_ENABLE"] == "True"
+    assert answers["RECORDING_OUTPUT_FOLDER"] == "recordings"
+    # the download base URL references the st_meet_public_host ansible var so the
+    # operator changes the domain in ONE place ({{ }} lands verbatim in the env blob).
+    assert (
+        answers["RECORDING_DOWNLOAD_BASE_URL"]
+        == "https://{{ st_meet_public_host }}/recording"
+    )
+    body = envrender.render_env("meet", "meet", answers)["st_meet_backend_env"]
+    assert "RECORDING_ENABLE=True" in body
+    assert "RECORDING_STORAGE_EVENT_ENABLE=False" in body
+    assert "RECORDING_OUTPUT_FOLDER=recordings" in body
+    assert (
+        "RECORDING_DOWNLOAD_BASE_URL=https://{{ st_meet_public_host }}/recording"
+        in body
+    )
 
 
 def test_bootstrap_keycloak_writes_env_blob_and_vault(repo, monkeypatch):
@@ -979,13 +1493,25 @@ def test_bootstrap_intro_guidance_for_core_not_provider(repo, monkeypatch, capfd
         [
             ("select", "Secret backend:", "ansible-vault"),
             ("text", "livekit host(s)", "10.0.0.1"),
+            # egress hosts (bundled into the livekit step) asked right after the
+            # livekit hosts, BEFORE LiveKit domain/TURN: blank → co-locate
+            ("text", "egress (leave blank", ""),
             (
                 "text",
                 "LiveKit domain (e.g. livekit.example.org)",
                 "livekit.example.org",
             ),
             ("text", "LiveKit TURN domain (e.g. turn.example.org)", "turn.example.org"),
-            ("confirm", "cadvisor", True),
+            # standalone -c livekit → _ensure_meet_domain prompts DOMAIN for the
+            # livekit unit's st_meet_public_host (no _ask_core here, so DOMAIN
+            # isn't set yet).
+            (
+                "text",
+                "Public domain for meet (for the LiveKit recording webhook)",
+                "meet.example.org",
+            ),
+            ("confirm", "livekit", True),  # livekit cadvisor
+            ("confirm", "egress", True),  # egress cadvisor (single co-located → valkey)
         ],
     )
     bootstrap.bootstrap("meet", "prod", component="livekit")
@@ -1027,11 +1553,18 @@ def test_confirm_ready_gate_aborts_on_decline_or_interrupt(monkeypatch):
 
 
 def test_ask_core_sets_login_redirect_url_failure_for_non_drive(monkeypatch):
-    """`_ask_core` sets LOGIN_REDIRECT_URL_FAILURE for a non-drive app (meet) so
-    the OIDC login "failure" redirect resolves to https://<domain>/ instead of
-    the literal string None (browser → /api/v1.0/callback/None → 404). The drive
-    branch reassigns it to the st_drive_public_host form afterwards, so drive is
-    unaffected; this test covers the meet path (no drive override)."""
+    """`_ask_core` sets LOGIN_REDIRECT_URL_FAILURE so the OIDC login "failure"
+    redirect resolves to https://<domain>/ instead of the literal string None
+    (browser → /api/v1.0/callback/None → 404). meet now HAS an override, like
+    drive: the meet branch reassigns LOGIN_REDIRECT_URL(_FAILURE) (and the
+    DJANGO_ALLOWED_HOSTS / CORS / logout redirect) to the st_meet_public_host
+    ansible var — single source of truth, mirroring drive's st_drive_public_host
+    override. The answer VALUE is the literal `https://{{ st_meet_public_host }}/`
+    string; the env template emits it via answers.SOMEKEY so the {{ }} lands
+    verbatim in the env blob and ANSIBLE resolves it at deploy. This test covers
+    the meet override path; drive is unaffected (its own override uses
+    st_drive_public_host), and messages (the actual no-override non-drive case)
+    is covered by its own _ask_core tests."""
     script_questionary(
         monkeypatch,
         [
@@ -1055,11 +1588,19 @@ def test_ask_core_sets_login_redirect_url_failure_for_non_drive(monkeypatch):
     meta = appmeta.load_app("meet")
     answers = bootstrap._ask_core(meta, AnsibleVaultBackend())
 
-    # the core answers dict now carries the failure redirect for non-drive apps
-    assert answers["LOGIN_REDIRECT_URL"] == "https://meet.example.org/"
-    assert answers["LOGIN_REDIRECT_URL_FAILURE"] == "https://meet.example.org/"
+    # meet reassigns the redirect URLs to the st_meet_public_host ansible var
+    # (single source of truth); the {{ }} travels verbatim through the answer so
+    # ANSIBLE resolves it at deploy from the core vars.yml (which lands the literal
+    # DOMAIN). DJANGO_ALLOWED_HOSTS + CSRF/CORS origins get the same treatment.
+    assert answers["LOGIN_REDIRECT_URL"] == "https://{{ st_meet_public_host }}/"
+    assert answers["LOGIN_REDIRECT_URL_FAILURE"] == "https://{{ st_meet_public_host }}/"
+    assert answers["DJANGO_ALLOWED_HOSTS"] == "{{ st_meet_public_host }}"
 
-    # the rendered meet backend env blob emits it (base.django.env.j2 guard passes)
+    # the rendered meet backend env blob emits the verbatim var-ref (the env
+    # template prints answers.SOMEKEY, so the {{ }} is not re-evaluated by jinja2)
     body = envrender.render_env("meet", "meet", answers)["st_meet_backend_env"]
-    assert "LOGIN_REDIRECT_URL=https://meet.example.org/" in body
-    assert "LOGIN_REDIRECT_URL_FAILURE=https://meet.example.org/" in body
+    assert "LOGIN_REDIRECT_URL=https://{{ st_meet_public_host }}/" in body
+    assert "LOGIN_REDIRECT_URL_FAILURE=https://{{ st_meet_public_host }}/" in body
+    # recording is always on now (no confirm) → RECORDING_* lines are always
+    # present in the rendered env
+    assert "RECORDING_ENABLE=True" in body

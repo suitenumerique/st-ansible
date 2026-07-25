@@ -17,6 +17,10 @@ separate systemd user unit. All sub-apps are disabled by default and must be exp
 |---------|-------------|-----|
 | **meet** | Core web application (frontend + backend) | This page |
 | **livekit** | LiveKit server for video/audio | [02-livekit.md](02-livekit.md) |
+| **egress** | LiveKit egress recorder (meeting recordings) | [03-egress.md](03-egress.md) |
+
+Meeting recording requires the **egress** sub-app plus the `RECORDING_*` backend environment
+variables — see [03-egress.md](03-egress.md) for the full setup.
 
 ## Container Stack
 
@@ -82,6 +86,22 @@ You can either:
 
 - Set `st_meet_backend_env` / `st_meet_frontend_env` to provide env content inline
 - Set `st_meet_backend_env_template` / `st_meet_frontend_env_template` to use a custom template
+
+## Custom Logo
+
+You can override the meet frontend logo without rebuilding the image. Set
+`st_meet_frontend_logo_src` to the local path of a logo file (e.g. an SVG) on the Ansible
+controller. When set, the file is copied to the host and mounted read-only over
+`/usr/share/nginx/html/assets/logo.svg` in the frontend container.
+
+```yaml
+# with st-cli put my-logo.svg in
+#   /repo/meet/prod/meet/my-logo.svg
+st_meet_frontend_logo_src: "{{ inventory_dir }}/my-logo.svg"
+```
+
+For further custom theming, see the
+[meet theming documentation](https://github.com/suitenumerique/meet/blob/main/docs/theming.md).
 
 ## Troubleshooting
 

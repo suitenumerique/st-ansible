@@ -20,6 +20,22 @@ def test_drive_public_host_from_domain():
     assert data["st_drive_public_host"] == "drive.example.org"
 
 
+def test_meet_public_host_from_domain():
+    """Mirrors test_drive_public_host_from_domain: the meet core exposes
+    st_meet_public_host (=="{DOMAIN}") as the single source of truth for the
+    public meet domain, so every public-facing env var references it verbatim
+    (the role derives DJANGO_ALLOWED_HOSTS, redirects, the LiveKit recording
+    webhook URL and the recordings download base from it). apply_component_vars
+    renders {DOMAIN} → the literal DOMAIN answer (written into the core vars.yml),
+    and the livekit component reuses the SAME var (see
+    test_meet_and_livekit_component_vars_carry_public_host)."""
+    meta = appmeta.load_app("meet")
+    assert meta.component_vars("meet")["st_meet_public_host"] == "{DOMAIN}"
+    data = CommentedMap()
+    writer.apply_component_vars(data, meta, meta.core(), {"DOMAIN": "meet.example.org"})
+    assert data["st_meet_public_host"] == "meet.example.org"
+
+
 def test_drive_s3_component_vars_from_answers():
     meta = appmeta.load_app("drive")
     cvars = meta.component_vars("drive")

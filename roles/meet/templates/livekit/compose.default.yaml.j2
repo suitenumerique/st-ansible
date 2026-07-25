@@ -15,28 +15,18 @@ services:
     image: "{{ st_meet_livekit_image }}:{{ st_meet_livekit_tag }}"
     command: --config /etc/livekit.yaml
     network_mode: "host"
+{% if st_meet_livekit_valkey_enabled %}
     depends_on:
       valkey:
         condition: service_healthy
+{% endif %}
     volumes:
       - {{ st_meet_livekit_dir }}/livekit.yaml:/etc/livekit.yaml
     healthcheck:
       test: wget -q --spider http://localhost:7880
       interval: 10s
       timeout: 3s
-  egress:
-    container_name: egress
-    image: "{{ st_meet_livekit_egress_image }}:{{ st_meet_livekit_egress_tag }}"
-    environment:
-      - EGRESS_CONFIG_FILE=/etc/egress.yaml
-    network_mode: "host"
-    depends_on:
-      valkey:
-        condition: service_healthy
-    volumes:
-      - {{ st_meet_livekit_dir }}/egress.yaml:/etc/egress.yaml
-    cap_add:
-      - CAP_SYS_ADMIN
+{% if st_meet_livekit_valkey_enabled %}
   valkey:
     container_name: valkey
     image: "{{ st_meet_livekit_valkey_image }}:{{ st_meet_livekit_valkey_tag }}"
@@ -49,3 +39,4 @@ services:
       interval: 10s
       timeout: 3s
       start_period: 10s
+{% endif %}

@@ -1,0 +1,89 @@
+{{ ansible_managed | comment }}
+{
+	admin off
+	auto_https off
+	log {
+		output stdout
+		format json
+	}
+	servers {
+		# Trust the front load balancer (private network) so the real client IP
+		# from its X-Forwarded-For is preserved and forwarded to frontend + backend.
+		trusted_proxies static private_ranges
+	}
+}
+
+:50300 {
+	# Access logs to stdout as JSON.
+	log {
+		output stdout
+		format json
+	}
+
+	# Strip proxy/upstream identity headers from every response.
+	header {
+		-Server
+		-Via
+	}
+
+	# Health endpoint for the front LB (preserves the old nginx /__lbheartbeat__).
+	handle /__lbheartbeat__ {
+		respond "ok" 200
+	}
+
+	# Object storage — file-share media (mirrors ingress_media_files.yaml).
+	# More specific than /media/* so Caddy's path-specificity ordering picks it first.
+	handle /media/files/* {
+		route {
+			forward_auth meet-backend:8000 {
+				uri /api/v1.0/files/media-auth/
+				copy_headers Authorization X-Amz-Date X-Amz-Content-Sha256
+				header_up X-Original-URL {http.request.uri}
+				# Backend has SECURE_SSL_REDIRECT: without this the auth subrequest
+				# is 301'd to https, the browser follows it to media-auth (no
+				# X-Original-URL) and 403s.
+				header_up X-Forwarded-Proto https
+			}
+			uri replace /media/ /{$CADDY_S3_BUCKET}/ 1
+			header Content-Security-Policy "default-src 'none'"
+			header Content-Disposition attachment
+			reverse_proxy {$CADDY_S3_PROTOCOL}://{$CADDY_S3_HOST} {
+				header_up Host {$CADDY_S3_HOST}
+			}
+		}
+	}
+
+	# Object storage — recordings media (mirrors ingress_media.yaml). CSP only; the object's
+	# own single Content-Disposition passes through (frontend download attribute forces save).
+	handle /media/* {
+		route {
+			forward_auth meet-backend:8000 {
+				uri /api/v1.0/recordings/media-auth/
+				copy_headers Authorization X-Amz-Date X-Amz-Content-Sha256
+				header_up X-Original-URL {http.request.uri}
+				# Backend has SECURE_SSL_REDIRECT: without this the auth subrequest
+				# is 301'd to https, the browser follows it to media-auth (no
+				# X-Original-URL) and 403s.
+				header_up X-Forwarded-Proto https
+			}
+			uri replace /media/ /{$CADDY_S3_BUCKET}/ 1
+			header Content-Security-Policy "default-src 'none'"
+			reverse_proxy {$CADDY_S3_PROTOCOL}://{$CADDY_S3_HOST} {
+				header_up Host {$CADDY_S3_HOST}
+			}
+		}
+	}
+
+	# Backend (mirrors ingress.yaml /api + /external-api, ingress_admin.yaml, ingress_webhook.yaml).
+	@backend path /api/* /external-api/* /admin /admin/* /static/*
+	handle @backend {
+		reverse_proxy meet-backend:8000 {
+			header_up X-Forwarded-Proto https
+		}
+	}
+
+	# Frontend SPA (mirrors ingress.yaml / — stock image serves index.html + fallback).
+	handle {
+		reverse_proxy meet-frontend:8080
+	}
+}

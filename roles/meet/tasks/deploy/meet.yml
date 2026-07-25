@@ -14,9 +14,15 @@
         dest: "backend_env"
       - src: "{{ st_meet_frontend_env_template }}"
         dest: "frontend_env"
-      - src: "meet/nginx.conf.j2"
-        dest: "nginx.conf"
+      - src: "{{ st_meet_caddy_env_template }}"
+        dest: "caddy_env"
+      - src: "meet/Caddyfile.j2"
+        dest: "Caddyfile"
+      - src: "{{ st_meet_frontend_logo_src }}"
+        dest: "logo.svg"
+        template: false
         container_uid: 1001
+        when: "{{ st_meet_frontend_logo_src | length > 0 }}"
 
 - name: "Play meet migrations."
   become: true

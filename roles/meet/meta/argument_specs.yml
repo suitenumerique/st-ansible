@@ -15,6 +15,9 @@ argument_specs:
         type: "list"
         elements: "dict"
         description: "Optional private container registries to login the `meet` user onto."
+      st_meet_public_host:
+        type: "str"
+        description: "The public hostname used to access the meet application."
       st_meet_enabled:
         type: "bool"
         description: "Triggers the installation of meet."
@@ -39,7 +42,7 @@ argument_specs:
         type: "str"
         description: "Tag of the meet docker image to deploy."
         # renovate: datasource=github-releases depName=suitenumerique/meet versioning=semver
-        default: "v1.21.0"
+        default: "v1.23.0"
       st_meet_backend_env_template:
         type: "str"
         description: "Local path to the custom template to use for meet env file."
@@ -60,10 +63,33 @@ argument_specs:
         type: "str"
         description: "Content of the default frontend_env_template, not used if st_meet_frontend_env_template is defined."
         default: ""
+      st_meet_frontend_logo_src:
+        type: "str"
+        description: "Local path to a custom logo file (e.g. svg) to mount over the meet frontend logo. No validation is performed. Empty means use the image default."
+        default: ""
+      st_meet_caddy_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for meet caddy env file."
+        default: "meet/caddy_env.j2"
+      st_meet_caddy_env:
+        type: "str"
+        description: "Content of the default caddy_env_template, not used if st_meet_caddy_env_template is defined."
+        default: ""
       st_meet_compose_template:
         type: "str"
         description: "Local path to the custom template to use for meet compose file."
         default: "meet/compose.yaml.j2"
+      st_meet_caddy_image:
+        type: "str"
+        description: "Image repository for the meet caddy reverse-proxy."
+        default: "docker.io/caddy"
+      st_meet_caddy_tag:
+        type: "str"
+        description:
+          - "The tag of the caddy docker image to use."
+          - "See https://hub.docker.com/_/caddy/tags."
+        # renovate: datasource=docker depName=docker.io/caddy
+        default: "2.11.4-alpine"
       st_meet_rollback_enabled:
         type: "bool"
         description: "Whether or not to trigger the rollback tasks if the meet deployment fails."
@@ -76,10 +102,6 @@ argument_specs:
         type: "str"
         description: "Image repository for the livekit server."
         default: "docker.io/livekit/livekit-server"
-      st_meet_livekit_egress_image:
-        type: "str"
-        description: "Image repository for livekit egress."
-        default: "docker.io/livekit/egress"
       st_meet_livekit_valkey_image:
         type: "str"
         description: "Image repository for the livekit valkey."
@@ -88,12 +110,7 @@ argument_specs:
         type: "str"
         description: "Tag of the livekit docker image to deploy."
         # renovate: datasource=docker depName=docker.io/livekit/livekit-server
-        default: "v1.13.2"
-      st_meet_livekit_egress_tag:
-        type: "str"
-        description: "Tag of the livekit egress docker image to deploy."
-        # renovate: datasource=docker depName=docker.io/livekit/egress
-        default: "v1.13.0"
+        default: "v1.13.4"
       st_meet_livekit_caddyl4_tag:
         type: "str"
         description: "Tag of the livekit caddyl4 docker image to deploy."
@@ -104,6 +121,22 @@ argument_specs:
         description: "Tag of the valkey docker image to deploy for livekit when using the full compose template."
         # renovate: datasource=docker depName=docker.io/valkey/valkey
         default: "9.0.4"
+      st_meet_livekit_valkey_enabled:
+        type: "bool"
+        description: "Deploy a local valkey in the livekit compose (single-node co-located egress). Set false when using an external shared redis."
+        default: true
+      st_meet_livekit_redis_address:
+        type: "str"
+        description: "Redis/valkey address (host:port) the livekit server connects to. Defaults to the local valkey; set to a shared external redis when egress runs on a different node."
+        default: "127.0.0.1:6379"
+      st_meet_livekit_redis_username:
+        type: "str"
+        description: "Username for the external shared redis used by livekit and egress. Not used by the co-located local valkey, which has no auth."
+        default: ""
+      st_meet_livekit_redis_password:
+        type: "str"
+        description: "Password for the external shared redis used by livekit and egress, provided via vault. Not used by the co-located local valkey, which has no auth."
+        default: ""
       st_meet_livekit_enabled:
         type: "bool"
         description: "Triggers the installation of livekit."
@@ -137,13 +170,12 @@ argument_specs:
         elements: "dict"
         description: >
           List of files to deploy for the livekit application.
-          By default deploys livekit.yaml, caddy.yaml and redis.conf from the default templates.
+          By default deploys livekit.yaml, caddy.yaml and valkey_config/valkey.conf from the default templates.
           Override this entirely to deploy a custom livekit configuration.
         default:
           - { src: "livekit/livekit.default.yaml.j2", dest: "livekit.yaml" }
           - { src: "livekit/caddy.default.yaml.j2", dest: "caddy.yaml" }
-          - { src: "livekit/valkey.default.conf.j2", dest: "valkey_config/valkey.conf" }
-          - { src: "livekit/egress.default.yaml.j2", dest: "egress.yaml" }
+          - { src: "livekit/valkey.default.conf.j2", dest: "valkey_config/valkey.conf", when: "{{ st_meet_livekit_valkey_enabled }}" }
       st_meet_livekit_directories:
         type: "list"
         elements: "dict"
@@ -153,8 +185,50 @@ argument_specs:
           Override this entirely for custom setups.
         default:
           - { name: "caddy_data" }
-          - { name: "valkey_data", container_uid: "999" }
-          - { name: "valkey_config" }
+          - { name: "valkey_data", container_uid: "999", when: "{{ st_meet_livekit_valkey_enabled }}" }
+          - { name: "valkey_config", when: "{{ st_meet_livekit_valkey_enabled }}" }
+      st_meet_egress_image:
+        type: "str"
+        description: "Image repository for livekit egress."
+        default: "docker.io/livekit/egress"
+      st_meet_egress_tag:
+        type: "str"
+        description: "Tag of the livekit egress docker image to deploy."
+        # renovate: datasource=docker depName=docker.io/livekit/egress
+        default: "v1.13.0"
+      st_meet_egress_cpus:
+        type: "str"
+        description: "Optional CPU limit for the livekit egress container (podman-compose `cpus`, e.g. '2' or '1.5'). Recommended on single-node setups so starting a recording (CPU-heavy transcoding) cannot starve the livekit server. Empty means no limit."
+        default: ""
+      st_meet_egress_memory:
+        type: "str"
+        description: "Optional memory limit for the livekit egress container (podman-compose `mem_limit`, e.g. '2g'). Recommended on single-node setups so a recording cannot OOM the node and take down the livekit server. Empty means no limit."
+        default: ""
+      st_meet_egress_enabled:
+        type: "bool"
+        description: "Triggers the installation of the livekit egress recorder as a separate component."
+        default: false
+      st_meet_egress_dir:
+        type: "str"
+        description: "Remote path to the base directory for the egress app."
+        default: "/opt/meet/egress"
+      st_meet_egress_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for the egress compose file."
+        default: "egress/compose.yaml.j2"
+      st_meet_egress_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the egress deployment fails."
+        default: false
+      st_meet_egress_files:
+        type: "list"
+        elements: "dict"
+        description: >
+          List of files to deploy for the egress application.
+          By default deploys egress.yaml from the default template.
+          Override this entirely to deploy a custom egress configuration.
+        default:
+          - { src: "egress/egress.yaml.j2", dest: "egress.yaml" }
       st_meet_cadvisor_image:
         type: "str"
         description: "Image repository for the cadvisor container."

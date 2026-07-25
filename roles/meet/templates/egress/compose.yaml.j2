@@ -1,0 +1,20 @@
+---
+{{ ansible_managed | comment }}
+name: meet_egress
+services:
+  egress:
+    container_name: egress
+    image: "{{ st_meet_egress_image }}:{{ st_meet_egress_tag }}"
+    environment:
+      - EGRESS_CONFIG_FILE=/etc/egress.yaml
+    network_mode: "host"
+{% if st_meet_egress_cpus %}
+    cpus: {{ st_meet_egress_cpus }}
+{% endif %}
+{% if st_meet_egress_memory %}
+    mem_limit: "{{ st_meet_egress_memory }}"
+{% endif %}
+    volumes:
+      - {{ st_meet_egress_dir }}/egress.yaml:/etc/egress.yaml
+    cap_add:
+      - CAP_SYS_ADMIN

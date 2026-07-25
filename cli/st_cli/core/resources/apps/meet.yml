@@ -12,6 +12,11 @@ components:
     deploy_order: 20
     is_core: true
     vars:
+      # single source of truth for the public meet domain: every public-facing env
+      # var (DJANGO_ALLOWED_HOSTS, LOGIN_REDIRECT_URL(_FAILURE), LOGOUT_REDIRECT_URL,
+      # RECORDING_DOWNLOAD_BASE_URL, …) references this verbatim so an operator
+      # changes the domain in ONE place. Mirrors drive's st_drive_public_host.
+      st_meet_public_host: "{DOMAIN}"
       # Run DB migrations only once across a multi-host deploy. Plays are serial:1,
       # so the role's run_once migrations task fires on every host — gate it to the
       # first play host. Braces are quadrupled so str.format emits literal {{ }}.
@@ -21,6 +26,10 @@ components:
         blob_var: st_meet_backend_env
         templates:
           - meet.backend.env.j2
+      caddy:
+        blob_var: st_meet_caddy_env
+        templates:
+          - meet.caddy.env.j2
   - key: livekit
     role: suitenumerique.st.meet
     user: meet
@@ -28,6 +37,19 @@ components:
     dir_var: st_meet_livekit_dir
     enabled_var: st_meet_livekit_enabled
     deploy_order: 10
+    is_core: false
+    vars:
+      # the livekit unit reuses the same single source of truth as the meet core
+      # (the role derives the LiveKit recording webhook URL from it). Mirrors
+      # drive's collabora component sharing st_drive_public_host.
+      st_meet_public_host: "{DOMAIN}"
+  - key: egress
+    role: suitenumerique.st.meet
+    user: meet
+    app_name: egress
+    dir_var: st_meet_egress_dir
+    enabled_var: st_meet_egress_enabled
+    deploy_order: 15
     is_core: false
   - key: workers
     role: suitenumerique.st.meet
@@ -55,3 +77,6 @@ dependencies:
         label: "LiveKit domain (e.g. livekit.example.org)"
       - var: st_meet_livekit_turn_domain
         label: "LiveKit TURN domain (e.g. turn.example.org)"
+  - of: meet
+    on: egress
+    shared: []

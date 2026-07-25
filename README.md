@@ -23,7 +23,7 @@ You can find the documentation of the collection under the [docs/](docs/) direct
 - **[00-getting-started/](docs/00-getting-started/)** st-cli, ansible-galaxy install, architecture, podman base role
 - **[01-drive/](docs/01-drive/)** drive app, workers, collabora
 - **[02-keycloak/](docs/02-keycloak/)** keycloak identity provider
-- **[03-meet/](docs/03-meet/)** meet app, livekit
+- **[03-meet/](docs/03-meet/)** meet app, livekit, egress (recording)
 - **[04-messages/](docs/04-messages/)** messages app, workers, mta-in, socks-proxy, mpa
 - **[monitoring.md](docs/monitoring.md)** cAdvisor + Grafana Alloy
 - **[backup.md](docs/backup.md)** Restic backup

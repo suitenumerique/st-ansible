@@ -31,7 +31,9 @@ for outbound SMTP. LiveKit also has its own public IP for WebRTC traffic.
      │
      ├─── socks-proxy (1+2, public IPs)
      │
-     └─── livekit (1, public IP)
+     ├─── livekit (1, public IP)
+     │
+     └─── egress (1, recording)
 ```
 
 ## External Services
@@ -49,11 +51,13 @@ for outbound SMTP. LiveKit also has its own public IP for WebRTC traffic.
 | collabora | | | | |
 | meet | x | x | | x |
 | livekit | | x | | |
+| egress | | x | | |
 
 > [!NOTE]
-> In this example LiveKit is deployed as a single host with its own valkey (redis-compatible) as part of the
-> compose stack and no external Redis is needed. However if you want high availability for livekit too, you should
-> take a look at the [meet/multi-host](../meet/multi-host) example.
+> LiveKit ships with a co-located valkey (redis-compatible) in its compose stack, and when egress runs on the
+> same single host that is all you need — no external Redis. This example puts egress on its own host, so the
+> co-located valkey is unreachable: `playbook_livekit.yml` sets `st_meet_livekit_valkey_enabled: false` and both
+> playbooks point at the same external Redis. See [03-egress.md](../../03-meet/03-egress.md) for both topologies.
 
 ## Rolling Updates
 
@@ -83,6 +87,7 @@ first host stays on the new version and the second can be debugged manually.
 | playbook_collabora.yml | collabora | 1 | - | drive (collabora) |
 | playbook_meet.yml | meet | 2 | 1 | meet |
 | playbook_livekit.yml | livekit | 1 | - | meet (livekit) |
+| playbook_egress.yml | egress | 1 | - | meet (egress) |
 
 ## Running
 

@@ -42,6 +42,11 @@ def test_dependency_graph():
     assert {"mta-in", "mpa", "socks-proxy"} <= {
         c.key for c in appmeta.load_app("messages").components
     }
+    # egress is a meet dependency (the livekit dep stays dependencies[0]).
+    meet_deps = appmeta.load_app("meet").dependencies
+    assert ("meet", "egress") in [(d.of, d.on) for d in meet_deps]
+    assert meet_deps[0].on == "livekit"
+    assert {d.on for d in meet_deps} == {"livekit", "egress"}
 
 
 def test_meet_livekit_shared_rules():
@@ -52,6 +57,50 @@ def test_meet_livekit_shared_rules():
         r for r in dep.shared if r.get("consumer_env_key") == "LIVEKIT_API_URL"
     )
     assert url_rule["consumer_format"] == "wss://{value}"
+
+
+def test_meet_egress_component_metadata():
+    """egress is a full, independently-deployable meet component: deploy_order 15
+    (BETWEEN livekit=10 and meet=20), no ``vars`` block, no ``env_render`` (egress
+    reads its ansible vars straight from vars.yml/vault.yml). It is NOT core (the meet
+    Django backend stays the core). The livekit dependency stays ``dependencies[0]``;
+    egress is a SECOND meet dependency appended after it (bundled into the livekit
+    bootstrap step on the CLI side, also targetable standalone via ``-c egress``)."""
+    meta = appmeta.load_app("meet")
+    egress = meta.component("egress")
+    assert egress.key == "egress"
+    assert egress.role == "suitenumerique.st.meet"
+    assert egress.user == "meet"
+    assert egress.app_name == "egress"
+    assert egress.dir_var == "st_meet_egress_dir"
+    assert egress.enabled_var == "st_meet_egress_enabled"
+    assert egress.deploy_order == 15
+    assert egress.is_core is False
+    assert egress.is_worker is False
+    # no vars / no env_render: egress is a bare unit (vars written by bootstrap helpers)
+    assert meta.component_vars("egress") == {}
+    assert meta.env_render_spec("egress") == {}
+    # deploy_order sits between livekit (10) and meet (20) so it rolls out after
+    # livekit and before the meet core on a `st-cli deploy`.
+    orders = {c.key: c.deploy_order for c in meta.components}
+    assert orders["livekit"] < orders["egress"] < orders["meet"]
+    # the egress dep is shared: [] — egress is fully standalone (no env blob wiring).
+    egress_dep = next(d for d in meta.dependencies if d.on == "egress")
+    assert egress_dep.shared == []
+
+
+def test_meet_and_livekit_component_vars_carry_public_host():
+    """Both the meet core and the livekit component expose the same
+    st_meet_public_host var (=="{DOMAIN}") so writer.apply_component_vars writes
+    a single source of truth for the public meet domain into BOTH units' vars.yml
+    — the role then derives every public-facing URL (DJANGO_ALLOWED_HOSTS, the
+    login/logout redirects, the LiveKit recording webhook, the recordings download
+    base) from it. The {DOMAIN} placeholder is re-rendered via str.format —
+    single-brace, intentional (unlike the meet core's quadrupled braces which emit
+    literal ``{{ }}`` for an Ansible expression)."""
+    meta = appmeta.load_app("meet")
+    assert meta.component_vars("meet")["st_meet_public_host"] == "{DOMAIN}"
+    assert meta.component_vars("livekit")["st_meet_public_host"] == "{DOMAIN}"
 
 
 # --------------------------------------------------------------------------- workers component

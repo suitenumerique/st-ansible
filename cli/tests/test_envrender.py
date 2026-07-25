@@ -67,6 +67,28 @@ def test_render_meet_backend_env_concrete_s3_values():
     assert "AWS_S3_ENDPOINT_URL=https://s3.amazonaws.com" in body
     assert "AWS_STORAGE_BUCKET_NAME=meet-media" in body
     assert "st_drive_s3" not in body
+    # file upload (custom call backgrounds) is on by default for meet
+    assert "FILE_UPLOAD_ENABLED=True" in body
+
+
+def test_render_meet_caddy_env_s3_values():
+    """meet's Caddy ingress proxies media straight to S3 via CADDY_S3_* container
+    env vars (fed through the caddy_env file), not st_meet_s3_* ansible vars —
+    mirrors test_render_meet_backend_env_concrete_s3_values but for the caddy
+    env_render layer (see apps/meet.yml's caddy layer / meet.caddy.env.j2)."""
+    blobs = envrender.render_env(
+        "meet",
+        "meet",
+        {
+            "CADDY_S3_PROTOCOL": "https",
+            "CADDY_S3_HOST": "minio.example.org:9000",
+            "CADDY_S3_BUCKET": "meet-media",
+        },
+    )
+    body = blobs["st_meet_caddy_env"]
+    assert "CADDY_S3_PROTOCOL=https" in body
+    assert "CADDY_S3_HOST=minio.example.org:9000" in body
+    assert "CADDY_S3_BUCKET=meet-media" in body
 
 
 def test_render_messages_backend_env_omits_aws_s3():
@@ -157,6 +179,44 @@ def test_render_meet_backend_email_extras():
     body = blobs["st_meet_backend_env"]
     assert "DJANGO_EMAIL_DOMAIN=meet.example.org" in body
     assert "DJANGO_EMAIL_APP_BASE_URL=https://meet.example.org" in body
+
+
+def test_render_meet_backend_env_emits_recording_block_when_enabled():
+    """meet backend emits the RECORDING_* block when RECORDING_ENABLE is set: LiveKit
+    egress uploads to the backend's existing AWS_S3_* bucket; RECORDING_STORAGE_EVENT_ENABLE
+    is pinned False so completion is signalled via the LiveKit webhook. RECORDING_DOWNLOAD_BASE_URL
+    references the st_meet_public_host ansible var (set by _ask_core to the same
+    single-source-of-truth value DJANGO_ALLOWED_HOSTS / the redirects reference);
+    the {{ }} lands verbatim in the env blob and ANSIBLE resolves it at deploy from
+    the core vars.yml (DOMAIN still feeds the {DOMAIN} component var). RECORDING_OUTPUT_FOLDER
+    is optional."""
+    blobs = envrender.render_env(
+        "meet",
+        "meet",
+        {
+            "DOMAIN": "meet.example.org",
+            "RECORDING_ENABLE": "True",
+            "RECORDING_DOWNLOAD_BASE_URL": "https://{{ st_meet_public_host }}/recording",
+            "RECORDING_OUTPUT_FOLDER": "recordings",
+        },
+    )
+    body = blobs["st_meet_backend_env"]
+    assert "RECORDING_ENABLE=True" in body
+    assert "RECORDING_STORAGE_EVENT_ENABLE=False" in body
+    assert "RECORDING_OUTPUT_FOLDER=recordings" in body
+    assert (
+        "RECORDING_DOWNLOAD_BASE_URL=https://{{ st_meet_public_host }}/recording"
+        in body
+    )
+
+
+def test_render_meet_backend_env_omits_recording_block_when_disabled():
+    """Without RECORDING_ENABLE, none of the RECORDING_* lines appear in the rendered
+    meet backend env — mirrors the AWS_S3 guard test for messages
+    (test_render_messages_backend_env_omits_aws_s3)."""
+    blobs = envrender.render_env("meet", "meet", {"DOMAIN": "meet.example.org"})
+    body = blobs["st_meet_backend_env"]
+    assert "RECORDING_" not in body
 
 
 def test_render_keycloak_env_keeps_vault_refs_and_omits_baked_keys():

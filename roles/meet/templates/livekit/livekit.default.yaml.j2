@@ -10,9 +10,9 @@ rtc:
     use_external_ip: true
     enable_loopback_candidate: false
 redis:
-    address: 127.0.0.1:6379
-    username: ""
-    password: ""
+    address: {{ st_meet_livekit_redis_address }}
+    username: "{{ st_meet_livekit_redis_username }}"
+    password: "{{ st_meet_livekit_redis_password }}"
     db: 0
     use_tls: false
     sentinel_master_name: ""
@@ -29,3 +29,9 @@ turn:
     external_tls: true
 keys:
     "{{ st_meet_livekit_api_key }}": "{{ st_meet_livekit_api_secret }}"
+{% if st_meet_public_host is defined %}
+webhook:
+    api_key: "{{ st_meet_livekit_api_key }}"
+    urls:
+        - "https://{{ st_meet_public_host }}/api/v1.0/rooms/webhooks-livekit/"
+{% endif %}

@@ -10,7 +10,7 @@ from __future__ import annotations
 from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.scalarstring import LiteralScalarString
 
-from st_cli.core import envrender, paths, tree
+from st_cli.core import appmeta, envrender, paths, tree
 from st_cli.core.models import SecretConfig, StCliManifest, UnitState
 from st_cli.core.secretbackend import (
     AnsibleVaultBackend,
@@ -332,6 +332,48 @@ def test_ansible_vault_backend_env_and_var_secret():
     b.var_secret(pvars, "st_meet_livekit_api_secret", "raw", component="livekit")
     assert pvars == {}
     assert b.component_secrets("livekit") == {"st_meet_livekit_api_secret": "raw"}
+
+
+def test_mirror_livekit_creds_to_egress_separates_buffers():
+    """`_mirror_livekit_creds_to_egress` (ansible-vault mode) reads livekit's live
+    buffer and copies the api key/secret verbatim into egress's OWN component buffer
+    under the SAME ``st_meet_livekit_*`` var name (egress reuses livekit's vars — the
+    role reads them straight from egress's own vault.yml). The egress buffer is a
+    DISTINCT per-component dict from livekit's, so each unit gets its own vault.yml
+    even though the key names match."""
+    from st_cli.cmd import bootstrap
+
+    b = AnsibleVaultBackend()
+    # populate livekit's buffer the way shared_provider_secret does (raw under the
+    # var name, no vault_key — the livekit vault.yml carries st_meet_livekit_api_key)
+    b.var_secret(CommentedMap(), "st_meet_livekit_api_key", "tok", component="livekit")
+    b.var_secret(
+        CommentedMap(), "st_meet_livekit_api_secret", "sec", component="livekit"
+    )
+
+    meta = appmeta.load_app("meet")
+    bootstrap._mirror_livekit_creds_to_egress(b, meta, "prod", CommentedMap(), {})
+
+    # egress's own buffer holds the mirrored creds under the same livekit var names
+    egress_buf = b.component_secrets("egress")
+    livekit_buf = b.component_secrets("livekit")
+    assert egress_buf["st_meet_livekit_api_key"] == "tok"
+    assert egress_buf["st_meet_livekit_api_secret"] == "sec"
+    # a DISTINCT per-component buffer (separate vault.yml), not livekit's dict
+    assert egress_buf is not livekit_buf
+    # the egress values are EQUAL to livekit's (copied verbatim, not re-generated)
+    assert (
+        egress_buf["st_meet_livekit_api_key"] == livekit_buf["st_meet_livekit_api_key"]
+    )
+    assert (
+        egress_buf["st_meet_livekit_api_secret"]
+        == livekit_buf["st_meet_livekit_api_secret"]
+    )
+    # egress buffers exactly the two mirrored creds
+    assert set(egress_buf) == {
+        "st_meet_livekit_api_key",
+        "st_meet_livekit_api_secret",
+    }
 
 
 # --------------------------------------------------------------------------- backend selection + common.yml

@@ -1,8 +1,11 @@
 # LiveKit Server
 
-LiveKit is the video/audio backend for Meet. It handles WebRTC media routing, TURN relay, and
-recording (egress). The default deployment uses a standalone compose with caddy-l4 for TLS
-termination, livekit-server, egress, and valkey.
+LiveKit is the video/audio backend for Meet. It handles WebRTC media routing and TURN relay. The
+default deployment uses a standalone compose with caddy-l4 for TLS termination, livekit-server,
+and (by default) a co-located valkey.
+
+Recording is handled by a separate sub-application, LiveKit egress — see
+[03-egress.md](03-egress.md).
 
 > [!IMPORTANT]
 > LiveKit uses `network_mode: host` because of the wide range of UDP ports required.
@@ -14,8 +17,8 @@ termination, livekit-server, egress, and valkey.
 ```text
 caddy-l4 (docker.io/livekit/caddyl4)
   └── layer4 TLS termination → livekit-server (:7880)
-                                  ├── egress (recording)
-                                  └── valkey (redis-compatible, state)
+                                  └── valkey (redis-compatible, state; only when
+                                              st_meet_livekit_valkey_enabled)
 ```
 
 ## Prerequisites
@@ -42,9 +45,12 @@ See [roles/meet/REFERENCE.md](../../roles/meet/REFERENCE.md) for the complete va
 | `st_meet_livekit_api_secret` | LiveKit API secret | **(required)** |
 | `st_meet_livekit_dir` | Application directory | `/opt/meet/livekit` |
 | `st_meet_livekit_tag` | livekit-server image tag | see REFERENCE.md |
-| `st_meet_livekit_egress_tag` | egress image tag | see REFERENCE.md |
 | `st_meet_livekit_caddyl4_tag` | caddy-l4 image tag | see REFERENCE.md |
 | `st_meet_livekit_valkey_tag` | valkey image tag | see REFERENCE.md |
+| `st_meet_livekit_valkey_enabled` | Deploy a local valkey in the livekit compose (co-located topology). Set `false` for an external shared redis | `true` |
+| `st_meet_livekit_redis_address` | Redis/valkey address (`host:port`) the livekit server connects to | `127.0.0.1:6379` |
+| `st_meet_livekit_redis_username` | Username for an external shared redis (not used by the local valkey) | _(empty)_ |
+| `st_meet_livekit_redis_password` | Password for an external shared redis (not used by the local valkey) | _(empty)_ |
 | `st_meet_livekit_rollback_enabled` | Rollback on failure | `false` |
 | `st_meet_livekit_files` | List of config files to deploy | _(defaults)_ |
 | `st_meet_livekit_directories` | List of directories to create | _(defaults)_ |
@@ -75,17 +81,17 @@ requests to `st_meet_livekit_turn_domain` go to the TURN server (port 5349), req
 /opt/meet/livekit/
 ├── livekit.yaml        # livekit-server config
 ├── caddy.yaml          # caddy-l4 config
-├── egress.yaml         # egress config
-├── valkey_config/      # valkey config
+├── valkey_config/      # valkey config (only when st_meet_livekit_valkey_enabled)
 ├── caddy_data/         # caddy TLS certificates
-└── valkey_data/        # valkey persistence
+└── valkey_data/        # valkey persistence (only when st_meet_livekit_valkey_enabled)
 ```
 
 ## Custom Configuration
 
 The `st_meet_livekit_files` variable controls which config files are deployed. The defaults
-deploy `livekit.yaml`, `caddy.yaml`, `valkey.conf`, and `egress.yaml` from the role's templates.
-Override this entirely for custom setups:
+deploy `livekit.yaml` and `caddy.yaml` from the role's templates, plus `valkey_config/valkey.conf`
+when `st_meet_livekit_valkey_enabled` is `true` (the default). Override this entirely for custom
+setups:
 
 ```yaml
 st_meet_livekit_files:

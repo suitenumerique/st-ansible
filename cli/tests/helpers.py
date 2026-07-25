@@ -43,7 +43,16 @@ def seed_scaffolding_artifacts() -> None:
 
 
 def seed_livekit_provider(repo: Path) -> None:
-    """Seed a bootstrapped meet/prod/livekit provider unit (vars/vault/hosts)."""
+    """Seed a bootstrapped meet/prod/livekit provider unit (vars/vault/hosts).
+
+    The vars reflect what a fresh ``-c livekit`` bootstrap now writes (including the
+    egress-bundled valkey/redis topology decision), so a standalone ``-c egress`` run
+    that ADOPTS them can be asserted on. The seeded redis address is a distinctive
+    value (NOT the ``127.0.0.1:6379`` co-located default) so adoption tests can tell a
+    real adoption apart from the fallback default. The vault also seeds the
+    external-redis password (valkey is disabled here, so a real bootstrap always
+    mirrors one).
+    """
     seed_creds(repo)
     manifest.save_manifest(
         StCliManifest(
@@ -53,6 +62,8 @@ def seed_livekit_provider(repo: Path) -> None:
     data = tree.load_vars("meet", "prod", "livekit")
     data["st_meet_livekit_domain"] = "livekit.example.org"
     data["st_meet_livekit_turn_domain"] = "turn.example.org"
+    data["st_meet_livekit_valkey_enabled"] = False
+    data["st_meet_livekit_redis_address"] = "livekit-redis.example:6379"
     tree.save_vars("meet", "prod", "livekit", data)
     tree.write_hosts("meet", "prod", "livekit", "livekit", ["10.0.0.1"])
     vp = paths.vault_path("meet", "prod", "livekit")
@@ -62,6 +73,7 @@ def seed_livekit_provider(repo: Path) -> None:
             {
                 "st_meet_livekit_api_key": "real-token",
                 "st_meet_livekit_api_secret": "real-secret",
+                "st_meet_livekit_redis_password": "real-redis-pass",
             },
             fh,
         )

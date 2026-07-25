@@ -132,26 +132,25 @@ st-cli bootstrap meet poc
 A typical run looks like this:
 
 ```text
-╭────────────────────────────────────────────── Bootstrap ──────────────────────────────────────────────╮
-│ Read how meet is architected before you start:                                                        │
-│   https://github.com/suitenumerique/st-ansible/tree/main/docs/03-meet                                 │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭──────────────────────────────────────────── Requirements ─────────────────────────────────────────────╮
-│ Depending on the app, make sure you've prepared:                                                      │
-│   • IP or hostname of the VM(s)                                                                       │
-│   • PostgreSQL host and credentials                                                                   │
-│   • Redis host and credentials                                                                        │
-│   • S3 endpoint, bucket and credentials                                                               │
-│   • Identity provider URLs and credentials                                                            │
-│     (For ProConnect Integration environment: create an app at                                         │
-│ https://partenaires.proconnect.gouv.fr/)                                                              │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭───────────────────────────────────────────────────────────── Bootstrap ─────────────────────────────────────────────────────────────╮
+│ Read how meet is architected before you start:                                                                                      │
+│   https://github.com/suitenumerique/st-ansible/tree/main/docs/03-meet                                                               │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─────────────────────────────────────────────────────────── Requirements ────────────────────────────────────────────────────────────╮
+│ Depending on the app, make sure you've prepared:                                                                                    │
+│   • IP or hostname of the VM(s)                                                                                                     │
+│   • PostgreSQL host and credentials                                                                                                 │
+│   • Redis host and credentials                                                                                                      │
+│   • S3 endpoint, bucket and credentials                                                                                             │
+│   • Identity provider URLs and credentials                                                                                          │
+│     (For ProConnect Integration environment: create an app at https://partenaires.proconnect.gouv.fr/)                              │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ? Do you have all of the above ready to continue? Yes
-╭──────────────────────────────────────────────── Note ─────────────────────────────────────────────────╮
-│ This questionnaire only scaffolds your config files.                                                  │
-│ If you mistype an answer, don't start over: finish the questionnaire, then edit the generated files   │
-│ directly under <app>/<env>/<component>/.                                                              │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─────────────────────────────────────────────────────────────── Note ────────────────────────────────────────────────────────────────╮
+│ This questionnaire only scaffolds your config files.                                                                                │
+│ If you mistype an answer, don't start over: finish the questionnaire, then edit the generated files directly under                  │
+│ <app>/<env>/<component>/.                                                                                                           │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ? Secret backend: ansible-vault — secrets encrypted locally with a generated password
 
 st-cli generated a random ansible-vault password.
@@ -170,7 +169,7 @@ If you lose it, every encrypted secret in this repo is unrecoverable.
 ? DB_USER meet
 ? DB_PASSWORD ****
 ? DB_PORT 5432
-? REDIS_URL redis://host.containers.internal:6379
+? REDIS_URL (redis://[user:password@]host:port/db) redis://host.containers.internal:6379
 ? AWS_S3_ENDPOINT_URL http://host.containers.internal:9000
 ? AWS_S3_ACCESS_KEY_ID meet
 ? AWS_S3_SECRET_ACCESS_KEY ****
@@ -185,24 +184,27 @@ If you lose it, every encrypted secret in this repo is unrecoverable.
 › Bootstrapping livekit/poc (dependency of meet).
 ? Bootstrap livekit now? Yes — bootstrap now
 ? livekit host(s) — IP or hostname, comma-separated livekit.poc.st.fr
+? egress (leave blank to co-locate on the livekit hosts) host(s) — IP or hostname, comma-separated
 › livekit: generated LIVEKIT_API_KEY.
 › livekit: generated LIVEKIT_API_SECRET.
 ? LiveKit domain (e.g. livekit.example.org) livekit.poc.st.fr
 ? LiveKit TURN domain (e.g. turn.example.org) livekit-turn.poc.st.fr
 ? Enable cadvisor container monitoring for livekit? Yes
+? Enable cadvisor container monitoring for egress? Yes
 ✓ livekit: managed — wrote vars.yml + vault.yml + hosts.
 ✓ meet: wrote vars.yml + vault.yml + hosts.
 ✓ Bootstrapped meet/poc.
 ›   domain: meet.poc.st.fr
-›   provider: proconnect-integ
+›   OIDC provider: proconnect-integ
 ›   - livekit       hosts=livekit.poc.st.fr
+›   - egress        hosts=livekit.poc.st.fr
 ›   - meet          hosts=meet.poc.st.fr
-╭───────────────────────────────────────────── Next steps ──────────────────────────────────────────────╮
-│ 1. Back up and share .vault-pass with the other operators.                                            │
-│ 2. Review meet/poc/*/vars.yml and meet/poc/*/hosts.                                                   │
-│ 3. Review secrets with `st-cli secrets meet poc`.                                                     │
-│ 4. Deploy with `st-cli deploy meet poc`.                                                              │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────── Next steps ─────────────────────────────────────────────────────────────╮
+│ 1. Back up and share .vault-pass with the other operators.                                                                          │
+│ 2. Review meet/poc/*/vars.yml and meet/poc/*/hosts.                                                                                 │
+│ 3. Review secrets with `st-cli secrets meet poc`.                                                                                   │
+│ 4. Deploy with `st-cli deploy meet poc`.                                                                                            │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 Bootstrap writes, into your repo:

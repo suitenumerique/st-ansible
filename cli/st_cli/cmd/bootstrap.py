@@ -195,6 +195,22 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
         "LOGIN_REDIRECT_URL_FAILURE": f"https://{domain}/",
         "LOGOUT_REDIRECT_URL": f"https://{domain}/",
     }
+    if app == "meet":
+        # single source of truth: every public-domain env var references the
+        # st_meet_public_host ansible var (written into the core vars.yml from
+        # DOMAIN), so the operator changes the domain in one place. Mirrors drive's
+        # st_drive_public_host redirect-url override. The answer VALUE is the literal
+        # "https://{{ st_meet_public_host }}" string — the env template emits it
+        # via answers.SOMEKEY so the {{ }} lands verbatim in the env file and ANSIBLE
+        # resolves it at deploy (do NOT put {{ st_meet_public_host }} directly in a
+        # jinja env template line — jinja2 would resolve it and emit empty).
+        host = "{{ st_meet_public_host }}"
+        answers["DJANGO_ALLOWED_HOSTS"] = host
+        answers["DJANGO_CSRF_TRUSTED_ORIGINS"] = f"https://{host}"
+        answers["DJANGO_CORS_ALLOWED_ORIGINS"] = f"https://{host}"
+        answers["LOGIN_REDIRECT_URL"] = f"https://{host}/"
+        answers["LOGIN_REDIRECT_URL_FAILURE"] = f"https://{host}/"
+        answers["LOGOUT_REDIRECT_URL"] = f"https://{host}/"
     backend.env_secret(
         answers,
         "DJANGO_SECRET_KEY",
@@ -242,8 +258,10 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
         )
 
         if app == "drive":
-            # drive nginx proxies media straight to S3 via st_drive_s3_* vars; derive
-            # them here and point the backend env at the same vars (single source of truth).
+            # drive's nginx proxies media straight to S3 via st_drive_s3_* vars;
+            # derive them here and point the backend env at the same vars (single
+            # source of truth). See apps/drive.yml's st_drive_s3_protocol/host/bucket
+            # component vars.
             parts = urlsplit(endpoint if "://" in endpoint else f"https://{endpoint}")
             answers["S3_PROTOCOL"] = parts.scheme or "https"
             answers["S3_HOST"] = parts.netloc
@@ -252,6 +270,7 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
                 "{{ st_drive_s3_protocol }}://{{ st_drive_s3_host }}"
             )
             answers["AWS_STORAGE_BUCKET_NAME"] = "{{ st_drive_s3_bucket }}"
+
             # WOPI (collabora) wiring — WOPI_SRC_BASE_URL points at the same
             # st_drive_public_host var the role already sets (resolved at deploy).
             answers["WOPI_CLIENTS"] = "collabora"
@@ -264,6 +283,18 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
             )
             answers["LOGOUT_REDIRECT_URL"] = "https://{{ st_drive_public_host }}/"
             answers["MEDIA_BASE_URL"] = "https://{{ st_drive_public_host }}"
+        elif app == "meet":
+            # meet's in-compose Caddy ingress proxies media straight to S3 via
+            # CADDY_S3_* container env vars fed through a caddy_env file (not
+            # st_meet_s3_* ansible vars) — see apps/meet.yml's caddy env_render
+            # layer and roles/meet/templates/meet/Caddyfile.j2. The backend env
+            # keeps the real literal endpoint/bucket values (no indirection).
+            parts = urlsplit(endpoint if "://" in endpoint else f"https://{endpoint}")
+            answers["CADDY_S3_PROTOCOL"] = parts.scheme or "https"
+            answers["CADDY_S3_HOST"] = parts.netloc
+            answers["CADDY_S3_BUCKET"] = bucket
+            answers["AWS_S3_ENDPOINT_URL"] = endpoint
+            answers["AWS_STORAGE_BUCKET_NAME"] = bucket
         else:
             answers["AWS_S3_ENDPOINT_URL"] = endpoint
             answers["AWS_STORAGE_BUCKET_NAME"] = bucket
@@ -304,6 +335,8 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
     _ask_email(answers, backend, core_key, app)
     if app == "messages":
         _ask_messages_outbound(answers, backend, core_key)
+    if app == "meet":
+        _set_meet_recording(answers)
     return answers
 
 
@@ -516,6 +549,240 @@ def _ask_messages_outbound(
         )
 
 
+def _ensure_meet_domain(answers: dict) -> None:
+    """meet/livekit: the livekit unit's st_meet_public_host component var is
+    built from DOMAIN in apply_component_vars. DOMAIN is already collected in a
+    full bootstrap; for a standalone `bootstrap -c livekit` run answers is empty,
+    so prompt it."""
+    if not answers.get("DOMAIN"):
+        answers["DOMAIN"] = _ask(
+            "Public domain for meet (for the LiveKit recording webhook)",
+            placeholder="meet.example.org",
+        )
+
+
+def _set_meet_recording(answers: dict) -> None:
+    """meet-only: always enable LiveKit egress recording (uploads to the backend's
+    existing AWS_S3_* bucket; completion is signalled via the LiveKit webhook) —
+    never prompted.
+
+    This used to be a confirm (default No). It isn't one anymore because the
+    egress recorder is bundled into the livekit bootstrap step UNCONDITIONALLY
+    (see ``_bundle_egress`` / ``_standalone_egress`` / ``_reuse_egress`` below,
+    none of which check a recording flag): the recorder's infrastructure is
+    deployed either way. A confirm here would only let the operator switch OFF
+    an *app-level* feature (whether the meet backend advertises/serves
+    recordings) while the process that produces them keeps running regardless —
+    that's not a meaningful choice, just a footgun (a deployed-but-unused
+    recorder, or worse, a silently confusing half-wired stack). So recording is
+    unconditionally on.
+
+    RECORDING_OUTPUT_FOLDER is fixed at "recordings" — the value the old prompt
+    defaulted to. It's an S3 key prefix, not something most operators need to
+    change; one who does can edit RECORDING_OUTPUT_FOLDER directly in the core
+    <app>/<env>/<core>/vars.yml after bootstrap.
+    """
+    answers["RECORDING_ENABLE"] = "True"
+    answers["RECORDING_OUTPUT_FOLDER"] = "recordings"
+    # SINGULAR /recording — matches the meet frontend SPA route (upstream default
+    # is RECORDING_DOWNLOAD_BASE_URL=http://localhost:3000/recording). Do not
+    # pluralize: that would 404 the emailed recording-ready link. Unrelated to
+    # RECORDING_OUTPUT_FOLDER above, which is legitimately plural (an S3 folder
+    # prefix, not a URL path).
+    answers["RECORDING_DOWNLOAD_BASE_URL"] = (
+        "https://{{ st_meet_public_host }}/recording"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# egress component (bundled into the livekit bootstrap step, or standalone -c egress)
+# --------------------------------------------------------------------------- #
+def _redis_topology(
+    livekit_hosts: list[str], egress_hosts: list[str]
+) -> tuple[bool, str | None]:
+    """(valkey_enabled, redis_address|None). Single co-located node → local valkey
+    (``127.0.0.1:6379``); otherwise the operator must supply a shared redis url —
+    the caller prompts it (NO format validation: any non-empty string is accepted)."""
+    single = sorted(livekit_hosts) == sorted(egress_hosts) and len(livekit_hosts) == 1
+    return (True, "127.0.0.1:6379") if single else (False, None)
+
+
+def _ask_egress_hosts(livekit_hosts: list[str]) -> tuple[list[str], bool]:
+    """meet/livekit: ask the egress hosts (blank ⇒ co-locate on the livekit hosts)
+    right after the livekit hosts prompt (Q2 — BEFORE the LiveKit domain/TURN
+    prompts) and decide the livekit↔egress redis topology up front so the redis
+    prompt (if any) can be asked later, after the livekit cadvisor confirm.
+    Returns (egress_hosts, valkey_enabled)."""
+    egress_hosts = _ask_hosts(
+        "egress (leave blank to co-locate on the livekit hosts)", allow_empty=True
+    ) or list(livekit_hosts)
+    valkey_enabled, _ = _redis_topology(livekit_hosts, egress_hosts)
+    return egress_hosts, valkey_enabled
+
+
+def _mirror_livekit_creds_to_egress(
+    backend,
+    meta,
+    env: str,
+    ev,
+    lk_vars,
+    names=("st_meet_livekit_api_key", "st_meet_livekit_api_secret"),
+) -> None:
+    """Mirror livekit's already-decided secrets (api key/secret, plus the redis
+    password when the caller adds it to ``names``) into egress's own vault — raw
+    under the same ``st_meet_livekit_*`` var name egress reuses, exactly how
+    livekit stores its own (the role reads them directly from vault.yml). Full run
+    → read the live buffer; standalone ``-c egress`` → read livekit's on-disk
+    vault. hashi mode reuses livekit's ALREADY-DECIDED lookup refs from
+    ``lk_vars`` directly in ``ev`` — no fresh prompt (the old code prompted fresh
+    lookup terms into a throwaway map, discarding them; egress lost the ref and
+    re-asked). Both branches now fail fast (``StCliError``) on a missing
+    secret/ref instead of silently skipping it — a silent skip would leave
+    egress's vars.yml without a required var, only to blow up much later at
+    deploy time as an undefined variable."""
+    if (
+        backend.prompts_values()
+    ):  # ansible-vault: copy raw values into egress vault buffer
+        src = backend.component_secrets("livekit")
+        disk = None
+        for name in names:
+            val = src.get(name)
+            if val is None:
+                if disk is None:
+                    lvp = paths.vault_path(meta.app, env, "livekit")
+                    disk = vault.decrypt_to_dict(lvp) if lvp.exists() else {}
+                val = disk.get(name)
+            if val is None:
+                raise StCliError(
+                    f"livekit secret {name} missing — cannot mirror it to egress; "
+                    "re-bootstrap livekit."
+                )
+            backend.var_secret(CommentedMap(), name, val, component="egress")
+    else:  # hashi: reuse livekit's lookup refs directly in egress vars.yml (NO re-prompt)
+        for name in names:
+            ref = lk_vars.get(name)
+            if ref is None:
+                raise StCliError(
+                    f"livekit lookup ref {name} missing — cannot mirror it to egress; "
+                    "re-bootstrap livekit."
+                )
+            ev[name] = ref
+
+
+def _bundle_egress(
+    meta, lk_pvars, answers, backend, env, egress_hosts, valkey_enabled
+) -> None:
+    """Called from the livekit deploy tail, AFTER ``apply_component_vars``/the
+    livekit cadvisor confirm but BEFORE livekit's tail writes its vars.yml (so the
+    redis vars set here on ``lk_pvars`` are persisted with the livekit unit).
+    Egress hosts + the livekit↔egress redis topology were already decided
+    (``_ask_egress_hosts``, right after the livekit hosts prompt) — this only
+    prompts the redis address/username/password when NOT co-located, sets the
+    livekit unit's valkey/redis vars, mirrors livekit's generated api creds (+ the
+    redis password when external) into egress's own vault, and writes the
+    egress's own unit (vars.yml/vault.yml/hosts) — egress is bundled into the
+    livekit bootstrap step so the core env stays the only meet component that
+    references livekit. Records ``answers["_egress_bundled"]`` so the deps loop
+    registers the egress unit."""
+    if valkey_enabled:
+        addr, username, pw = "127.0.0.1:6379", "", None
+    else:
+        addr = _ask("Redis address shared by livekit and egress (host:port)")
+        username = _ask(
+            "Redis username shared by livekit and egress (leave blank if none)",
+            required=False,
+        )
+        pw = (
+            _password(
+                "Redis password shared by livekit and egress (leave blank if none)",
+                required=False,
+            )
+            if backend.prompts_values()
+            else None
+        )
+    lk_pvars["st_meet_livekit_valkey_enabled"] = valkey_enabled
+    lk_pvars["st_meet_livekit_redis_address"] = addr
+    mirror_names = ["st_meet_livekit_api_key", "st_meet_livekit_api_secret"]
+    if not valkey_enabled:
+        if username:
+            lk_pvars["st_meet_livekit_redis_username"] = username
+        backend.var_secret(
+            lk_pvars, "st_meet_livekit_redis_password", pw, component="livekit"
+        )
+        mirror_names.append("st_meet_livekit_redis_password")
+    ev = CommentedMap()
+    ev["st_meet_livekit_domain"] = lk_pvars["st_meet_livekit_domain"]
+    ev["st_meet_livekit_redis_address"] = addr
+    if not valkey_enabled and username:
+        ev["st_meet_livekit_redis_username"] = username
+    _mirror_livekit_creds_to_egress(backend, meta, env, ev, lk_pvars, mirror_names)
+    writer.apply_component_vars(ev, meta, meta.component("egress"), answers)
+    ev[writer.cadvisor_var(meta.app)] = _ask_cadvisor("egress")
+    ev.yaml_set_start_comment(
+        writer.vars_header(meta.app, meta, meta.component("egress"))
+    )
+    tree.save_vars(meta.app, env, "egress", ev)
+    writer.write_vault(meta.app, env, "egress", backend)
+    tree.write_hosts(
+        meta.app, env, "egress", meta.component("egress").app_name, egress_hosts
+    )
+    answers["_egress_bundled"] = "managed"
+
+
+def _standalone_egress(meta, ev_pvars, answers, backend, env) -> None:
+    """Called from a ``provider.key == "egress"`` branch in ``_handle_dependency``: a
+    standalone ``bootstrap -c egress`` run. The generic dep tail then writes the
+    egress unit's vars/vault/hosts, so this ONLY adopts livekit's already-decided
+    domain + redis topology (it does NOT re-prompt or re-decide topology —
+    guarantees egress shares the same redis the livekit unit was bootstrapped
+    with), including the redis username (plaintext) and — when the livekit unit
+    is on an EXTERNAL (non-valkey) redis — mirroring the redis password alongside
+    the api key/secret."""
+    lvp = paths.vars_path(meta.app, env, "livekit")
+    if not lvp.exists():
+        raise StCliError(
+            "bootstrap livekit first — egress adopts livekit's redis topology "
+            "and ws domain, so the livekit unit must already exist."
+        )
+    lk = tree.load_vars(meta.app, env, "livekit")
+    ev_pvars["st_meet_livekit_domain"] = lk["st_meet_livekit_domain"]
+    ev_pvars["st_meet_livekit_redis_address"] = lk.get(
+        "st_meet_livekit_redis_address", "127.0.0.1:6379"
+    )
+    username = lk.get("st_meet_livekit_redis_username")
+    if username:
+        ev_pvars["st_meet_livekit_redis_username"] = username
+    external = not lk.get("st_meet_livekit_valkey_enabled", True)
+    mirror_names = ["st_meet_livekit_api_key", "st_meet_livekit_api_secret"]
+    if external:
+        mirror_names.append("st_meet_livekit_redis_password")
+    _mirror_livekit_creds_to_egress(backend, meta, env, ev_pvars, lk, mirror_names)
+
+
+def _reuse_egress(meta, answers, backend, env) -> None:
+    """livekit REUSE: keep egress in the deployment. If the egress tree already
+    exists (bundled when livekit was first deployed), just re-register it. If it is
+    missing (livekit predates egress bundling), create it from livekit's on-disk
+    redis topology + ws domain, co-located on the livekit hosts."""
+    if paths.vars_path(meta.app, env, "egress").exists():
+        answers["_egress_bundled"] = "managed"  # keep as-is, re-register
+        return
+    ev = CommentedMap()
+    _standalone_egress(meta, ev, answers, backend, env)
+    writer.apply_component_vars(ev, meta, meta.component("egress"), answers)
+    ev[writer.cadvisor_var(meta.app)] = _ask_cadvisor("egress")
+    ev.yaml_set_start_comment(
+        writer.vars_header(meta.app, meta, meta.component("egress"))
+    )
+    tree.save_vars(meta.app, env, "egress", ev)
+    writer.write_vault(meta.app, env, "egress", backend)
+    egress_hosts = tree.read_hosts(meta.app, env, "livekit")
+    tree.write_hosts(
+        meta.app, env, "egress", meta.component("egress").app_name, egress_hosts
+    )
+    answers["_egress_bundled"] = "managed"
+
+
 # --------------------------------------------------------------------------- #
 # dependency handling
 # --------------------------------------------------------------------------- #
@@ -652,6 +919,8 @@ def _handle_dependency(
             if rule.get("answer_key") and value is not None:
                 answers[rule["answer_key"]] = value
             writer.inject_consumer(rule, value, answers, backend, core.key)
+        if meta.app == "meet" and provider.key == "livekit" and not wire_only:
+            _reuse_egress(meta, answers, backend, env)
         ui.info(f"{dep.on}: reuse — kept existing unit (still deployed).")
         return "managed"
 
@@ -662,6 +931,9 @@ def _handle_dependency(
     ):
         raise StCliError(f"aborted — {dep.on} left untouched.")
     hosts = _ask_hosts(dep.on)
+    egress_hosts = valkey_enabled = None
+    if meta.app == "meet" and provider.key == "livekit":
+        egress_hosts, valkey_enabled = _ask_egress_hosts(hosts)  # Q2
     pvars = CommentedMap()  # enabled flag is injected on the deploy task, not here
     for rule in dep.shared:
         if rule.get("generate"):
@@ -714,8 +986,18 @@ def _handle_dependency(
         _ask_messages_provider(
             provider.key, answers, backend, hosts, core.key, meta.app, env, pvars
         )
+    if meta.app == "meet" and provider.key == "livekit":
+        _ensure_meet_domain(answers)
+        # egress hosts already asked (Q2); redis+egress write happens AFTER the
+        # livekit cadvisor confirm below.
+    elif meta.app == "meet" and provider.key == "egress":
+        _standalone_egress(meta, pvars, answers, backend, env)
     writer.apply_component_vars(pvars, meta, provider, answers)
-    pvars[writer.cadvisor_var(meta.app)] = _ask_cadvisor(dep.on)
+    pvars[writer.cadvisor_var(meta.app)] = _ask_cadvisor(dep.on)  # Q7 livekit cadvisor
+    if meta.app == "meet" and provider.key == "livekit":
+        # Q8 redis (address/username/password, only when NOT co-located) + Q9
+        # egress cadvisor; runs before save_vars so the redis vars land in pvars.
+        _bundle_egress(meta, pvars, answers, backend, env, egress_hosts, valkey_enabled)
     pvars.yaml_set_start_comment(writer.vars_header(meta.app, meta, provider))
     tree.save_vars(meta.app, env, provider.key, pvars)
     writer.write_vault(meta.app, env, provider.key, backend)
@@ -944,6 +1226,8 @@ def bootstrap(app: str, env: str, component: str | None = None) -> None:
             and answers.get("MTA_OUT_MODE") == "relay"
         ):
             continue
+        if app == "meet" and dep.on == "egress" and component != "egress":
+            continue  # egress is bundled into the livekit step, not a separate iteration
         mode = _handle_dependency(
             meta,
             dep,
@@ -957,6 +1241,16 @@ def bootstrap(app: str, env: str, component: str | None = None) -> None:
             manifest.upsert_unit(
                 m, UnitState(app=app, env=env, component=dep.on, mode=mode)
             )
+            if app == "meet" and dep.on == "livekit" and answers.get("_egress_bundled"):
+                manifest.upsert_unit(
+                    m,
+                    UnitState(
+                        app=app,
+                        env=env,
+                        component="egress",
+                        mode=answers["_egress_bundled"],
+                    ),
+                )
 
     if target_core and redo_core:
         writer.write_core(
