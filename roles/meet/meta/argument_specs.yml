@@ -88,7 +88,7 @@ argument_specs:
         type: "str"
         description: "Tag of the livekit docker image to deploy."
         # renovate: datasource=docker depName=docker.io/livekit/livekit-server
-        default: "v1.13.2"
+        default: "v1.13.4"
       st_meet_livekit_egress_tag:
         type: "str"
         description: "Tag of the livekit egress docker image to deploy."
