@@ -1,7 +1,0 @@
-# Sections: major_changes, minor_changes, breaking_changes,
-# deprecated_features, removed_features, security_fixes, bugfixes,
-# known_issues, release_summary, trivial. Entries are Markdown strings.
-# Use `trivial:` for changes that should NOT appear in the changelog.
-minor_changes:
-  - (meet) separated egress component and added recording feature to bootstrap
-  - (meet) added custom logo handling

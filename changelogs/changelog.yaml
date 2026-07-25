@@ -45,3 +45,35 @@ releases:
     - renovate-pr-38.yml
     - renovate-pr-42.yml
     release_date: '2026-07-22'
+  0.2.0:
+    changes:
+      bugfixes:
+      - (cli) allow @openbao markers on non-secret fields
+      minor_changes:
+      - (meet) added custom logo handling
+      - (meet) separated egress component and added recording feature to bootstrap
+      - Update actions/checkout digest to 3d3c42e
+      - Update actions/setup-python action to v7
+      - Update dependency ansible.posix to v2.2.2
+      - Update dependency containers.podman to v1.20.2
+      - Update dependency suitenumerique/meet to v1.23.0
+      - Update docker.io/livekit/livekit-server Docker tag to v1.13.4
+      - Update docker/login-action digest to abd2ef4
+      release_summary: 'Adds support for meet recordings, fix openbao markers on st-cli
+        bootstrap
+
+        and multiple versions upgrades.
+
+        '
+    fragments:
+    - fix-cli-openbao-backend.yml
+    - meet-recordings.yml
+    - release_summary.yml
+    - renovate-pr-30.yml
+    - renovate-pr-40.yml
+    - renovate-pr-41.yml
+    - renovate-pr-44.yml
+    - renovate-pr-46.yml
+    - renovate-pr-48.yml
+    - renovate-pr-55.yml
+    release_date: '2026-07-26'
