@@ -147,6 +147,42 @@ st-cli upgrade          # automatically updates pipx package, bumps the .st-cli.
 st-cli deploy meet prod # roll out the new blessed image tags
 ```
 
+### Keeping your config up to date (rebootstrap)
+
+Some releases add configuration an app now requires — a new mandatory environment
+variable, a new Ansible variable. When that happens, `st-cli doctor` tells you which
+apps need attention and `st-cli deploy` refuses to run until you have dealt with it:
+
+```bash
+st-cli doctor           # e.g. "meet/prod/meet: rebootstrap needed (0.3.0 — …)"
+st-cli bootstrap meet prod
+```
+
+**Re-running `bootstrap` on an existing deployment is not destructive.** It replays the
+same questionnaire with **every answer pre-filled from your current config** — press
+Enter to keep a value, or edit it inline. Only genuinely new questions are unanswered.
+An Enter-through run leaves your config byte-identical, so `git diff` shows exactly what
+changed and nothing else.
+
+What survives a rebootstrap:
+
+- your own `st_*` variables, and any comments you added to `vars.yml`;
+- your own `KEY=value` lines inside the `*_env` blocks (new keys from the release are
+  appended under an `# added by st-cli <version>` marker — nothing is ever deleted);
+- your secrets. Already-answered secrets are never re-prompted and never regenerated, so
+  `vault.yml` is left alone unless a release genuinely introduces a new one. If the vault
+  cannot be decrypted, the run aborts *before* the questionnaire rather than failing at
+  the end.
+
+**What st-cli cannot keep in sync.** If you point a role at your own template — for
+example `st_drive_backend_env_template`, a `*_compose_template`, or an overridden
+`st_meet_livekit_files` — then the blob st-cli renders is no longer what gets deployed.
+A rebootstrap keeps that blob correct but cannot touch your file; keeping it current is
+up to you. See the role's `REFERENCE.md` for what upstream expects.
+
+Since the questionnaire is interactive, a non-interactive/CI deploy needs the rebootstrap
+done beforehand.
+
 ## Uninstall
 
 ### Using the container

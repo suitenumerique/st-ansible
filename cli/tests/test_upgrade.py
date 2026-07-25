@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
-from st_cli.core import drift, generate, manifest, paths, runner, ui
+import ruamel.yaml
+
+from st_cli.core import drift, generate, manifest, paths, rebootstrap, runner, ui
 from st_cli.core.models import StCliManifest, UnitState
 
 from helpers import seed_creds, seed_scaffolding_artifacts
+
+
+def _set_flags(monkeypatch, tmp_path, flags: list[dict]):
+    """Point rebootstrap._RESOURCE at a temp flags file (see test_rebootstrap.py)."""
+    p = tmp_path / "rebootstrap.yml"
+    y = ruamel.yaml.YAML(typ="safe")
+    with p.open("w", encoding="utf-8") as fh:
+        y.dump(flags, fh)
+    monkeypatch.setattr(rebootstrap, "_RESOURCE", p)
+    return p
 
 
 def test_upgrade_bumps_pin_and_cleans_scaffolding(repo, mocker):
@@ -137,3 +149,93 @@ def test_upgrade_final_message_hints_bare_doctor(repo, mocker):
     final = " ".join(str(c.args[0]) for c in success_spy.call_args_list if c.args)
     assert "st-cli doctor" in final  # parameterless doctor hint
     assert "st-cli doctor <app>" not in final  # no <app> placeholder on the doctor hint
+
+
+def test_upgrade_reports_pending_rebootstraps_on_real_change(
+    repo, mocker, tmp_path, monkeypatch
+):
+    """After realigning the pin on a real version change, upgrade reports which
+    apps now need a rebootstrap so the operator learns immediately, rather than
+    only at their next `deploy` (which hard-gates on it)."""
+    from st_cli.cmd import upgrade as upgrade_mod
+
+    seed_creds(repo)
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.19",
+            "0.0.19",
+            [
+                UnitState("meet", "prod", "meet", "managed", "0.1.0"),
+                UnitState("drive", "prod", "drive", "managed", "0.5.0"),
+            ],
+        )
+    )
+    _set_flags(
+        monkeypatch,
+        tmp_path,
+        [
+            {
+                "version": "0.3.0",
+                "apps": ["meet"],
+                "reason": "meet 1.5 adds mandatory recording env vars",
+                "link": "https://example.org/changelog#v030",
+            }
+        ],
+    )
+
+    mocker.patch.object(upgrade_mod.shutil, "which", return_value=None)
+    mocker.patch("importlib.metadata.version", return_value="0.0.99")
+    warn_spy = mocker.patch.object(ui, "warn")
+
+    upgrade_mod.upgrade()
+
+    warn_msgs = " ".join(str(c.args[0]) for c in warn_spy.call_args_list if c.args)
+    assert "meet" in warn_msgs
+    assert "drive" not in warn_msgs  # 0.5.0 already outranks the 0.3.0 flag
+    assert "st-cli bootstrap" in warn_msgs
+
+
+def test_upgrade_no_change_does_not_report_rebootstraps(repo, mocker):
+    """The no-op (no version change) path returns before any rebootstrap
+    reporting — it must not run at all."""
+    from st_cli.cmd import upgrade as upgrade_mod
+
+    seed_creds(repo)
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.20", "0.0.20", [UnitState("meet", "prod", "meet", "managed")]
+        )
+    )
+    mocker.patch.object(upgrade_mod.shutil, "which", return_value="/usr/bin/pipx")
+    mocker.patch.object(
+        upgrade_mod.subprocess, "run", return_value=mocker.MagicMock(returncode=0)
+    )
+    mocker.patch("importlib.metadata.version", return_value="0.0.20")
+    report_spy = mocker.patch.object(upgrade_mod, "_report_pending_rebootstraps")
+
+    upgrade_mod.upgrade()
+
+    report_spy.assert_not_called()
+
+
+def test_upgrade_rebootstrap_reporting_failure_does_not_break_upgrade(repo, mocker):
+    """A failure while checking for pending rebootstraps must never turn an
+    otherwise successful upgrade into a failure — it's purely best-effort."""
+    from st_cli.cmd import upgrade as upgrade_mod
+
+    seed_creds(repo)
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.19", "0.0.19", [UnitState("meet", "prod", "meet", "managed")]
+        )
+    )
+    mocker.patch.object(upgrade_mod.shutil, "which", return_value=None)
+    mocker.patch("importlib.metadata.version", return_value="0.0.99")
+    mocker.patch.object(
+        upgrade_mod.rebootstrap, "needed", side_effect=RuntimeError("boom")
+    )
+
+    upgrade_mod.upgrade()  # must not raise
+
+    m = manifest.load_manifest()
+    assert m.collection_version == "0.0.99"

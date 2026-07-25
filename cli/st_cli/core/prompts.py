@@ -125,12 +125,23 @@ def _is_valid_host(h: str) -> bool:
     return bool(_HOSTNAME_RE.match(h))
 
 
-def _ask_hosts(label: str, allow_empty: bool = False) -> list[str]:
+def _ask_hosts(
+    label: str, allow_empty: bool = False, default: list[str] | None = None
+) -> list[str]:
     """Prompt for comma-separated hosts (IP or hostname), validated inline.
 
     When ``allow_empty`` is True, a blank answer is accepted and returns ``[]``
     (used for optional worker hosts that default to the core's hosts). Any
     entered hosts are still validated with :func:`_is_valid_host`.
+
+    ``default`` (rebootstrap) pre-fills the field with the operator's current
+    hosts as questionary's native editable pre-fill — same rationale as
+    ``_text_question``'s ``default``: Enter keeps it, or the operator edits
+    inline. It is joined with ``", "`` (a comma + space) for readability; the
+    parser (``[h.strip() for h in raw.split(",") if h.strip()]``) strips
+    whitespace either way, so a bare ``","`` join would round-trip identically
+    but reads worse. A falsy ``default`` (``None`` or ``[]``) omits the
+    pre-fill entirely, matching today's behaviour exactly.
     """
 
     def validate(raw: str):
@@ -146,6 +157,7 @@ def _ask_hosts(label: str, allow_empty: bool = False) -> list[str]:
 
     raw = questionary.text(
         f"{label} host(s) — IP or hostname, comma-separated",
+        default=", ".join(default) if default else "",
         validate=validate,
     ).ask()
     if raw is None:
@@ -153,9 +165,21 @@ def _ask_hosts(label: str, allow_empty: bool = False) -> list[str]:
     return [h.strip() for h in raw.split(",") if h.strip()]
 
 
-def _ask_select(message: str, choices: list[str]) -> str:
-    """Single-choice questionary select; raises if the user bails out."""
-    choice = questionary.select(message, choices=choices).ask()
+def _ask_select(message: str, choices: list[str], default: str | None = None) -> str:
+    """Single-choice questionary select; raises if the user bails out.
+
+    ``default`` (rebootstrap) pre-selects the operator's current answer — but
+    ``questionary.select`` requires its ``default`` to be one of ``choices``,
+    raising otherwise. A recovered config value can legitimately no longer be
+    an offered choice (e.g. an OIDC provider or dependency mode removed/renamed
+    since the config was written), so it is passed through only when truthy
+    AND present in ``choices``; otherwise it is silently omitted, degrading to
+    "no pre-selection" rather than crashing the questionnaire.
+    """
+    kwargs = {}
+    if default and default in choices:
+        kwargs["default"] = default
+    choice = questionary.select(message, choices=choices, **kwargs).ask()
     if choice is None:
         raise StCliError("bootstrap cancelled by user.")
     return choice

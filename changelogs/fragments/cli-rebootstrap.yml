@@ -1,0 +1,14 @@
+# Sections: major_changes, minor_changes, breaking_changes,
+# deprecated_features, removed_features, security_fixes, bugfixes,
+# known_issues, release_summary, trivial. Entries are Markdown strings.
+# Use `trivial:` for changes that should NOT appear in the changelog.
+minor_changes:
+  - (cli) re-running `st-cli bootstrap` over an existing unit now **rebootstraps** it — the questionnaire replays with every answer pre-filled from the committed config, so pressing Enter keeps it. Answers (including `{{ vault_* }}` refs) are recovered from the tree, so secrets are never re-prompted and never rotated.
+  - (cli) `bootstrap` now merges into the committed tree instead of rebuilding it — hand-added `st_*` vars, comments, `*_env_template`/`*_compose_template` overrides and custom `KEY=value` lines inside the `*_env` blobs all survive. New env keys are appended under an `# added by st-cli <version>` marker; nothing is ever deleted.
+  - (cli) `vault.yml` is now merged rather than overwritten, and an unreadable vault aborts a rebootstrap before the questionnaire runs instead of failing at write time.
+  - (cli) releases can declare that operators must rebootstrap (`rebootstrap.yml`); `doctor` reports which apps need it, `upgrade` points at it, and `deploy` refuses to run until it is done. Each unit records the st-cli version whose questionnaire last ran for it.
+  - (cli) `doctor` no longer installs the pinned collection — it is now fully offline and fast.
+bugfixes:
+  - (cli) `@openbao()`/`@vault()` markers typed into a provider prompt are now expanded instead of being written to `vars.yml` as literal text.
+removed_features:
+  - (cli) `doctor` no longer reports `st_*` vars that are absent from a role's `argument_specs.yml`. The check flagged deliberate hand-edits in a tree operators are explicitly invited to edit, so it produced noise rather than signal.

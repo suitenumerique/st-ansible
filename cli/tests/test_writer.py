@@ -4,16 +4,21 @@ from __future__ import annotations
 
 import stat
 
+import pytest
 from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.scalarstring import LiteralScalarString
 
-from st_cli.core import appmeta, paths, writer
+from st_cli import __version__
+from st_cli.core import appmeta, paths, tree, vault, writer
+from st_cli.core.errors import StCliError
 from st_cli.core.secretbackend import (
     AnsibleVaultBackend,
     HashiVaultBackend,
     SecretBackend,
     hashi_lookup_ref,
 )
+
+from helpers import seed_creds, seed_livekit_provider
 
 
 def test_drive_public_host_from_domain():
@@ -65,6 +70,38 @@ def test_drive_s3_component_vars_from_answers():
     assert data["st_drive_s3_host"] == "minio.example.org:9000"
     assert data["st_drive_s3_protocol"] == "https"
     assert data["st_drive_s3_bucket"] == "drive-media"
+
+
+def test_apply_component_vars_keeps_committed_value_when_answer_is_missing():
+    """A recovery gap must never downgrade a committed value to "{PLACEHOLDER}".
+
+    Regression guard for the merge behaviour of write_core: apply_component_vars
+    falls back to the literal template when an answer is missing, which was
+    harmless while every write started from an empty map. Now that a rebootstrap
+    merges into the committed file, that fallback would overwrite a perfectly
+    good st_drive_public_host with the literal string "{DOMAIN}" whenever
+    recovery failed to reproduce DOMAIN — silent config corruption on exactly
+    the path the rebootstrap flow adds.
+    """
+    meta = appmeta.load_app("drive")
+    data = CommentedMap()
+    data["st_drive_public_host"] = "drive.example.org"
+
+    writer.apply_component_vars(data, meta, meta.core(), {})  # no DOMAIN recovered
+
+    assert data["st_drive_public_host"] == "drive.example.org"
+
+
+def test_apply_component_vars_writes_literal_when_nothing_to_preserve():
+    """The literal fallback still applies for an ABSENT key — writing
+    "{DOMAIN}" for the operator to fix beats writing nothing at all. Only an
+    already-committed value is protected (see the test above)."""
+    meta = appmeta.load_app("drive")
+    data = CommentedMap()
+
+    writer.apply_component_vars(data, meta, meta.core(), {})
+
+    assert data["st_drive_public_host"] == "{DOMAIN}"
 
 
 def test_backend_run_migrations_gated_to_first_host():
@@ -206,3 +243,232 @@ def test_expand_var_markers_ansible_vault_is_noop():
 
     assert {k: str(v) for k, v in data.items()} == before
     assert isinstance(data["st_x_env"], LiteralScalarString)
+
+
+# --------------------------------------------------------------------------- write_core merge / rebootstrap
+
+
+def _write_meet_core(answers, backend=None, hosts=("10.0.0.5",)):
+    meta = appmeta.load_app("meet")
+    writer.write_core(
+        meta, answers, backend or AnsibleVaultBackend(), list(hosts), [], "prod"
+    )
+
+
+def test_write_core_fresh_unit_behaves_as_before(repo):
+    """No pre-existing vars.yml: a fresh write_core call must look exactly like
+    the pre-merge behaviour — component vars rendered, a single header comment,
+    no marker/merge artefacts anywhere."""
+    seed_creds(repo)
+    _write_meet_core({"DOMAIN": "meet.example.org"})
+
+    data = tree.load_vars("meet", "prod", "meet")
+    assert data["st_meet_public_host"] == "meet.example.org"
+    assert bool(data.ca.comment)  # header was stamped
+
+    text = paths.vars_path("meet", "prod", "meet").read_text(encoding="utf-8")
+    assert text.count("safe to edit by hand") == 1
+    assert f"# added by st-cli {__version__}" not in text  # nothing to merge yet
+
+
+def test_write_core_enter_through_rebootstrap_is_byte_identical(repo):
+    """The safety property the whole rebootstrap feature rests on: re-running
+    write_core with the SAME answers over an existing unit must reproduce the
+    exact same vars.yml, byte for byte."""
+    seed_creds(repo)
+    answers = {"DOMAIN": "meet.example.org", "DJANGO_ALLOWED_HOSTS": "meet.example.org"}
+    _write_meet_core(dict(answers))
+
+    path = paths.vars_path("meet", "prod", "meet")
+    before = path.read_bytes()
+
+    _write_meet_core(dict(answers), backend=AnsibleVaultBackend())
+
+    assert path.read_bytes() == before
+
+
+def test_write_core_merge_preserves_custom_var_comment_and_env_line(repo):
+    """A rebootstrap must never destroy an operator's hand-edits: a custom
+    st_* var (with its own comment) and a custom KEY=value line stuffed inside
+    an *_env blob must both survive an Enter-through rerun, and the header must
+    not be duplicated."""
+    seed_creds(repo)
+    answers = {"DOMAIN": "meet.example.org"}
+    _write_meet_core(dict(answers))
+
+    data = tree.load_vars("meet", "prod", "meet")
+    data["st_meet_something"] = "custom-value"
+    data.yaml_set_comment_before_after_key(
+        "st_meet_something", before="an operator's own comment"
+    )
+    blob = str(data["st_meet_backend_env"])
+    data["st_meet_backend_env"] = LiteralScalarString(blob + "MY_VAR=1\n")
+    tree.save_vars("meet", "prod", "meet", data)
+
+    _write_meet_core(dict(answers), backend=AnsibleVaultBackend())
+
+    text = paths.vars_path("meet", "prod", "meet").read_text(encoding="utf-8")
+    assert "st_meet_something: custom-value" in text
+    assert "# an operator's own comment" in text
+    assert "MY_VAR=1" in text
+    assert text.count("safe to edit by hand") == 1  # header not stacked
+
+
+def test_write_core_rebootstrap_updates_value_in_place_and_appends_new_key(repo):
+    """A changed answer must update the existing line IN PLACE (not duplicate
+    it); a key the renderer emits but the committed blob is missing (as if it
+    predates that key) must be appended once, under the marker."""
+    seed_creds(repo)
+    answers = {"DOMAIN": "meet.example.org", "DJANGO_ALLOWED_HOSTS": "meet.example.org"}
+    _write_meet_core(dict(answers))
+
+    # Simulate a blob that predates OIDC_RP_CLIENT_ID (an operator-committed
+    # file missing a key the current templates always render).
+    data = tree.load_vars("meet", "prod", "meet")
+    lines = [
+        ln
+        for ln in str(data["st_meet_backend_env"]).splitlines()
+        if not ln.startswith("OIDC_RP_CLIENT_ID=")
+    ]
+    data["st_meet_backend_env"] = LiteralScalarString("\n".join(lines) + "\n")
+    tree.save_vars("meet", "prod", "meet", data)
+
+    answers2 = dict(answers, DJANGO_ALLOWED_HOSTS="changed.example.org")
+    _write_meet_core(answers2, backend=AnsibleVaultBackend())
+
+    blob = str(tree.load_vars("meet", "prod", "meet")["st_meet_backend_env"])
+    assert blob.count("DJANGO_ALLOWED_HOSTS=") == 1
+    assert "DJANGO_ALLOWED_HOSTS=changed.example.org" in blob
+
+    marker = f"# added by st-cli {__version__}"
+    assert blob.count(marker) == 1
+    blob_lines = blob.splitlines()
+    marker_idx = blob_lines.index(marker)
+    assert any(ln.startswith("OIDC_RP_CLIENT_ID=") for ln in blob_lines[marker_idx:])
+
+
+def test_write_core_reports_wrote_vs_updated(repo, capfd):
+    """ui.success reflects whether the unit was fresh or already existed."""
+    seed_creds(repo)
+    _write_meet_core({"DOMAIN": "meet.example.org"})
+    assert "wrote vars.yml" in capfd.readouterr().out
+
+    _write_meet_core({"DOMAIN": "meet.example.org"}, backend=AnsibleVaultBackend())
+    assert "updated vars.yml" in capfd.readouterr().out
+
+
+# --------------------------------------------------------------------------- write_vault merge / rebootstrap
+
+
+def test_write_vault_noop_on_empty_buffer_leaves_existing_vault_untouched(repo):
+    """An empty component_secrets buffer must be a total no-op — even when
+    vault.yml already exists — so a rebootstrap that introduces no new secret
+    never touches the file (mtime + bytes both unchanged)."""
+    seed_livekit_provider(repo)
+    path = paths.vault_path("meet", "prod", "livekit")
+    before_bytes = path.read_bytes()
+    before_mtime = path.stat().st_mtime_ns
+
+    backend = _StubBackend()  # component_secrets("livekit") == {}
+    writer.write_vault("meet", "prod", "livekit", backend)
+
+    assert path.read_bytes() == before_bytes
+    assert path.stat().st_mtime_ns == before_mtime
+
+
+def test_write_vault_merges_new_secret_preserving_existing(repo):
+    """A rebootstrap's buffer holds only NEWLY prompted secrets; write_vault
+    must merge them over the existing decrypted mapping rather than replacing
+    it, so every previously-committed secret survives."""
+    seed_livekit_provider(repo)
+    path = paths.vault_path("meet", "prod", "livekit")
+
+    class _NewSecretBackend(SecretBackend):
+        def component_secrets(self, component):
+            return {"vault_meet_livekit_new_secret": "brand-new"}
+
+    writer.write_vault("meet", "prod", "livekit", _NewSecretBackend())
+
+    merged = writer.vault.decrypt_to_dict(path)
+    assert merged["st_meet_livekit_api_key"] == "real-token"
+    assert merged["st_meet_livekit_api_secret"] == "real-secret"
+    assert merged["st_meet_livekit_redis_password"] == "real-redis-pass"
+    assert merged["vault_meet_livekit_new_secret"] == "brand-new"
+
+
+def test_write_vault_noop_when_merge_changes_nothing(repo):
+    """Re-mirroring an UNCHANGED secret must not rewrite the file.
+
+    ansible-vault salts each encryption, so re-encrypting the same mapping
+    yields different ciphertext and the file would churn in `git diff` on every
+    rebootstrap. The reuse-a-livekit-provider path re-mirrors its api key/secret
+    into the meet core's vault on every run, so this is the common case.
+    """
+    seed_creds(repo)
+    backend = AnsibleVaultBackend()
+    backend.var_secret(CommentedMap(), "vault_api_key", "same-value", component="meet")
+    writer.write_vault("meet", "prod", "meet", backend)
+
+    path = paths.vault_path("meet", "prod", "meet")
+    before = path.read_bytes()
+
+    # a second run mirroring the identical value must leave the bytes alone
+    backend2 = AnsibleVaultBackend()
+    backend2.var_secret(CommentedMap(), "vault_api_key", "same-value", component="meet")
+    writer.write_vault("meet", "prod", "meet", backend2)
+
+    assert path.read_bytes() == before
+
+    # ...but a genuinely changed value still gets written
+    backend3 = AnsibleVaultBackend()
+    backend3.var_secret(CommentedMap(), "vault_api_key", "rotated", component="meet")
+    writer.write_vault("meet", "prod", "meet", backend3)
+
+    assert path.read_bytes() != before
+    assert vault.decrypt_to_dict(path)["vault_api_key"] == "rotated"
+
+
+def test_write_vault_undecryptable_raises_and_leaves_file_untouched(repo):
+    """A vault.yml that can't be decrypted (missing/wrong .vault-pass, corrupt
+    file) must raise StCliError BEFORE anything is written — no partial write,
+    no leftover .tmp, the original bytes untouched."""
+    seed_creds(repo)
+    path = paths.vault_path("meet", "prod", "livekit")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("not a real ansible-vault file\n", encoding="utf-8")
+    before = path.read_bytes()
+
+    class _Backend(SecretBackend):
+        def component_secrets(self, component):
+            return {"vault_x": "y"}
+
+    with pytest.raises(StCliError):
+        writer.write_vault("meet", "prod", "livekit", _Backend())
+
+    assert path.read_bytes() == before
+    assert not path.with_name(path.name + ".tmp").exists()
+
+
+# --------------------------------------------------------------------------- ensure_vault_readable
+
+
+def test_ensure_vault_readable_noop_when_absent(repo):
+    seed_creds(repo)
+    writer.ensure_vault_readable(
+        "meet", "prod", ["meet", "livekit"]
+    )  # nothing to check
+
+
+def test_ensure_vault_readable_passes_for_good_vault(repo):
+    seed_livekit_provider(repo)
+    writer.ensure_vault_readable("meet", "prod", ["livekit"])  # must not raise
+
+
+def test_ensure_vault_readable_raises_for_bad_vault(repo):
+    seed_creds(repo)
+    path = paths.vault_path("meet", "prod", "livekit")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("garbage\n", encoding="utf-8")
+
+    with pytest.raises(StCliError):
+        writer.ensure_vault_readable("meet", "prod", ["livekit"])

@@ -76,6 +76,47 @@ def test_deploy_unknown_host_alias_raises(repo, mocker):
         )
 
 
+def test_deploy_aborts_when_rebootstrap_pending(repo, mocker):
+    """deploy hard-gates on a pending rebootstrap: no override flag, exit 1,
+    and the error names the exact `st-cli bootstrap` command to run."""
+    seed_meet_unit(repo)
+    mocker.patch.object(generate, "generate_all", lambda *a, **k: None)
+    mocker.patch.object(runner, "galaxy_install", lambda *a, **k: None)
+    mocker.patch.object(
+        drift,
+        "check_app",
+        lambda *a, **k: [
+            "meet/prod/meet: rebootstrap needed (0.3.0 — reason). "
+            "Run `st-cli bootstrap meet prod`."
+        ],
+    )
+    play = mocker.patch.object(runner, "play", return_value=0)
+
+    result = CliRunner().invoke(main_mod.app, ["deploy", "meet", "prod"])
+
+    assert result.exit_code == 1
+    # rich wraps long lines, so check content rather than one exact substring
+    assert "Rebootstrap required before deploying" in result.output
+    assert "st-cli bootstrap" in result.output
+    assert "meet" in result.output and "prod" in result.output
+    play.assert_not_called()
+
+
+def test_deploy_runs_normally_when_no_rebootstrap_pending(repo, mocker):
+    """No pending rebootstrap (check_app returns no warnings) → deploy proceeds
+    as normal."""
+    seed_meet_unit(repo)
+    mocker.patch.object(generate, "generate_all", lambda *a, **k: None)
+    mocker.patch.object(runner, "galaxy_install", lambda *a, **k: None)
+    mocker.patch.object(drift, "check_app", lambda *a, **k: [])
+    play = mocker.patch.object(runner, "play", return_value=0)
+
+    result = CliRunner().invoke(main_mod.app, ["deploy", "meet", "prod"])
+
+    assert result.exit_code == 0
+    play.assert_called_once()
+
+
 def test_deploy_two_components_runs_play_for_each(repo, mocker):
     """`st-cli deploy APP ENV -c drive -c collabora` (repeatable -c) is collected
     into a list by Typer and runs runner.play once per requested component, in

@@ -18,8 +18,9 @@ import importlib.metadata
 import shutil
 import subprocess
 
-from ..core import manifest, paths, ui
+from ..core import manifest, paths, rebootstrap, ui
 from ..core.errors import StCliError
+from ..core.models import StCliManifest
 from .. import __version__ as CLI_VERSION
 
 
@@ -73,6 +74,33 @@ def _clean_scaffolding() -> None:
             ui.info(f"Cleaned {d}.")
 
 
+def _report_pending_rebootstraps(m: StCliManifest) -> None:
+    """Best-effort: warn which units now need a rebootstrap after this upgrade.
+
+    A new st-cli version can bundle newly-added rebootstrap flags (see
+    ``core/rebootstrap.py``) that didn't exist under the old pin — re-checking
+    right after realigning the pin means the operator learns immediately,
+    instead of only at their next ``deploy`` (which hard-gates on this) or a
+    later standalone ``doctor`` run. Purely informational: any failure here
+    (a corrupt flags file, whatever) is swallowed so it can never turn an
+    otherwise successful upgrade into a failure.
+    """
+    try:
+        needs = rebootstrap.needed(m)
+        if not needs:
+            return
+        apps = ", ".join(sorted({n.app for n in needs}))
+        ui.warn(
+            f"Rebootstrap needed for: {apps}. Run `st-cli bootstrap <app> <env>` "
+            "for each before your next deploy (deploy hard-gates on this)."
+        )
+        for n in needs:
+            link = f" ({n.link})" if n.link else ""
+            ui.info(f"  {n.app}/{n.env}/{n.component}: {n.version} — {n.reason}{link}")
+    except Exception:
+        ui.warn("Could not check for pending rebootstraps after upgrade.")
+
+
 def upgrade() -> None:
     """Upgrade the CLI, realign the .st-cli.yml pin, and clean the scaffolding.
 
@@ -107,8 +135,9 @@ def upgrade() -> None:
     m.cli_version = installed
     manifest.save_manifest(m)
     ui.success(f"Realigned .st-cli.yml pin to {installed}.")
+    _report_pending_rebootstraps(m)
     _clean_scaffolding()
     ui.success(
-        "upgrade complete — run `st-cli doctor` to check for drift against "
-        "the new collection, then `st-cli deploy <app> <env>` to roll the new tags."
+        "upgrade complete — run `st-cli doctor` to check for pending "
+        "rebootstraps, then `st-cli deploy <app> <env>` to roll the new tags."
     )

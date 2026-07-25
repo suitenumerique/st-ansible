@@ -149,6 +149,53 @@ def test_load_manifest_malformed_missing_secret_key_raises_stclierror(repo):
         manifest.load_manifest()
 
 
+# --------------------------------------------------------------------------- bootstrapped_with
+
+
+def test_bootstrapped_with_roundtrips(repo):
+    """A non-empty bootstrapped_with round-trips through save/load."""
+    seed_creds(repo)
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.20",
+            "0.0.20",
+            [UnitState("meet", "prod", "meet", "managed", "0.0.20")],
+        )
+    )
+    loaded = manifest.load_manifest()
+    assert loaded.units[0].bootstrapped_with == "0.0.20"
+    assert "bootstrapped_with: 0.0.20" in (repo / ".st-cli.yml").read_text()
+
+
+def test_bootstrapped_with_absent_key_loads_as_empty_string(repo):
+    """A hand-written manifest with no bootstrapped_with key loads as ""."""
+    seed_creds(repo)
+    (repo / ".st-cli.yml").write_text(
+        "versions:\n"
+        "  collection: '0.0.20'\n"
+        "  cli: '0.0.20'\n"
+        "units:\n"
+        "  - app: meet\n"
+        "    env: prod\n"
+        "    component: meet\n"
+        "    mode: managed\n"
+    )
+    loaded = manifest.load_manifest()
+    assert loaded.units[0].bootstrapped_with == ""
+
+
+def test_bootstrapped_with_empty_is_omitted_on_save(repo):
+    """An empty bootstrapped_with is left out of the saved unit (clean diff)."""
+    seed_creds(repo)
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.20", "0.0.20", [UnitState("meet", "prod", "meet", "managed")]
+        )
+    )
+    raw = (repo / ".st-cli.yml").read_text()
+    assert "bootstrapped_with" not in raw
+
+
 # --------------------------------------------------------------------------- ssh_user resolution
 
 

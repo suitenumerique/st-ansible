@@ -41,6 +41,13 @@ class UnitState:
     mode: str  # "managed" (deployed by us) | "external" (runs elsewhere)
     # NB: hosts are NOT stored here — the <app>/<env>/<component>/hosts ini file
     # is the single source of truth (read via tree.read_hosts()).
+    # The st-cli version whose bootstrap questionnaire last ran for this unit.
+    # Stamped by `bootstrap` itself on every run (including a rebootstrap) —
+    # it records an action st-cli performed, never a claim that an operator
+    # did some matching manual work. Empty ("") means the unit predates this
+    # field (bootstrapped before rebootstrap tracking existed); see
+    # `core/rebootstrap.py` for how that default is treated.
+    bootstrapped_with: str = ""
 
 
 @dataclass
@@ -65,3 +72,21 @@ class StCliManifest:
     cli_version: str
     units: list[UnitState] = field(default_factory=list)
     secrets: list[SecretConfig] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class RebootstrapNeed:
+    """One outstanding rebootstrap flag matched against a bootstrapped unit.
+
+    Produced by ``core/rebootstrap.needed()`` (one flag x one unit, when the
+    flag's version outranks the unit's ``bootstrapped_with`` stamp). Pure data
+    — no I/O — hence its home here alongside the other manifest-shaped holders
+    rather than in ``core/rebootstrap.py``, which owns the matching logic.
+    """
+
+    app: str
+    env: str
+    component: str
+    version: str  # the flagged release version, e.g. "0.3.0"
+    reason: str
+    link: str
