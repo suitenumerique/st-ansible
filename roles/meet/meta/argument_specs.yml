@@ -237,7 +237,7 @@ argument_specs:
         type: "str"
         description: "Tag of the cadvisor docker image to deploy."
         # renovate: datasource=docker depName=ghcr.io/google/cadvisor
-        default: "v0.60.3"
+        default: "v0.60.5"
       st_meet_cadvisor_enabled:
         type: "bool"
         description: "Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server."
