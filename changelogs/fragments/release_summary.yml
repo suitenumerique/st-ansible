@@ -1,0 +1,4 @@
+# Summary of the whole release, shown at the top of the changelog.
+release_summary: |
+  Adds support for meet recordings, fix openbao markers on st-cli bootstrap
+  and multiple versions upgrades.
