@@ -80,6 +80,20 @@ def seed_livekit_provider(repo: Path) -> None:
     vault.encrypt_file(vp)
 
 
+class _AcceptDefault:
+    """Sentinel script answer: "press Enter" on whatever ``default=`` the
+    prompt call was given (a native editable pre-fill, per
+    ``core/prompts.py``'s ``_text_question``/``_ask_select`` docstrings). Used
+    by rebootstrap tests to script an Enter-through run without hardcoding the
+    recovered value at every single prompt."""
+
+    def __repr__(self) -> str:
+        return "ACCEPT_DEFAULT"
+
+
+ACCEPT_DEFAULT = _AcceptDefault()
+
+
 class FakeQuestion:
     """A questionary Question stand-in returning a canned answer from .ask()."""
 
@@ -113,7 +127,10 @@ class ScriptedQuestionary:
         )
 
     def text(self, prompt, **kwargs):
-        return FakeQuestion(self._consume("text", prompt))
+        ans = self._consume("text", prompt)
+        if ans is ACCEPT_DEFAULT:
+            return FakeQuestion(kwargs.get("default", ""))
+        return FakeQuestion(ans)
 
     def password(self, prompt, **kwargs):
         return FakeQuestion(self._consume("password", prompt))
@@ -123,11 +140,17 @@ class ScriptedQuestionary:
         # a script, so every full/core/workers-run test needn't script it.
         if "ready" in prompt.lower():
             return FakeQuestion(True)
-        return FakeQuestion(self._consume("confirm", prompt))
+        ans = self._consume("confirm", prompt)
+        if ans is ACCEPT_DEFAULT:
+            return FakeQuestion(kwargs.get("default", False))
+        return FakeQuestion(ans)
 
     def select(self, message, choices, **kwargs):
         self.select_calls.append((message, list(choices)))
-        return FakeQuestion(self._consume("select", message))
+        ans = self._consume("select", message)
+        if ans is ACCEPT_DEFAULT:
+            return FakeQuestion(kwargs.get("default"))
+        return FakeQuestion(ans)
 
 
 def script_questionary(monkeypatch, scripts) -> ScriptedQuestionary:

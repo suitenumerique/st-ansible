@@ -1,0 +1,15 @@
+# Releases that REQUIRE operators to rebootstrap (`st-cli bootstrap <app> <env>`).
+#
+# Append-only. Never delete an entry: one that no longer applies is simply
+# outranked by every unit stamp, so it costs nothing to keep, while removing it
+# would silently skip the step for a repo that has not caught up yet.
+#
+# Only add an entry when operators MUST act. Adding an env var to a template or
+# a var to apps/<app>.yml needs no entry — a rebootstrap picks those up anyway.
+#
+# Schema (see core/rebootstrap.py):
+#   - version: "0.3.0"                # the release that introduced the need
+#     apps: [meet, drive]             # a list of app names, or the string: all
+#     reason: "meet 1.5 adds mandatory recording env vars"
+#     link: "https://github.com/suitenumerique/st-ansible/blob/main/CHANGELOG.md#v030"
+[]

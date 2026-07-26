@@ -1,86 +1,52 @@
-"""Materialize the pinned collection, then warn-only drift check.
+"""Preflight checks run before a deploy, and the standalone `doctor` sweep.
 
-Never touches the committed config tree, but DOES populate the trashable
-``.st-cli/`` scaffolding and install the collection so the drift check runs
-against the same collection the upcoming play will use.
+Historically this module also materialized the pinned collection to diff
+committed ``st_*`` vars against each role's ``meta/argument_specs.yml``. That
+check is gone: it flagged hand-edited ``vars.yml`` keys, which is backwards
+for a config tree we explicitly tell operators to edit by hand (see
+``core/writer.py`` / the bootstrap docs). ``check_app`` is now the
+**rebootstrap-status report**: it surfaces which bootstrapped units have an
+outstanding rebootstrap flag (``core/rebootstrap.py``) so operators learn
+*before* a deploy that a release requires them to replay the bootstrap
+questionnaire.
+
+``preflight`` (single pair, used by ``deploy``) still materializes the pinned
+collection first — a deploy needs it installed regardless of drift status.
+``preflight_all`` (sweep, used by ``doctor``) no longer touches the collection
+or the network at all: with the argspec check gone, there is nothing left
+that needs it, so `doctor` is now fast and fully offline.
+
+Neither function ever touches the committed config tree.
 """
 
 from __future__ import annotations
 
-import difflib
-from pathlib import Path
-
-from ruamel.yaml import YAML
-
-from . import appmeta, generate, manifest, paths, runner, tree, ui
+from . import generate, manifest, rebootstrap, runner, ui
 from .errors import StCliError
-
-_COLLECTION_SUBPATH = Path("ansible_collections/suitenumerique/st/roles")
-
-
-def _role_name(role_fqcn: str) -> str:
-    return role_fqcn.split(".")[-1]
-
-
-def _argument_specs_path(role_fqcn: str) -> Path | None:
-    role = _role_name(role_fqcn)
-    candidate = (
-        paths.collections_dir()
-        / _COLLECTION_SUBPATH
-        / role
-        / "meta"
-        / "argument_specs.yml"
-    )
-    if candidate.is_file():
-        return candidate
-    # dev fallback: the collection repo this CLI ships inside
-    dev = paths.repo_root().parent / "roles" / role / "meta" / "argument_specs.yml"
-    return dev if dev.is_file() else None
-
-
-def argument_spec_options(role: str) -> set[str]:
-    """Return the set of valid option names for a role (union of all entrypoints)."""
-    path = _argument_specs_path(role)
-    if path is None:
-        return set()
-    data = YAML(typ="safe").load(path) or {}
-    specs = data.get("argument_specs", {}) or {}
-    options: set[str] = set()
-    for entry in specs.values():
-        options.update((entry.get("options", {}) or {}).keys())
-    return options
-
-
-def check_unit(app: str, env: str, component: str) -> list[str]:
-    """Return human-readable warnings for one unit's vars.yml (never writes)."""
-    warnings: list[str] = []
-    comp = appmeta.load_app(app).component(component)
-    options = argument_spec_options(comp.role)
-    if not options:
-        warnings.append(
-            f"{app}/{env}/{component}: could not load argument_specs for role "
-            f"{comp.role} (collection installed?); skipping drift check."
-        )
-        return warnings
-
-    data = tree.load_vars(app, env, component)
-    for key in data:
-        if not str(key).startswith("st_"):
-            continue
-        if key not in options:
-            near = difflib.get_close_matches(str(key), options, n=1)
-            hint = f" — did you mean '{near[0]}'?" if near else ""
-            warnings.append(f"{app}/{env}/{component}: unknown var '{key}'{hint}")
-    return warnings
+from .models import RebootstrapNeed
 
 
 def check_app(app: str, env: str, components: list[str] | None = None) -> list[str]:
-    """Check all (or a subset of) managed units of an app/env.
+    """Return human-readable rebootstrap-status warnings for an app/env.
 
-    External units are skipped (their vars live elsewhere, so there is nothing
-    committed to drift-check). If EVERY matched unit is external, return a single
-    warning saying so rather than an empty list — an empty result would read as a
-    clean check even though nothing was actually evaluated.
+    Checks every (optionally ``components``-narrowed) unit of ``(app, env)``
+    against ``rebootstrap.needed()`` and reports the ones with an outstanding
+    flag. External units are already skipped inside ``rebootstrap.needed()``
+    (they have no local tree for bootstrap to rewrite); if EVERY matched unit
+    is external, this returns a single explicit warning rather than an empty
+    list — an empty result would read as "clean" even though nothing was
+    actually evaluated.
+
+    When several flags apply to the same unit, only the newest is reported:
+    an operator only needs to run the rebootstrap once, and the
+    freshly-replayed questionnaire naturally re-asks everything older flags
+    would have too, so listing every historical flag would just be noise.
+
+    Each warning names the unit (``app/env/component``), the flagged version,
+    the reason, the changelog/PR link when the flag carries one, and the
+    exact command to run (a plain, un-narrowed ``st-cli bootstrap <app>
+    <env>`` — rebootstrap replays the whole questionnaire for the pair, not
+    just one component).
     """
     m = manifest.load_manifest()
     units = manifest.units_for(m, app, env, components)
@@ -89,21 +55,41 @@ def check_app(app: str, env: str, components: list[str] | None = None) -> list[s
     managed = [u for u in units if u.mode != "external"]
     if not managed:
         scope = f"{app}/{env}" + (f"/{','.join(components)}" if components else "")
-        return [f"{scope}: all units are external — no committed vars to drift-check."]
+        return [f"{scope}: all units are external — nothing to rebootstrap-check."]
+
+    wanted = {u.component for u in managed}
+    newest: dict[str, RebootstrapNeed] = {}
+    for n in rebootstrap.needed(m, app, env):
+        if n.component not in wanted:
+            continue
+        cur = newest.get(n.component)
+        if cur is None or rebootstrap.parse_version(
+            n.version
+        ) > rebootstrap.parse_version(cur.version):
+            newest[n.component] = n
+
     out: list[str] = []
-    for u in managed:
-        out.extend(check_unit(app, env, u.component))
+    for comp in sorted(newest):
+        n = newest[comp]
+        msg = (
+            f"{app}/{env}/{comp}: rebootstrap needed ({n.version} — {n.reason}). "
+            f"Run `st-cli bootstrap {app} {env}`."
+        )
+        if n.link:
+            msg += f" See {n.link}."
+        out.append(msg)
     return out
 
 
 def preflight(app: str, env: str, components: list[str] | None = None) -> list[str]:
-    """Materialize the pinned collection, then check vars drift.
+    """Materialize the pinned collection, then report rebootstrap status.
 
-    Shared preflight used by both ``doctor`` and ``deploy``: render the
-    trashable scaffolding (``generate.generate_all``) and install the pinned
-    collection (``runner.galaxy_install``) so the drift check runs against the
-    same collection the upcoming play will use. Returns the ``check_app``
-    warnings (warn-only / non-blocking).
+    Shared preflight used by ``deploy``: render the trashable scaffolding
+    (``generate.generate_all``) and install the pinned collection
+    (``runner.galaxy_install``) — a deploy needs the collection materialized
+    regardless of drift status — then return the ``check_app`` rebootstrap
+    warnings (warn-only / non-blocking; ``deploy`` itself hard-gates on a
+    pending rebootstrap separately, see ``cmd/deploy.py``).
     """
     generate.generate_all(app, env)
     runner.galaxy_install()
@@ -113,23 +99,17 @@ def preflight(app: str, env: str, components: list[str] | None = None) -> list[s
 def preflight_all(
     app: str | None = None, env: str | None = None, components: list[str] | None = None
 ) -> list[str]:
-    """Materialize + drift-check every managed ``(app, env)`` pair (warn-only).
+    """Rebootstrap-status sweep across every managed ``(app, env)`` pair (warn-only).
 
-    Sweeps the whole ``.st-cli.yml`` when no args are given (external units are
-    skipped), narrows to one app when only APP is given, or checks a single
-    ``(app, env)`` unit when both are given. ``--component`` requires both APP
-    and ENV (a component is meaningless without its unit).
+    Sweeps the whole ``.st-cli.yml`` when no args are given (external units
+    are skipped), narrows to one app when only APP is given, or checks a
+    single ``(app, env)`` unit when both are given. ``--component`` requires
+    both APP and ENV (a component is meaningless without its unit).
 
-    The collection is installed ONCE per sweep: the pin
-    (``m.collection_version``) is a single value installed into the shared
-    ``.st-cli/collections/`` dir, and the drift check (``check_app``/
-    ``check_unit``) only reads the installed collection's
-    ``argument_specs.yml`` + the committed ``vars.yml`` (NOT the generated
-    scaffolding, NOT ``community.hashi_vault``), so per-pair reinstalls are
-    unnecessary. ``generate_all`` still runs per pair (cheap, local; also
-    produces the requirements file the one install reads and validates each
-    pair has managed units). The per-pair / hashi_vault reasoning only applies
-    to ``deploy``, which uses the single-pair :func:`preflight`.
+    Unlike ``preflight``, this never touches the collection or the network:
+    now that the argspec drift check is gone, ``check_app`` only reads
+    ``.st-cli.yml`` and the rebootstrap flag declaration, both local — so
+    `doctor` stays fast and fully offline.
     """
     if components and not (app and env):
         raise StCliError("--component requires both APP and ENV.")
@@ -150,10 +130,7 @@ def preflight_all(
         pairs = sorted(managed)
 
     warnings: list[str] = []
-    for i, (a, e) in enumerate(pairs):
+    for a, e in pairs:
         ui.info(f"Checking {a}/{e} …")
-        generate.generate_all(a, e)
-        if i == 0:
-            runner.galaxy_install()
         warnings += check_app(a, e, components if (app and env) else None)
     return warnings

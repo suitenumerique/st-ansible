@@ -23,6 +23,13 @@ def run(
     to ansible as ``--limit <alias>`` (default: all hosts, one at a time via
     ``serial: 1``). With ``components`` set, a missing host raises; without it, a
     component that lacks the host is skipped.
+
+    Hard-gates on a pending rebootstrap: if any of the components being
+    deployed still needs the bootstrap questionnaire replayed (see
+    ``core/rebootstrap.py``), this raises instead of deploying — there is no
+    override flag, deliberately. Because the rebootstrap questionnaire is
+    interactive, a non-interactive/CI deploy must have it run beforehand
+    (e.g. as a separate, manual step).
     """
     _, units = manifest.managed_units(app_name, env, components)
     meta = appmeta.load_app(app_name)
@@ -34,8 +41,21 @@ def run(
         )
     ]
     sshuser.ensure_ssh_user(hosts)
-    for w in drift.preflight(app_name, env, components):
-        ui.warn(w)
+    warnings = drift.preflight(app_name, env, components)
+
+    # Hard gate: managed_units above already guarantees `units` is non-empty and
+    # non-external, so every check_app warning here is a rebootstrap-needed
+    # message (never the "all units are external" one) — scoped to exactly the
+    # components this deploy was asked to act on. No override flag: deliberate.
+    # The warnings are NOT also emitted via ui.warn — they are reproduced
+    # verbatim in the error below, and printing both makes the operator read the
+    # same paragraph twice and hunt for the difference between them.
+    if warnings:
+        raise StCliError(
+            "Rebootstrap required before deploying:\n"
+            + "\n".join(f"  - {w}" for w in warnings)
+        )
+
     tags = ["deploy"] if deploy_only else None
     prefix = "(dry-run) " if dry_run else ("(deploy-only) " if deploy_only else "")
     deployed_any = False
