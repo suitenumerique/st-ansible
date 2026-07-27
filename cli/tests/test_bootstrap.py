@@ -789,7 +789,7 @@ def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
     OIDC client secret, the S3 secret key), encrypts them into vault.yml, writes
     the hosts, and registers the projects unit."""
     seed_creds(repo)
-    script_questionary(
+    sq = script_questionary(
         monkeypatch,
         [
             ("select", "Secret backend:", "ansible-vault"),
@@ -816,6 +816,7 @@ def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
 
     bootstrap.bootstrap("projects", "prod")
 
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
     assert paths.vars_path("projects", "prod", "projects").exists()
     assert (
         tree.load_vars("projects", "prod", "projects")["st_projects_cadvisor_enabled"]
@@ -1711,7 +1712,7 @@ def test_bootstrap_projects_oidc_provider_switch_proconnect(repo, monkeypatch):
     derives a single OIDC_ISSUER: picking a ProConnect environment needs no URL
     prompt at all (the issuer is bundled)."""
     seed_creds(repo)
-    script_questionary(
+    sq = script_questionary(
         monkeypatch,
         [
             ("select", "Secret backend:", "ansible-vault"),
@@ -1730,6 +1731,7 @@ def test_bootstrap_projects_oidc_provider_switch_proconnect(repo, monkeypatch):
 
     bootstrap.bootstrap("projects", "prod")
 
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
     body = (repo / "projects/prod/projects/vars.yml").read_text()
     # bundled ProConnect integ issuer, derived without asking for any URL
     assert "OIDC_ISSUER=https://fca.integ01.dev-agentconnect.fr/api/v2" in body, body
@@ -1752,7 +1754,7 @@ def test_bootstrap_projects_custom_oidc_org_mode_and_smtp(repo, monkeypatch):
     (routing SMTP_PASSWORD through the vault). S3 is declined here (local
     storage), so no S3_* keys are emitted."""
     seed_creds(repo)
-    script_questionary(
+    sq = script_questionary(
         monkeypatch,
         [
             ("select", "Secret backend:", "ansible-vault"),
@@ -1779,6 +1781,7 @@ def test_bootstrap_projects_custom_oidc_org_mode_and_smtp(repo, monkeypatch):
 
     bootstrap.bootstrap("projects", "prod")
 
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
     body = (repo / "projects/prod/projects/vars.yml").read_text()
     # custom issuer: typed verbatim, trailing slash stripped
     assert "OIDC_ISSUER=https://sso.example.org/realms/lst\n" in body

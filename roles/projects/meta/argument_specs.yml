@@ -71,6 +71,7 @@ argument_specs:
       st_projects_cadvisor_tag:
         type: "str"
         description: "Tag of the cadvisor docker image to deploy."
+        # renovate: datasource=docker depName=ghcr.io/google/cadvisor
         default: "v0.60.3"
       st_projects_cadvisor_port:
         type: "str"
