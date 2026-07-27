@@ -825,6 +825,11 @@ def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
     assert "BASE_URL=https://projects.example.org" in body
     assert "OIDC_ISSUER=https://idp.example.org/realms/st" in body
     assert "OIDC_ENFORCED=true" in body  # SSO only, no local accounts
+    # keycloak keeps the generic OIDC defaults — the ProConnect-only overrides
+    # (signed userinfo, per-claim scopes) must NOT leak into a keycloak setup.
+    assert "OIDC_SCOPES=openid email profile" in body
+    assert "OIDC_FULLNAME_ATTRIBUTES=name" in body
+    assert "OIDC_USERINFO_SIGNED_RESPONSE_ALG" not in body
     assert "S3_ENDPOINT=https://s3.fr-par.scw.cloud" in body
     assert "SECRET_KEY={{ vault_secret_key }}" in body
     assert "DATABASE_URL={{ vault_database_url }}" in body
@@ -1732,6 +1737,12 @@ def test_bootstrap_projects_oidc_provider_switch_proconnect(repo, monkeypatch):
     assert "OIDC_PROVIDER" not in body
     # S3 declined ⇒ no S3 block at all (uploads fall back to the local dirs)
     assert "S3_" not in body
+    # ProConnect overrides the generic OIDC defaults: it returns the userinfo as a
+    # signed JWT (RS256) and exposes given_name/usual_name/email/siret via per-claim
+    # scopes (no `profile` scope, no `name` claim). Without these, login loops back.
+    assert "OIDC_SCOPES=openid given_name usual_name email siret" in body
+    assert "OIDC_USERINFO_SIGNED_RESPONSE_ALG=RS256" in body
+    assert "OIDC_FULLNAME_ATTRIBUTES=given_name,usual_name" in body
 
 
 def test_bootstrap_projects_custom_oidc_org_mode_and_smtp(repo, monkeypatch):

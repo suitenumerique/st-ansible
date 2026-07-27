@@ -51,17 +51,11 @@ argument_specs:
       st_projects_directories:
         type: "list"
         elements: "dict"
-        description: "Persistent host directories bind-mounted into the projects container for user uploads (avatars, project backgrounds, attachments), owned by the container's `node` user (uid 1000). Each entry's `container_path` is the mount target inside the container; the compose template loops over this list, so overriding it changes both the created directories and the bind mounts. Empty it when every upload target is served from S3 (no upload mounts are then emitted)."
+        description: "Persistent host directories created for the projects container's user uploads (avatars, project backgrounds, attachments), owned by the container's `node` user (uid 1000) so it can write to the bind-mounted volumes. The container mount targets are fixed by the image (its VOLUME directives) and hardcoded in the compose template — not configurable here."
         default:
-          - name: user-avatars
-            container_uid: 1000
-            container_path: /app/public/user-avatars
-          - name: project-background-images
-            container_uid: 1000
-            container_path: /app/public/project-background-images
-          - name: attachments
-            container_uid: 1000
-            container_path: /app/private/attachments
+          - {name: user-avatars, container_uid: 1000}
+          - {name: project-background-images, container_uid: 1000}
+          - {name: attachments, container_uid: 1000}
       st_projects_rollback_enabled:
         type: "bool"
         description: "Whether to trigger the rollback tasks if the projects deployment fails. Rollback is config-level only (it restores the previous compose/env directory, never the database). Projects runs its DB migrations unconditionally on every container start, so rolling back across a schema-changing upgrade leaves the old image running against an already-migrated database — back up the database before such an upgrade."

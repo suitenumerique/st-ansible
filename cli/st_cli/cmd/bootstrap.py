@@ -214,6 +214,15 @@ def _ask_projects_oidc(answers: dict, backend: SecretBackend, component: str) ->
             placeholder="https://idp.example.org/realms/main",
         )
     answers["OIDC_ISSUER"] = envrender.oidc_issuer(provider, base_url, realm)
+    if provider.startswith("proconnect"):
+        # ProConnect specifics (override the generic keycloak-ish defaults set in
+        # _ask_projects): it returns the userinfo as a signed JWT (RS256, not JSON),
+        # and exposes given_name/usual_name/email/siret via per-claim scopes — there
+        # is no `profile` scope nor a `name` claim. Without these, login loops back
+        # to the landing page (userinfo parse error, then the fullname check fails).
+        answers["OIDC_SCOPES"] = "openid given_name usual_name email siret"
+        answers["OIDC_USERINFO_SIGNED_RESPONSE_ALG"] = "RS256"
+        answers["OIDC_FULLNAME_ATTRIBUTES"] = "given_name,usual_name"
     answers["OIDC_CLIENT_ID"] = _ask("OIDC_CLIENT_ID")
     value = _password("OIDC_CLIENT_SECRET") if backend.prompts_values() else None
     backend.env_secret(answers, "OIDC_CLIENT_SECRET", component=component, value=value)
