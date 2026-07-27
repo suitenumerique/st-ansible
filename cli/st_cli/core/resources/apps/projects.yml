@@ -2,7 +2,7 @@
 app: projects
 env_docs_url: "https://github.com/suitenumerique/projects/blob/main/docker-compose.yml"
 arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/05-projects"
-requires: [postgresql, s3, oidc]
+requires: [postgresql, oidc]
 components:
   - key: projects
     role: suitenumerique.st.projects

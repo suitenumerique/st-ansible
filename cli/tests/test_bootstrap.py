@@ -1689,8 +1689,10 @@ def test_requirements_checklist_is_app_aware(capsys, monkeypatch):
     monkeypatch.setattr(bootstrap, "_confirm_ready", lambda *a, **k: None)
     bootstrap._print_bootstrap_intro(appmeta.load_app("projects"))
     out = capsys.readouterr().out
-    assert "PostgreSQL" in out and "S3" in out and "Identity provider" in out
-    assert "Redis" not in out
+    # projects requires only PostgreSQL + an IdP; S3 is opt-in (local storage by
+    # default) so it must NOT be listed as required prep, and it uses no Redis.
+    assert "PostgreSQL" in out and "Identity provider" in out
+    assert "Redis" not in out and "S3" not in out
 
     bootstrap._print_bootstrap_intro(appmeta.load_app("keycloak"))
     out = capsys.readouterr().out

@@ -195,8 +195,9 @@ def test_component_unknown_raises_stclierror():
 def test_requires_declares_external_infra_per_app():
     """Apps declare the external infra they need (`requires`), so the bootstrap
     Requirements checklist only lists what's relevant. projects and keycloak are
-    NOT Django apps and use no Redis/broker; keycloak is itself the IdP."""
-    assert appmeta.load_app("projects").requires == ["postgresql", "s3", "oidc"]
+    NOT Django apps and use no Redis/broker; keycloak is itself the IdP. projects
+    stores uploads locally by default (S3 is opt-in, so not a required prep item)."""
+    assert appmeta.load_app("projects").requires == ["postgresql", "oidc"]
     assert appmeta.load_app("keycloak").requires == ["postgresql"]
     for app in ("drive", "meet", "messages"):
         assert appmeta.load_app(app).requires == [

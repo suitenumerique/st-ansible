@@ -217,4 +217,10 @@ def write_core(
     if worker and worker.implemented:
         groups[worker.app_name] = worker_hosts
     tree.write_groups(app, env, core.key, groups)
-    ui.success(f"{core.key}: wrote vars.yml + vault.yml + hosts.")
+    # hashi_vault mode buffers no secrets and writes no vault.yml, so don't claim it.
+    files = (
+        "vars.yml + vault.yml + hosts"
+        if backend.component_secrets(core.key)
+        else "vars.yml + hosts"
+    )
+    ui.success(f"{core.key}: wrote {files}.")

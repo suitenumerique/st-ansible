@@ -882,7 +882,7 @@ def _bundle_egress(
     writer.apply_component_vars(ev, meta, meta.component("egress"), answers)
     ev[writer.cadvisor_var(meta.app)] = _ask_cadvisor("egress")
     ev.yaml_set_start_comment(
-        writer.vars_header(meta.app, meta, meta.component("egress"))
+        writer.vars_header(meta.app, meta, meta.component("egress"), backend)
     )
     tree.save_vars(meta.app, env, "egress", ev)
     writer.write_vault(meta.app, env, "egress", backend)
@@ -935,7 +935,7 @@ def _reuse_egress(meta, answers, backend, env) -> None:
     writer.apply_component_vars(ev, meta, meta.component("egress"), answers)
     ev[writer.cadvisor_var(meta.app)] = _ask_cadvisor("egress")
     ev.yaml_set_start_comment(
-        writer.vars_header(meta.app, meta, meta.component("egress"))
+        writer.vars_header(meta.app, meta, meta.component("egress"), backend)
     )
     tree.save_vars(meta.app, env, "egress", ev)
     writer.write_vault(meta.app, env, "egress", backend)
