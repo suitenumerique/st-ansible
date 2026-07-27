@@ -1,0 +1,84 @@
+---
+argument_specs:
+  main:
+    short_description: "Installs and configures the projects application from La Suite Territoriale on Debian systems."
+    options:
+      st_projects_uid:
+        type: "int"
+        description: "UID of the `projects` user, used for the podman role."
+        default: 1105
+      st_projects_gid:
+        type: "int"
+        description: "GID of the `projects` group, used for the podman role."
+        default: "{{ st_projects_uid }}"
+      st_projects_registries:
+        type: "list"
+        elements: "dict"
+        description: "Optional private container registries to login the `projects` user onto."
+      st_projects_enabled:
+        type: "bool"
+        description: "Triggers the installation of projects."
+        default: false
+      st_projects_dir:
+        type: "str"
+        description: "Remote path to the base directory for projects app."
+        default: "/opt/projects/projects"
+      st_projects_port:
+        type: "str"
+        description: "The host published port for projects (mapped to the container's 1337)."
+        default: "50500"
+      st_projects_image:
+        type: "str"
+        description: "Image repository for projects."
+        default: "docker.io/lasuite/projects"
+      st_projects_tag:
+        type: "str"
+        description: "Tag of the projects docker image to deploy."
+        # renovate: datasource=docker depName=lasuite/projects versioning=semver
+        default: "1.27.10"
+      st_projects_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for projects env file."
+        default: "projects/env.j2"
+      st_projects_env:
+        type: "str"
+        description: "Content of the default env_template, not used if st_projects_env_template is defined."
+        default: ""
+      st_projects_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for projects compose file."
+        default: "projects/compose.yaml.j2"
+      st_projects_directories:
+        type: "list"
+        elements: "dict"
+        description: "Persistent host directories bind-mounted into the projects container for user uploads (avatars, project backgrounds, attachments), owned by the container's `node` user (uid 1000). Each entry's `container_path` is the mount target inside the container; the compose template loops over this list, so overriding it changes both the created directories and the bind mounts. Empty it when every upload target is served from S3 (no upload mounts are then emitted)."
+        default:
+          - name: user-avatars
+            container_uid: 1000
+            container_path: /app/public/user-avatars
+          - name: project-background-images
+            container_uid: 1000
+            container_path: /app/public/project-background-images
+          - name: attachments
+            container_uid: 1000
+            container_path: /app/private/attachments
+      st_projects_rollback_enabled:
+        type: "bool"
+        description: "Whether to trigger the rollback tasks if the projects deployment fails. Rollback is config-level only (it restores the previous compose/env directory, never the database). Projects runs its DB migrations unconditionally on every container start, so rolling back across a schema-changing upgrade leaves the old image running against an already-migrated database — back up the database before such an upgrade."
+        default: false
+      st_projects_cadvisor_enabled:
+        type: "bool"
+        description: "Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server."
+        default: false
+      st_projects_cadvisor_image:
+        type: "str"
+        description: "Image repository for the cadvisor container."
+        default: "ghcr.io/google/cadvisor"
+      st_projects_cadvisor_tag:
+        type: "str"
+        description: "Tag of the cadvisor docker image to deploy."
+        default: "v0.60.3"
+      st_projects_cadvisor_port:
+        type: "str"
+        description: "The host published port of the cadvisor container."
+        default: "127.0.0.1:50599"

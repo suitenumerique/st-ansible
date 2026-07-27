@@ -1,0 +1,20 @@
+---
+app: projects
+env_docs_url: "https://github.com/suitenumerique/projects/blob/main/docker-compose.yml"
+arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/05-projects"
+requires: [postgresql, s3, oidc]
+components:
+  - key: projects
+    role: suitenumerique.st.projects
+    user: projects
+    app_name: projects
+    dir_var: st_projects_dir
+    enabled_var: st_projects_enabled
+    deploy_order: 10
+    is_core: true
+    env_render:
+      backend:
+        blob_var: st_projects_env
+        templates:
+          - projects.env.j2
+dependencies: []

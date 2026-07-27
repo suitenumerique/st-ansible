@@ -10,7 +10,7 @@ from st_cli.core.models import Component
 
 
 def test_all_apps_load_with_core_and_components():
-    for app in ["meet", "drive", "messages", "keycloak"]:
+    for app in ["meet", "drive", "messages", "keycloak", "projects"]:
         a = appmeta.load_app(app)
         assert a.components
         assert a.core().is_core
@@ -30,6 +30,22 @@ def test_keycloak_is_a_standalone_single_component_app():
     spec = meta.env_render_spec("keycloak")
     assert spec["backend"]["blob_var"] == "st_keycloak_env"
     assert spec["backend"]["templates"] == ["keycloak.env.j2"]
+
+
+def test_projects_is_a_standalone_single_component_app():
+    """projects (a Planka fork) is a non-Django app: one core component, no deps,
+    no worker, and a single ``st_projects_env`` blob rendered from projects.env.j2."""
+    assert "projects" in appmeta.list_apps()
+    meta = appmeta.load_app("projects")
+    core = meta.core()
+    assert core.key == "projects"
+    assert core.role == "suitenumerique.st.projects"
+    assert core.enabled_var == "st_projects_enabled"
+    assert meta.dependencies == []
+    assert meta.worker() is None
+    spec = meta.env_render_spec("projects")
+    assert spec["backend"]["blob_var"] == "st_projects_env"
+    assert spec["backend"]["templates"] == ["projects.env.j2"]
 
 
 def test_dependency_graph():
@@ -174,3 +190,18 @@ def test_component_unknown_raises_stclierror():
     meta = appmeta.load_app("meet")
     with pytest.raises(StCliError, match=r"unknown component 'bogus' for app 'meet'"):
         meta.component("bogus")
+
+
+def test_requires_declares_external_infra_per_app():
+    """Apps declare the external infra they need (`requires`), so the bootstrap
+    Requirements checklist only lists what's relevant. projects and keycloak are
+    NOT Django apps and use no Redis/broker; keycloak is itself the IdP."""
+    assert appmeta.load_app("projects").requires == ["postgresql", "s3", "oidc"]
+    assert appmeta.load_app("keycloak").requires == ["postgresql"]
+    for app in ("drive", "meet", "messages"):
+        assert appmeta.load_app(app).requires == [
+            "postgresql",
+            "redis",
+            "s3",
+            "oidc",
+        ], app

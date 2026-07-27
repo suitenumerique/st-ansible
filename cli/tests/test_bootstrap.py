@@ -780,6 +780,71 @@ def test_bootstrap_keycloak_writes_env_blob_and_vault(repo, monkeypatch):
     assert "10.0.0.9" in (repo / "keycloak/prod/keycloak/hosts").read_text()
     m = manifest.load_manifest()
     assert [u.component for u in m.units] == ["keycloak"]
+
+
+def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
+    """Full `bootstrap projects prod` runs the projects-specific (non-Django)
+    questionnaire: it writes the st_projects_env blob with OIDC-enforced SSO
+    defaults + {{ vault_* }} refs for every secret (SECRET_KEY, DATABASE_URL, the
+    OIDC client secret, the S3 secret key), encrypts them into vault.yml, writes
+    the hosts, and registers the projects unit."""
+    seed_creds(repo)
+    script_questionary(
+        monkeypatch,
+        [
+            ("select", "Secret backend:", "ansible-vault"),
+            ("text", "projects host(s)", "10.0.0.7"),
+            ("text", "Public domain for projects", "projects.example.org"),
+            ("text", "DATABASE_URL", "postgresql://u:p@db.example.org:5432/projects"),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "st"),
+            ("text", "OIDC_CLIENT_ID", "projects"),
+            ("password", "OIDC_CLIENT_SECRET", "oidcsecret"),
+            ("text", "ORGANIZATION_ID_CLAIM", ""),
+            ("confirm", "Configure S3 object storage", True),
+            ("text", "S3_ENDPOINT", "https://s3.fr-par.scw.cloud"),
+            ("text", "S3_REGION", "fr-par"),
+            ("text", "S3_ACCESS_KEY_ID", "AKID"),
+            ("password", "S3_SECRET_ACCESS_KEY", "s3secret"),
+            ("text", "S3_BUCKET", "projects"),
+            ("confirm", "S3_FORCE_PATH_STYLE", True),
+            ("confirm", "Configure transactional email", False),
+            ("confirm", "cadvisor", True),
+        ],
+    )
+
+    bootstrap.bootstrap("projects", "prod")
+
+    assert paths.vars_path("projects", "prod", "projects").exists()
+    assert (
+        tree.load_vars("projects", "prod", "projects")["st_projects_cadvisor_enabled"]
+        is True
+    )
+    body = (repo / "projects/prod/projects/vars.yml").read_text()
+    assert "BASE_URL=https://projects.example.org" in body
+    assert "OIDC_ISSUER=https://idp.example.org/realms/st" in body
+    assert "OIDC_ENFORCED=true" in body  # SSO only, no local accounts
+    assert "S3_ENDPOINT=https://s3.fr-par.scw.cloud" in body
+    assert "SECRET_KEY={{ vault_secret_key }}" in body
+    assert "DATABASE_URL={{ vault_database_url }}" in body
+    assert "OIDC_CLIENT_SECRET={{ vault_oidc_client_secret }}" in body
+    assert "S3_SECRET_ACCESS_KEY={{ vault_s3_secret_access_key }}" in body
+    assert "SMTP_HOST" not in body  # SMTP declined
+    assert "st_projects_enabled" not in body  # enabled flag lives on the deploy task
+
+    assert vault.is_encrypted(paths.vault_path("projects", "prod", "projects"))
+    pvault = vault.decrypt_to_dict(paths.vault_path("projects", "prod", "projects"))
+    assert (
+        pvault["vault_database_url"] == "postgresql://u:p@db.example.org:5432/projects"
+    )
+    assert pvault["vault_oidc_client_secret"] == "oidcsecret"
+    assert pvault["vault_s3_secret_access_key"] == "s3secret"
+    assert pvault["vault_secret_key"]  # generated
+
+    assert "10.0.0.7" in (repo / "projects/prod/projects/hosts").read_text()
+    m = manifest.load_manifest()
+    assert [u.component for u in m.units] == ["projects"]
     assert m.units[0].mode == "managed"
 
 
@@ -1485,7 +1550,12 @@ def test_bootstrap_intro_guidance_for_core_not_provider(repo, monkeypatch, capfd
     flat = " ".join(intro.replace("│", " ").split())
     assert "st-ansible/tree/main/docs/02-keycloak" in flat
     assert "Requirements" in flat
-    assert "partenaires.proconnect.gouv.fr" in flat
+    # The checklist is app-aware (apps/<app>.yml `requires`): keycloak needs only
+    # a database — it IS the identity provider, and uses no Redis/S3 — so the
+    # OIDC/ProConnect pointer and the Redis/S3 lines must NOT be shown here.
+    assert "PostgreSQL" in flat
+    assert "partenaires.proconnect.gouv.fr" not in flat
+    assert "Redis" not in flat and "S3" not in flat
 
     # --- part 2: meet livekit provider run → guidance absent ---
     script_questionary(
@@ -1604,3 +1674,112 @@ def test_ask_core_sets_login_redirect_url_failure_for_non_drive(monkeypatch):
     # recording is always on now (no confirm) → RECORDING_* lines are always
     # present in the rendered env
     assert "RECORDING_ENABLE=True" in body
+
+
+def test_requirements_checklist_is_app_aware(capsys, monkeypatch):
+    """The pre-questionnaire Requirements panel lists only the infra the app
+    declares: projects (a Sails app) must NOT be told to prepare a Redis, while
+    the Django apps still are. An app declaring nothing gets the full list."""
+    monkeypatch.setattr(bootstrap, "_confirm_ready", lambda *a, **k: None)
+    bootstrap._print_bootstrap_intro(appmeta.load_app("projects"))
+    out = capsys.readouterr().out
+    assert "PostgreSQL" in out and "S3" in out and "Identity provider" in out
+    assert "Redis" not in out
+
+    bootstrap._print_bootstrap_intro(appmeta.load_app("keycloak"))
+    out = capsys.readouterr().out
+    assert "PostgreSQL" in out
+    assert "Redis" not in out and "S3" not in out
+
+    bootstrap._print_bootstrap_intro(appmeta.load_app("meet"))
+    assert "Redis" in capsys.readouterr().out
+
+    # an app that declares no `requires` falls back to the full generic list
+    meta = appmeta.load_app("projects")
+    meta.requires = []
+    bootstrap._print_bootstrap_intro(meta)
+    assert "Redis" in capsys.readouterr().out
+
+
+def test_bootstrap_projects_oidc_provider_switch_proconnect(repo, monkeypatch):
+    """projects gets the same identity-provider switch as the Django apps, but
+    derives a single OIDC_ISSUER: picking a ProConnect environment needs no URL
+    prompt at all (the issuer is bundled)."""
+    seed_creds(repo)
+    script_questionary(
+        monkeypatch,
+        [
+            ("select", "Secret backend:", "ansible-vault"),
+            ("text", "projects host(s)", "10.0.0.7"),
+            ("text", "Public domain for projects", "projects.example.org"),
+            ("text", "DATABASE_URL", "postgresql://u:p@db/projects"),
+            ("select", "Identity provider:", "proconnect-integ"),
+            ("text", "OIDC_CLIENT_ID", "projects"),
+            ("password", "OIDC_CLIENT_SECRET", "oidcsecret"),
+            ("text", "ORGANIZATION_ID_CLAIM", ""),
+            ("confirm", "Configure S3 object storage", False),
+            ("confirm", "Configure transactional email", False),
+            ("confirm", "cadvisor", False),
+        ],
+    )
+
+    bootstrap.bootstrap("projects", "prod")
+
+    body = (repo / "projects/prod/projects/vars.yml").read_text()
+    # bundled ProConnect integ issuer, derived without asking for any URL
+    assert "OIDC_ISSUER=https://fca.integ01.dev-agentconnect.fr/api/v2" in body, body
+    # the provider choice itself is questionnaire state, never an env key
+    assert "OIDC_PROVIDER" not in body
+    # S3 declined ⇒ no S3 block at all (uploads fall back to the local dirs)
+    assert "S3_" not in body
+
+
+def test_bootstrap_projects_custom_oidc_org_mode_and_smtp(repo, monkeypatch):
+    """Cover the projects questionnaire branches the happy-path tests skip: the
+    `custom` OIDC provider (issuer typed directly + rstrip-normalised), org mode
+    (ORGANIZATION_ID_CLAIM set), and SMTP configured with an authenticated user
+    (routing SMTP_PASSWORD through the vault). S3 is declined here (local
+    storage), so no S3_* keys are emitted."""
+    seed_creds(repo)
+    script_questionary(
+        monkeypatch,
+        [
+            ("select", "Secret backend:", "ansible-vault"),
+            ("text", "projects host(s)", "10.0.0.8"),
+            ("text", "Public domain for projects", "projects.example.org"),
+            ("text", "DATABASE_URL", "postgresql://u:p@db/projects"),
+            ("select", "Identity provider:", "custom"),
+            # trailing slash exercises the issuer rstrip normalisation
+            ("text", "OIDC issuer URL", "https://sso.example.org/realms/lst/"),
+            ("text", "OIDC_CLIENT_ID", "projects"),
+            ("password", "OIDC_CLIENT_SECRET", "oidcsecret"),
+            ("text", "ORGANIZATION_ID_CLAIM", "organization_id"),
+            ("confirm", "Configure S3 object storage", False),
+            ("confirm", "Configure transactional email", True),
+            ("text", "SMTP_HOST", "smtp.example.org"),
+            ("text", "SMTP_PORT", "587"),
+            ("confirm", "SMTP_SECURE", True),
+            ("text", "SMTP_USER", "mailer@example.org"),
+            ("password", "SMTP_PASSWORD", "smtppass"),
+            ("text", "SMTP_FROM", '"Projects" <noreply@example.org>'),
+            ("confirm", "cadvisor", False),
+        ],
+    )
+
+    bootstrap.bootstrap("projects", "prod")
+
+    body = (repo / "projects/prod/projects/vars.yml").read_text()
+    # custom issuer: typed verbatim, trailing slash stripped
+    assert "OIDC_ISSUER=https://sso.example.org/realms/lst\n" in body
+    assert "ORGANIZATION_ID_CLAIM=organization_id" in body  # org mode
+    assert "SMTP_HOST=smtp.example.org" in body
+    assert "SMTP_PORT=587" in body
+    assert "SMTP_SECURE=true" in body
+    assert "SMTP_USER=mailer@example.org" in body
+    assert "SMTP_PASSWORD={{ vault_smtp_password }}" in body  # secret → vault ref
+    assert "SMTP_FROM=" in body
+    assert "S3_" not in body  # S3 declined → local storage
+
+    pvault = vault.decrypt_to_dict(paths.vault_path("projects", "prod", "projects"))
+    assert pvault["vault_smtp_password"] == "smtppass"
+    assert pvault["vault_oidc_client_secret"] == "oidcsecret"

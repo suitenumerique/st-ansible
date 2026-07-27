@@ -206,3 +206,27 @@ def test_expand_var_markers_ansible_vault_is_noop():
 
     assert {k: str(v) for k, v in data.items()} == before
     assert isinstance(data["st_x_env"], LiteralScalarString)
+
+
+def test_vars_header_secrets_line_matches_the_backend():
+    """The header must describe the backend actually in use: the hashi_vault
+    backend writes no vault.yml, so pointing the operator at one (and at
+    {{ vault_* }} refs that don't exist) would be a wild goose chase."""
+    from st_cli.core import appmeta, writer
+    from st_cli.core.secretbackend import AnsibleVaultBackend, HashiVaultBackend
+
+    meta = appmeta.load_app("projects")
+    comp = meta.core()
+
+    vault_hdr = writer.vars_header("projects", meta, comp, AnsibleVaultBackend())
+    assert "{{ vault_* }}" in vault_hdr
+    assert "vault.yml" in vault_hdr and "OpenBao" not in vault_hdr
+
+    hashi_hdr = writer.vars_header(
+        "projects", meta, comp, HashiVaultBackend("projects")
+    )
+    assert "OpenBao" in hashi_hdr and "no vault.yml" in hashi_hdr
+    assert "{{ vault_* }}" not in hashi_hdr
+
+    # no backend passed → unchanged ansible-vault wording (the default)
+    assert "{{ vault_* }}" in writer.vars_header("projects", meta, comp)
