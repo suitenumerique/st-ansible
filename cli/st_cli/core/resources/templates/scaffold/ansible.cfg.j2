@@ -7,9 +7,10 @@ vault_password_file = {{ vault_password_file }}
 {% if ssh_user %}
 remote_user = {{ ssh_user }}
 {% endif %}
-stdout_callback = default
+stdout_callback = suitenumerique.st.compact
 result_format = yaml
 display_skipped_hosts = False
+interpreter_python = auto_silent
 
 [ssh_connection]
 pipelining = True

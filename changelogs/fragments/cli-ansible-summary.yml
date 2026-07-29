@@ -1,0 +1,8 @@
+# Sections: major_changes, minor_changes, breaking_changes,
+# deprecated_features, removed_features, security_fixes, bugfixes,
+# known_issues, release_summary, trivial. Entries are Markdown strings.
+# Use `trivial:` for changes that should NOT appear in the changelog.
+minor_changes:
+  - (callback) added the suitenumerique.st.compact stdout callback, one line per task and host, a live progress line on a TTY, diffs for changed tasks, and full default-style error output
+  - (cli) the generated ansible.cfg now selects suitenumerique.st.compact as the stdout callback
+  - (cli) the generated ansible.cfg silences the Python interpreter discovery warning with `interpreter_python = auto_silent`

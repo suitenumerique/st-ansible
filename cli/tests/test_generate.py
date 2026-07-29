@@ -208,6 +208,19 @@ def test_generate_ansible_cfg_uses_repo_root_vault_pass_by_default(repo):
     assert ".st-cli/.vault-pass" not in cfg
 
 
+def test_generate_ansible_cfg_uses_compact_callback(repo):
+    """The generated ansible.cfg selects the collection's compact stdout callback."""
+    seed_meet_unit(repo)
+
+    generate.generate_all("meet", "prod")
+
+    cfg = (repo / ".st-cli/ansible.cfg").read_text()
+    assert "stdout_callback = suitenumerique.st.compact" in cfg
+    assert "interpreter_python = auto_silent" in cfg
+    assert "profile_tasks" not in cfg
+    assert "[callback_profile_tasks]" not in cfg
+
+
 def _seed_meet_unit_no_local(repo):
     """Seed the meet/prod/meet manifest + vars + hosts with NO local config file.
 
