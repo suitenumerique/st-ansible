@@ -802,6 +802,7 @@ def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
             ("text", "OIDC_CLIENT_ID", "projects"),
             ("password", "OIDC_CLIENT_SECRET", "oidcsecret"),
             ("text", "ORGANIZATION_ID_CLAIM", ""),
+            ("confirm", "horizontal scaling", False),
             ("confirm", "Configure S3 object storage", True),
             ("text", "S3_ENDPOINT", "https://s3.fr-par.scw.cloud"),
             ("text", "S3_REGION", "fr-par"),
@@ -837,6 +838,7 @@ def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
     assert "OIDC_CLIENT_SECRET={{ vault_oidc_client_secret }}" in body
     assert "S3_SECRET_ACCESS_KEY={{ vault_s3_secret_access_key }}" in body
     assert "SMTP_HOST" not in body  # SMTP declined
+    assert "REDIS_URL" not in body  # scaling declined → single-instance default
     assert "st_projects_enabled" not in body  # enabled flag lives on the deploy task
 
     assert vault.is_encrypted(paths.vault_path("projects", "prod", "projects"))
@@ -1725,6 +1727,7 @@ def test_bootstrap_projects_oidc_provider_switch_proconnect(repo, monkeypatch):
             ("text", "OIDC_CLIENT_ID", "projects"),
             ("password", "OIDC_CLIENT_SECRET", "oidcsecret"),
             ("text", "ORGANIZATION_ID_CLAIM", ""),
+            ("confirm", "horizontal scaling", False),
             ("confirm", "Configure S3 object storage", False),
             ("confirm", "Configure transactional email", False),
             ("confirm", "cadvisor", False),
@@ -1754,8 +1757,11 @@ def test_bootstrap_projects_custom_oidc_org_mode_and_smtp(repo, monkeypatch):
     `custom` OIDC provider (issuer typed directly + rstrip-normalised), org mode
     (ORGANIZATION_ID_CLAIM set), and SMTP configured with an authenticated user
     (routing SMTP_PASSWORD through the vault). S3 is declined here (local
-    storage), so no S3_* keys are emitted."""
+    storage), so no S3_* keys are emitted and a warning flags that local
+    storage rules out multi-instance later."""
     seed_creds(repo)
+    warns: list[str] = []
+    monkeypatch.setattr(bootstrap.ui, "warn", warns.append)
     sq = script_questionary(
         monkeypatch,
         [
@@ -1769,6 +1775,7 @@ def test_bootstrap_projects_custom_oidc_org_mode_and_smtp(repo, monkeypatch):
             ("text", "OIDC_CLIENT_ID", "projects"),
             ("password", "OIDC_CLIENT_SECRET", "oidcsecret"),
             ("text", "ORGANIZATION_ID_CLAIM", "organization_id"),
+            ("confirm", "horizontal scaling", False),
             ("confirm", "Configure S3 object storage", False),
             ("confirm", "Configure transactional email", True),
             ("text", "SMTP_HOST", "smtp.example.org"),
@@ -1795,7 +1802,55 @@ def test_bootstrap_projects_custom_oidc_org_mode_and_smtp(repo, monkeypatch):
     assert "SMTP_PASSWORD={{ vault_smtp_password }}" in body  # secret → vault ref
     assert "SMTP_FROM=" in body
     assert "S3_" not in body  # S3 declined → local storage
+    # declining S3 warns that local storage rules out multi-instance later
+    assert any("S3" in w for w in warns), warns
 
     pvault = vault.decrypt_to_dict(paths.vault_path("projects", "prod", "projects"))
     assert pvault["vault_smtp_password"] == "smtppass"
     assert pvault["vault_oidc_client_secret"] == "oidcsecret"
+
+
+def test_bootstrap_projects_scaling_redis_enforces_s3(repo, monkeypatch):
+    """Accepting the horizontal-scaling prompt routes REDIS_URL through the
+    secret backend (the url can embed a password) into the env blob + vault,
+    and makes the S3 questionnaire mandatory: local uploads are not shared
+    between instances, so the "Configure S3?" opt-out confirm must NOT be asked
+    (ScriptedQuestionary raises on any unscripted prompt) and the S3_* prompts
+    run unconditionally."""
+    seed_creds(repo)
+    sq = script_questionary(
+        monkeypatch,
+        [
+            ("select", "Secret backend:", "ansible-vault"),
+            ("text", "projects host(s)", "10.0.0.7, 10.0.0.8"),
+            ("text", "Public domain for projects", "projects.example.org"),
+            ("text", "DATABASE_URL", "postgresql://u:p@db/projects"),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "st"),
+            ("text", "OIDC_CLIENT_ID", "projects"),
+            ("password", "OIDC_CLIENT_SECRET", "oidcsecret"),
+            ("text", "ORGANIZATION_ID_CLAIM", ""),
+            ("confirm", "horizontal scaling", True),
+            ("text", "REDIS_URL", "redis://:pw@redis.example.org:6379/0"),
+            # no ("confirm", "Configure S3 object storage") — skipped when scaling
+            ("text", "S3_ENDPOINT", "https://s3.fr-par.scw.cloud"),
+            ("text", "S3_REGION", ""),
+            ("text", "S3_ACCESS_KEY_ID", "AKID"),
+            ("password", "S3_SECRET_ACCESS_KEY", "s3secret"),
+            ("text", "S3_BUCKET", "projects"),
+            ("confirm", "S3_FORCE_PATH_STYLE", True),
+            ("confirm", "Configure transactional email", False),
+            ("confirm", "cadvisor", False),
+        ],
+    )
+
+    bootstrap.bootstrap("projects", "prod")
+
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+    body = (repo / "projects/prod/projects/vars.yml").read_text()
+    assert "REDIS_URL={{ vault_redis_url }}" in body  # secret → vault ref
+    assert "S3_ENDPOINT=https://s3.fr-par.scw.cloud" in body  # enforced S3
+    pvault = vault.decrypt_to_dict(paths.vault_path("projects", "prod", "projects"))
+    assert pvault["vault_redis_url"] == "redis://:pw@redis.example.org:6379/0"
+    assert pvault["vault_s3_secret_access_key"] == "s3secret"

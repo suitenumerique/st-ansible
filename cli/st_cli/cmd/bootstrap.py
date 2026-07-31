@@ -229,7 +229,7 @@ def _ask_projects_oidc(answers: dict, backend: SecretBackend, component: str) ->
 
 
 def _ask_projects_storage(
-    answers: dict, backend: SecretBackend, component: str
+    answers: dict, backend: SecretBackend, component: str, *, scaling: bool = False
 ) -> None:
     """Prompt S3 object storage for projects uploads (the recommended target).
 
@@ -237,10 +237,23 @@ def _ask_projects_storage(
     production; the role still bind-mounts local dirs as a fallback. The secret
     access key routes through the secret backend like every other credential;
     the access key id stays plaintext (matches the Django S3 questionnaire).
+    With ``scaling=True`` (horizontal scaling accepted) the opt-out confirm is
+    skipped: uploads on local disk are not shared between instances, so S3 is
+    mandatory as soon as more than one instance runs. Declining still warns
+    that local storage rules out going multi-instance later.
     """
-    if not _confirm(
+    if scaling:
+        ui.info(
+            "Horizontal scaling requires S3 object storage (local uploads are "
+            "not shared between instances)."
+        )
+    elif not _confirm(
         "Configure S3 object storage for uploads (recommended)?", default=True
     ):
+        ui.warn(
+            "Local storage keeps uploads on this host's disk: scaling to "
+            "several instances later will first require moving them to S3."
+        )
         return
     answers["S3_ENDPOINT"] = _ask(
         "S3_ENDPOINT", placeholder="https://s3.fr-par.scw.cloud"
@@ -257,6 +270,38 @@ def _ask_projects_storage(
     answers["S3_FORCE_PATH_STYLE"] = (
         "true" if _confirm("S3_FORCE_PATH_STYLE?", default=True) else "false"
     )
+
+
+def _ask_projects_scaling(
+    answers: dict, backend: SecretBackend, component: str
+) -> bool:
+    """Prompt the optional Redis wiring for horizontal scaling.
+
+    Upstream enables its Redis adapters (``@sailshq/connect-redis`` for sessions,
+    ``@sailshq/socket.io-redis`` for realtime broadcasts) only when ``REDIS_URL``
+    is set — required as soon as more than one instance runs behind a load
+    balancer, useless for a single instance, hence opt-in and default-declined.
+    The URL can embed a password (``redis://user:password@host``) so it routes
+    through the secret backend whole, like ``DATABASE_URL``. Replicas already
+    share SECRET_KEY/DATABASE_URL (one env blob for every host of the unit).
+    Returns whether scaling was accepted, so the caller can make the remaining
+    prerequisite — S3, local uploads are not visible across instances — required.
+    """
+    if not _confirm(
+        "Configure Redis for horizontal scaling (multiple instances)?",
+        default=False,
+    ):
+        return False
+    value = (
+        _ask(
+            "REDIS_URL",
+            placeholder="redis://user:password@redis.example.org:6379/0",
+        )
+        if backend.prompts_values()
+        else None
+    )
+    backend.env_secret(answers, "REDIS_URL", component=component, value=value)
+    return True
 
 
 def _ask_projects_email(answers: dict, backend: SecretBackend, component: str) -> None:
@@ -287,7 +332,8 @@ def _ask_projects(meta, backend: SecretBackend) -> dict:
     """Collect the projects core answers → the ``st_projects_env`` blob.
 
     projects (a Planka fork) is a Sails.js app, not Django: its role consumes a
-    single free-form ``st_projects_env`` blob (no DJANGO_*/Redis/Celery). Login is
+    single free-form ``st_projects_env`` blob (no DJANGO_*/Celery; Redis appears
+    only as the optional horizontal-scaling ``REDIS_URL``). Login is
     OIDC-enforced (SSO only, no local accounts) and uploads target S3. Secrets
     (DATABASE_URL, SECRET_KEY, the OIDC client secret, S3/SMTP credentials) route
     through the secret backend exactly like the Django apps' DB_PASSWORD.
@@ -336,7 +382,10 @@ def _ask_projects(meta, backend: SecretBackend) -> dict:
     if org_claim:
         answers["ORGANIZATION_ID_CLAIM"] = org_claim
 
-    _ask_projects_storage(answers, backend, core_key)
+    # Scaling before storage: accepting it makes the S3 questionnaire mandatory
+    # (uploads must be shared between instances), skipping its opt-out confirm.
+    scaling = _ask_projects_scaling(answers, backend, core_key)
+    _ask_projects_storage(answers, backend, core_key, scaling=scaling)
     _ask_projects_email(answers, backend, core_key)
     return answers
 

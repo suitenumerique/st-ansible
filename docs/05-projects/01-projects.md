@@ -13,7 +13,8 @@ projects (docker.io/lasuite/projects)
 ```
 
 Unlike the Django apps, Projects is a single self-contained container: no separate
-frontend, no Redis/Celery. It ships its own `HEALTHCHECK` (`node ./healthcheck.js`
+frontend, no Celery, and no Redis unless you [scale out](#horizontal-scaling).
+It ships its own `HEALTHCHECK` (`node ./healthcheck.js`
 → `GET :1337`) and runs its database migrations on startup (`node db/init.js`), so
 the role neither defines a healthcheck nor runs a separate migration step.
 
@@ -86,19 +87,49 @@ of two modes, chosen at runtime by whether S3 is configured:
 
 The `st-cli bootstrap projects` questionnaire asks *"Configure S3 object storage
 for uploads (recommended)?"*: answer **no** to run on local storage (nothing else
-to provide), or **yes** to enter the S3 endpoint, bucket and credentials.
+to provide — st-cli then warns that scaling to several instances later will first
+require moving uploads to S3), or **yes** to enter the S3 endpoint, bucket and
+credentials. When
+[horizontal scaling](#horizontal-scaling) was accepted, this opt-out is skipped
+and the S3 questionnaire runs unconditionally.
 
-## Single instance only
+## Horizontal scaling
 
-Deploy Projects on a **single instance** (scale up, not out). Its realtime
-collaboration relies on socket.io, and the upstream image does **not** wire a
-shared adapter (`@sailshq/socket.io-redis` is not bundled, and
-`config/env/production.js` leaves the `sockets.adapter`/`url` lines commented).
-With two instances behind a load balancer, socket events would not propagate
-between processes — a user on instance A would not see the live updates of a
-user on instance B. Sticky sessions do **not** fix this: they pin a client to an
-instance, they do not broadcast events across instances. Running more than one
-instance requires patching upstream to enable a Redis socket.io adapter.
+By default Projects runs as a **single instance**: it keeps sessions in memory
+and broadcasts realtime socket.io events per-process, so a second instance
+behind a load balancer would not receive the live updates emitted by the first
+(sticky sessions do not fix this — they pin a client to an instance, they do not
+broadcast events across instances).
+
+Setting `REDIS_URL` in `st_projects_env` switches upstream to its Redis
+adapters (`@sailshq/connect-redis` for sessions, `@sailshq/socket.io-redis` for
+socket broadcasts; production only), which makes running several instances
+possible. Every replica must then share:
+
+- the same `SECRET_KEY` (session cookies are signed with it), `DATABASE_URL`
+  and `REDIS_URL` — automatic here, since every host of the unit renders the
+  same `st_projects_env` blob;
+- **S3 object storage** — mandatory when scaling out: uploads kept on the
+  local bind-mounted dirs are not visible from the other instances;
+- an external load balancer in front of the replicas' `st_projects_port` — the
+  role does not provide one.
+
+To scale out, list several hosts in the component's `hosts` inventory and put
+your load balancer in front of them. The `st-cli bootstrap projects`
+questionnaire asks *"Configure Redis for horizontal scaling (multiple
+instances)?"* (default no); answering yes prompts the `REDIS_URL` (routed
+through the secret backend, as it can embed a password) and makes the S3
+questionnaire **mandatory** — its opt-out confirm is skipped, since local
+storage cannot work across instances.
+
+> [!IMPORTANT]
+> `REDIS_URL` support requires a Projects image that includes upstream
+> [PR #85](https://github.com/suitenumerique/projects/pull/85) (horizontal
+> scaling via optional Redis adapters). Until it lands in the release pinned by
+> `st_projects_tag`, override the tag explicitly. On an older image the
+> variable is silently ignored and each instance keeps its in-memory behaviour.
+> This collection does not provision Redis: provide it externally, like
+> PostgreSQL.
 
 ## Upgrades & rollback
 
