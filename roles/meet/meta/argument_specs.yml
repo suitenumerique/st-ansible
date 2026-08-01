@@ -42,7 +42,7 @@ argument_specs:
         type: "str"
         description: "Tag of the meet docker image to deploy."
         # renovate: datasource=github-releases depName=suitenumerique/meet versioning=semver
-        default: "v1.23.0"
+        default: "v1.24.0"
       st_meet_backend_env_template:
         type: "str"
         description: "Local path to the custom template to use for meet env file."
