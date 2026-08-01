@@ -27,7 +27,7 @@ argument_specs:
         type: "str"
         description: "Tag of the keycloak docker image to deploy."
         # renovate: datasource=github-releases depName=suitenumerique/messages versioning=semver extractVersion=^v(?<version>.+)$
-        default: "0.5.0"
+        default: "0.9.0"
       st_keycloak_env_template:
         type: "str"
         description: "Local path to the custom template to use for keycloak env file."
