@@ -120,7 +120,7 @@ argument_specs:
         type: "str"
         description: "Tag of the valkey docker image to deploy for livekit when using the full compose template."
         # renovate: datasource=docker depName=docker.io/valkey/valkey
-        default: "9.0.4"
+        default: "9.1.1"
       st_meet_livekit_valkey_enabled:
         type: "bool"
         description: "Deploy a local valkey in the livekit compose (single-node co-located egress). Set false when using an external shared redis."
