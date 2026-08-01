@@ -27,7 +27,7 @@ argument_specs:
         type: "str"
         description: "Tag of the messages docker images to deploy."
         # renovate: datasource=github-releases depName=suitenumerique/messages versioning=semver extractVersion=^v(?<version>.+)$
-        default: "0.5.0"
+        default: "0.9.0"
       st_messages_enabled:
         type: "bool"
         description: "Triggers the installation of the messages application."
@@ -108,7 +108,7 @@ argument_specs:
         type: "str"
         description: "Tag of the mta-in docker image to deploy."
         # renovate: datasource=github-releases depName=suitenumerique/messages versioning=semver extractVersion=^v(?<version>.+)$
-        default: "0.5.0"
+        default: "0.9.0"
       st_messages_mta_in_dir:
         type: "str"
         description: "Remote path to the base directory for mta-in app."
@@ -150,7 +150,7 @@ argument_specs:
         type: "str"
         description: "Tag of the socks-proxy docker image to deploy."
         # renovate: datasource=github-releases depName=suitenumerique/messages versioning=semver extractVersion=^v(?<version>.+)$
-        default: "0.5.0"
+        default: "0.9.0"
       st_messages_socks_proxy_dir:
         type: "str"
         description: "Remote path to the base directory for socks-proxy app."
