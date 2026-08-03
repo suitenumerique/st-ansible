@@ -10,7 +10,7 @@ from st_cli.core.models import Component
 
 
 def test_all_apps_load_with_core_and_components():
-    for app in ["meet", "drive", "messages", "keycloak"]:
+    for app in ["meet", "drive", "messages", "keycloak", "docs"]:
         a = appmeta.load_app(app)
         assert a.components
         assert a.core().is_core
@@ -108,7 +108,7 @@ def test_meet_and_livekit_component_vars_carry_public_host():
 
 def test_worker_component_metadata():
     """Each app exposes a first-class workers component (is_worker, app_name, enabled_var)."""
-    for app in ("drive", "messages", "meet"):
+    for app in ("drive", "messages", "meet", "docs"):
         w = appmeta.load_app(app).worker()
         assert w is not None, f"{app} has no workers component"
         assert w.is_worker is True
@@ -156,6 +156,67 @@ def test_component_implemented_flag():
     assert appmeta.load_app("meet").worker().implemented is False
     # core components are always implemented
     assert appmeta.load_app("meet").core().implemented is True
+
+
+# --------------------------------------------------------------------------- docs / yprovider
+
+
+def test_docs_yprovider_dependency():
+    """docs depends on yprovider (the collaboration server); the dependency has
+    no shared rules — its two secrets are owned by the docs core and mirrored in
+    at bootstrap (see cmd/bootstrap.py's _ask_docs_yprovider), not wired here."""
+    meta = appmeta.load_app("docs")
+    assert ("docs", "yprovider") in [(d.of, d.on) for d in meta.dependencies]
+    dep = next(d for d in meta.dependencies if d.on == "yprovider")
+    assert dep.shared == []
+    assert dep.optional is False
+
+
+def test_docs_component_metadata():
+    """docs core (order 20) + yprovider (order 10, rolls out first) + workers
+    (order 30). yprovider is a full unit with its own env_render-free
+    st_docs_yprovider_env blob (a manifest vars literal, no env template)."""
+    meta = appmeta.load_app("docs")
+    core = meta.core()
+    assert core.key == "docs"
+    assert core.role == "suitenumerique.st.docs"
+    assert core.user == "docs"
+    assert core.dir_var == "st_docs_dir"
+    assert core.enabled_var == "st_docs_enabled"
+    assert core.deploy_order == 20
+
+    yprovider = meta.component("yprovider")
+    assert yprovider.role == "suitenumerique.st.docs"
+    assert yprovider.dir_var == "st_docs_yprovider_dir"
+    assert yprovider.enabled_var == "st_docs_yprovider_enabled"
+    assert yprovider.deploy_order == 10
+    assert yprovider.is_core is False
+    assert meta.env_render_spec("yprovider") == {}
+    yp_vars = meta.component_vars("yprovider")
+    assert (
+        "COLLABORATION_SERVER_SECRET={COLLABORATION_SERVER_SECRET}"
+        in (yp_vars["st_docs_yprovider_env"])
+    )
+    assert "Y_PROVIDER_API_KEY={Y_PROVIDER_API_KEY}" in yp_vars["st_docs_yprovider_env"]
+
+    orders = {c.key: c.deploy_order for c in meta.components}
+    assert orders["yprovider"] < orders["docs"] < orders["workers"]
+
+    worker = meta.worker()
+    assert worker is not None
+    assert worker.implemented is True
+    assert worker.role == core.role
+    assert worker.user == core.user
+
+
+def test_docs_core_env_render_and_public_host():
+    meta = appmeta.load_app("docs")
+    spec = meta.env_render_spec("docs")
+    assert spec["backend"]["blob_var"] == "st_docs_backend_env"
+    assert spec["backend"]["templates"] == ["docs.backend.env.j2"]
+    assert spec["caddy"]["blob_var"] == "st_docs_caddy_env"
+    assert spec["caddy"]["templates"] == ["docs.caddy.env.j2"]
+    assert meta.component_vars("docs")["st_docs_public_host"] == "{DOMAIN}"
 
 
 # --------------------------------------------------------------------------- error surface
