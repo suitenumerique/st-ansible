@@ -73,7 +73,7 @@ def test_backend_run_migrations_gated_to_first_host():
     (plays are serial:1, so the role's run_once task would otherwise fire per host).
     The manifest quadruples the braces so str.format emits real {{ }}."""
     expr = "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
-    for app in ("drive", "meet", "messages"):
+    for app in ("drive", "meet", "messages", "docs"):
         meta = appmeta.load_app(app)
         var = f"st_{app}_backend_run_migrations"
         # manifest stores the escaped (quadrupled-brace) template …

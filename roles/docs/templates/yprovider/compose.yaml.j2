@@ -1,0 +1,16 @@
+---
+{{ ansible_managed | comment }}
+
+name: docs_yprovider
+services:
+  y-provider:
+    container_name: docs-yprovider
+    image: "{{ st_docs_yprovider_image }}:{{ st_docs_tag }}"
+    env_file: ./env
+    ports:
+      - "{{ st_docs_yprovider_port }}:4444"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:4444/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

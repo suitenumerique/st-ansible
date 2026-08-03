@@ -47,7 +47,7 @@ _OIDC_PROVIDERS = ["keycloak", "proconnect-prod", "proconnect-integ", "custom"]
 
 # Apps that carry upstream DJANGO_EMAIL_* settings; messages is skipped (no such
 # settings upstream) so its questionnaire never prompts for SMTP config.
-_EMAIL_APPS = {"drive", "meet"}
+_EMAIL_APPS = {"drive", "meet", "docs"}
 
 
 # --------------------------------------------------------------------------- #
@@ -86,7 +86,7 @@ def _ask_oidc(answers: dict, backend: SecretBackend, component: str) -> None:
 
 
 def _ask_email(answers: dict, backend: SecretBackend, component: str, app: str) -> None:
-    """Prompt Django transactional email (SMTP) settings for drive / meet.
+    """Prompt Django transactional email (SMTP) settings for drive / meet / docs.
 
     Skipped entirely for ``messages`` (no ``DJANGO_EMAIL_*`` upstream). The SMTP
     password is a secret routed through the backend like the other env secrets;
@@ -211,6 +211,18 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
         answers["LOGIN_REDIRECT_URL"] = f"https://{host}/"
         answers["LOGIN_REDIRECT_URL_FAILURE"] = f"https://{host}/"
         answers["LOGOUT_REDIRECT_URL"] = f"https://{host}/"
+    elif app == "docs":
+        # the upstream docs Django package is named "impress", so the generic
+        # f"{app}.settings" default would import the nonexistent docs.settings.
+        answers["DJANGO_SETTINGS_MODULE"] = "impress.settings"
+        # same single-source-of-truth indirection as meet, via st_docs_public_host.
+        host = "{{ st_docs_public_host }}"
+        answers["DJANGO_ALLOWED_HOSTS"] = host
+        answers["DJANGO_CSRF_TRUSTED_ORIGINS"] = f"https://{host}"
+        answers["DJANGO_CORS_ALLOWED_ORIGINS"] = f"https://{host}"
+        answers["LOGIN_REDIRECT_URL"] = f"https://{host}/"
+        answers["LOGIN_REDIRECT_URL_FAILURE"] = f"https://{host}/"
+        answers["LOGOUT_REDIRECT_URL"] = f"https://{host}/"
     backend.env_secret(
         answers,
         "DJANGO_SECRET_KEY",
@@ -295,9 +307,50 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
             answers["CADDY_S3_BUCKET"] = bucket
             answers["AWS_S3_ENDPOINT_URL"] = endpoint
             answers["AWS_STORAGE_BUCKET_NAME"] = bucket
+        elif app == "docs":
+            # docs' in-compose Caddy proxies /media/* straight to S3 via CADDY_S3_*
+            # container env vars (fed through the caddy_env file), mirroring meet.
+            parts = urlsplit(endpoint if "://" in endpoint else f"https://{endpoint}")
+            answers["CADDY_S3_PROTOCOL"] = parts.scheme or "https"
+            answers["CADDY_S3_HOST"] = parts.netloc
+            answers["CADDY_S3_BUCKET"] = bucket
+            answers["AWS_S3_ENDPOINT_URL"] = endpoint
+            answers["AWS_STORAGE_BUCKET_NAME"] = bucket
+            answers["MEDIA_BASE_URL"] = "https://{{ st_docs_public_host }}"
         else:
             answers["AWS_S3_ENDPOINT_URL"] = endpoint
             answers["AWS_STORAGE_BUCKET_NAME"] = bucket
+
+    if app == "docs":
+        # derived answers — never prompted, single source of truth via
+        # st_docs_public_host (the {{ }} resolves at deploy from the core vars.yml).
+        answers["OIDC_REDIRECT_ALLOWED_HOSTS"] = '["https://{{ st_docs_public_host }}"]'
+        answers["COLLABORATION_WS_URL"] = (
+            "wss://{{ st_docs_public_host }}/collaboration/ws/"
+        )
+        answers["COLLABORATION_API_URL"] = (
+            "https://{{ st_docs_public_host }}/collaboration/api/"
+        )
+        # the docspec conversion service ships in the core compose by default —
+        # enable the upload/import feature and point the backend at it over the
+        # compose network (backend-only, like Y_PROVIDER_API_BASE_URL).
+        answers["CONVERSION_UPLOAD_ENABLED"] = "true"
+        answers["DOCSPEC_API_URL"] = "http://docspec:4000/conversion"
+        # COLLABORATION_SERVER_SECRET / Y_PROVIDER_API_KEY are owned by the docs
+        # core and mirrored into yprovider's vault at deploy (see
+        # _ask_docs_yprovider) — the messages MDA_API_SECRET pattern.
+        backend.env_secret(
+            answers,
+            "COLLABORATION_SERVER_SECRET",
+            component=core_key,
+            value=secrets.gen_secret() if backend.prompts_values() else None,
+        )
+        backend.env_secret(
+            answers,
+            "Y_PROVIDER_API_KEY",
+            component=core_key,
+            value=secrets.gen_token() if backend.prompts_values() else None,
+        )
 
     if app == "messages":
         # MDA_API_SECRET is a messages-core secret (mta-in is only a consumer).
@@ -333,6 +386,11 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
 
     _ask_oidc(answers, backend, core_key)
     _ask_email(answers, backend, core_key, app)
+    if app == "docs" and answers.get("DJANGO_EMAIL_HOST"):
+        answers["DJANGO_EMAIL_LOGO_IMG"] = (
+            "https://{{ st_docs_public_host }}/assets/logo-suite-numerique.png"
+        )
+        answers["DJANGO_EMAIL_URL_APP"] = "https://{{ st_docs_public_host }}"
     if app == "messages":
         _ask_messages_outbound(answers, backend, core_key)
     if app == "meet":
@@ -547,6 +605,98 @@ def _ask_messages_outbound(
         backend.env_secret(
             answers, "MTA_OUT_RELAY_PASSWORD", component=core_key, value=value
         )
+
+
+# yprovider's published port is a role contract constant (st_docs_yprovider_port
+# default), not an operator choice — no precedent in this file for prompting a
+# fixed port, so it is hardcoded.
+_DOCS_YPROVIDER_PORT = "50601"
+
+
+def _docs_yprovider_endpoints(
+    answers: dict, app: str, env: str, core_key: str, yp_hosts: list[str]
+) -> str:
+    """The CADDY_YPROVIDER_ENDPOINTS value for the core caddy_env blob.
+
+    A single host shared by the core and yprovider → ``host.containers.internal``
+    (the podman host alias): the caddy container cannot always hairpin the
+    host's public IP. Any other topology keeps the real ``host:port`` list —
+    every caddy must share one identical list so the room hash stays
+    consistent across core hosts. Core hosts come from the run's stash
+    (``_core_hosts``, a full bootstrap) or the core hosts file on disk
+    (standalone/reuse); an empty list (no core yet) keeps the real hosts."""
+    if not yp_hosts:
+        raise StCliError(
+            "yprovider hosts list is empty — check the yprovider hosts file."
+        )
+    core_hosts = answers.get("_core_hosts") or tree.read_hosts(app, env, core_key)
+    if len(yp_hosts) == 1 and sorted(core_hosts) == sorted(yp_hosts):
+        return "host.containers.internal:" + _DOCS_YPROVIDER_PORT
+    return " ".join(f"{h}:{_DOCS_YPROVIDER_PORT}" for h in yp_hosts)
+
+
+def _ensure_docs_domain(answers: dict) -> None:
+    """docs/yprovider: COLLABORATION_SERVER_ORIGIN needs DOMAIN. A full bootstrap
+    already collected it; a standalone `bootstrap -c yprovider` run has an empty
+    answers, so prompt it."""
+    if not answers.get("DOMAIN"):
+        answers["DOMAIN"] = _ask(
+            "Public domain for docs (for the collaboration server origin)",
+            placeholder="docs.example.org",
+        )
+
+
+def _mirror_docs_secret(
+    answers: dict,
+    backend: SecretBackend,
+    core_key: str,
+    target_component: str,
+    app: str,
+    env: str,
+    env_key: str,
+) -> None:
+    """Mirror one docs-core-owned secret (COLLABORATION_SERVER_SECRET or
+    Y_PROVIDER_API_KEY, generated in ``_ask_core``) into ``target_component``'s
+    own vault, exactly like messages mirrors MDA_API_SECRET into mta-in: a full
+    run reads the live core buffer, a standalone/kept-core run reads the core
+    vault on disk, and if neither exists yet the operator is prompted."""
+    vault_key = "vault_" + env_key.lower()
+    if backend.prompts_values():
+        v = backend.component_secrets(core_key).get(vault_key)
+        if v is None:
+            cvp = paths.vault_path(app, env, core_key)
+            if cvp.exists():
+                v = vault.decrypt_to_dict(cvp).get(vault_key)
+        if v is None:
+            v = _password(f"{env_key} (shared with the docs core — must match it)")
+        backend.env_secret(answers, env_key, component=target_component, value=v)
+    elif not answers.get(env_key):
+        # hashi standalone: no core-set ref in answers → prompt a lookup term.
+        backend.env_secret(answers, env_key, component=target_component, value=None)
+    # hashi full run: answers[env_key] already holds the lookup ref → reuse.
+
+
+def _ask_docs_yprovider(
+    answers: dict,
+    backend: SecretBackend,
+    hosts: list[str],
+    core_key: str,
+    app: str,
+    env: str,
+) -> None:
+    """docs/yprovider: ensure DOMAIN, mirror the two core-owned collaboration
+    secrets into yprovider's own vault, and derive ``CADDY_YPROVIDER_ENDPOINTS``
+    (a space-separated host:port list for the core caddy_env blob; caddy expands
+    it into upstreams at parse time, and the co-located single-host case uses
+    the podman host alias). ``Y_PROVIDER_API_BASE_URL`` is backend-only
+    (server-to-server conversion calls, never the browser) and points at the
+    first endpoint — the co-located podman host alias included."""
+    _ensure_docs_domain(answers)
+    for env_key in ("COLLABORATION_SERVER_SECRET", "Y_PROVIDER_API_KEY"):
+        _mirror_docs_secret(answers, backend, core_key, "yprovider", app, env, env_key)
+    endpoints = _docs_yprovider_endpoints(answers, app, env, core_key, hosts)
+    answers["CADDY_YPROVIDER_ENDPOINTS"] = endpoints
+    answers["Y_PROVIDER_API_BASE_URL"] = f"http://{endpoints.split()[0]}/api/"
 
 
 def _ensure_meet_domain(answers: dict) -> None:
@@ -886,6 +1036,21 @@ def _handle_dependency(
                 else None
             )
             backend.env_secret(answers, "SPAM_CONFIG", component=core.key, value=value)
+        if meta.app == "docs" and dep.on == "yprovider":
+            eps_raw = _ask(
+                "yprovider endpoints (host:port, comma-separated)",
+                placeholder="10.0.0.9:50601,10.0.0.10:50601",
+            )
+            answers["CADDY_YPROVIDER_ENDPOINTS"] = " ".join(
+                e.strip() for e in eps_raw.split(",") if e.strip()
+            )
+            answers["Y_PROVIDER_API_BASE_URL"] = _ask(
+                "Y_PROVIDER_API_BASE_URL (backend-only conversion API)",
+                placeholder="http://yprovider.internal:50601/api/",
+            )
+            for env_key in ("COLLABORATION_SERVER_SECRET", "Y_PROVIDER_API_KEY"):
+                value = _password(env_key) if backend.prompts_values() else None
+                backend.env_secret(answers, env_key, component=core.key, value=value)
         ui.info(f"{dep.on}: external — values prompted, not deployed.")
         return "external"
 
@@ -921,6 +1086,32 @@ def _handle_dependency(
             writer.inject_consumer(rule, value, answers, backend, core.key)
         if meta.app == "meet" and provider.key == "livekit" and not wire_only:
             _reuse_egress(meta, answers, backend, env)
+        if meta.app == "docs" and provider.key == "yprovider":
+            # rebuild the core-side caddy upstream list and the backend-only
+            # conversion base URL from the reused unit's hosts file
+            # (co-location detection included).
+            yp_hosts = tree.read_hosts(meta.app, env, provider.key)
+            endpoints = _docs_yprovider_endpoints(
+                answers, meta.app, env, core.key, yp_hosts
+            )
+            answers["CADDY_YPROVIDER_ENDPOINTS"] = endpoints
+            answers["Y_PROVIDER_API_BASE_URL"] = f"http://{endpoints.split()[0]}/api/"
+            # the CORE must adopt the REUSED unit's secrets: _ask_core just
+            # generated fresh values, which would diverge from the kept unit's
+            # vault and break the backend↔yprovider auth. env_secret overwrites
+            # the core buffer with the values read from pvault above; hashi mode
+            # keeps the lookup refs _ask_core already collected (reference-only,
+            # nothing to adopt).
+            if backend.prompts_values():
+                for env_key in ("COLLABORATION_SERVER_SECRET", "Y_PROVIDER_API_KEY"):
+                    v = pvault.get("vault_" + env_key.lower())
+                    if v is None:
+                        v = _password(
+                            f"{env_key} (must match the reused yprovider unit)"
+                        )
+                    backend.env_secret(
+                        answers, env_key, component=core.key, value=str(v)
+                    )
         ui.info(f"{dep.on}: reuse — kept existing unit (still deployed).")
         return "managed"
 
@@ -986,6 +1177,8 @@ def _handle_dependency(
         _ask_messages_provider(
             provider.key, answers, backend, hosts, core.key, meta.app, env, pvars
         )
+    if meta.app == "docs" and provider.key == "yprovider":
+        _ask_docs_yprovider(answers, backend, hosts, core.key, meta.app, env)
     if meta.app == "meet" and provider.key == "livekit":
         _ensure_meet_domain(answers)
         # egress hosts already asked (Q2); redis+egress write happens AFTER the
@@ -1207,6 +1400,9 @@ def bootstrap(app: str, env: str, component: str | None = None) -> None:
                 if app == "keycloak"
                 else _ask_core(meta, backend)
             )
+            # a fresh run has no core hosts file on disk yet — stash the hosts
+            # so dependency hooks can detect co-location (_docs_yprovider_endpoints).
+            answers["_core_hosts"] = core_hosts
             core_cadvisor = _ask_cadvisor(core.key)  # last core question
         else:
             ui.info(f"{core.key}: kept existing.")

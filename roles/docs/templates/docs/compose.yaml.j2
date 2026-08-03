@@ -1,0 +1,67 @@
+---
+{{ ansible_managed | comment }}
+
+name: docs
+services:
+  caddy:
+    container_name: docs-caddy
+    image: "{{ st_docs_caddy_image }}:{{ st_docs_caddy_tag }}"
+    env_file: ./caddy_env
+    volumes:
+      - {{ st_docs_dir }}/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "{{ st_docs_port }}:50600"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:50600/__lbheartbeat__"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+
+  frontend:
+    container_name: docs-frontend
+    image: "{{ st_docs_frontend_image }}:{{ st_docs_tag }}"
+    env_file: ./frontend_env
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+{% if st_docs_frontend_logo_src is defined and st_docs_frontend_logo_src | length > 0 %}
+    # Custom logo staged on the host by the docs role.
+    volumes:
+      - {{ st_docs_dir }}/logo.svg:/app/assets/icon-docs.svg:ro
+{% endif %}
+
+  backend:
+    container_name: docs-backend
+    image: "{{ st_docs_backend_image }}:{{ st_docs_tag }}"
+    env_file: ./backend_env
+    healthcheck:
+      # manage.py check boots the whole Django application on every run, which
+      # is slow on a small host.
+      test: ["CMD", "python", "manage.py", "check"]
+      interval: 30s
+      timeout: 60s
+      retries: 3
+      start_period: 30s
+{% if st_docs_theme_customization_src is defined and st_docs_theme_customization_src | length > 0 %}
+    # Custom theme staged on the host by the docs role.
+    volumes:
+      - {{ st_docs_dir }}/theme.json:/app/impress/configuration/theme/default.json:ro
+{% endif %}
+
+  # Conversion service for the .docx import (docx → blocknote); the backend
+  # calls it at http://docspec:4000/conversion over the compose network.
+  docspec:
+    container_name: docs-docspec
+    image: "{{ st_docs_docspec_image }}:{{ st_docs_docspec_tag }}"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

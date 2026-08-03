@@ -1,0 +1,26 @@
+---
+- name: "Deploy docs."
+  ansible.builtin.import_tasks: deploy/docs.yml
+  when: st_docs_enabled
+  tags: ['docs_docs']
+
+- name: "Deploy docs workers."
+  ansible.builtin.import_tasks: deploy/workers.yml
+  when: st_docs_workers_enabled
+  tags: ['docs_workers']
+
+- name: "Deploy y-provider."
+  ansible.builtin.import_tasks: deploy/yprovider.yml
+  when: st_docs_yprovider_enabled
+  tags: ['docs_yprovider']
+
+- name: "Create cadvisor application."
+  when: st_docs_cadvisor_enabled
+  tags: ['docs_cadvisor']
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "docs"
+    st_podman_application_name: "cadvisor"
+    st_podman_application_compose_template: monitoring/compose_cadvisor.yaml.j2

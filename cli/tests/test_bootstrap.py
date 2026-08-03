@@ -14,7 +14,12 @@ from st_cli.core import appmeta, envrender, manifest, paths, prompts, tree, vaul
 from st_cli.core.errors import StCliError
 from st_cli.core.secretbackend import AnsibleVaultBackend
 
-from helpers import seed_creds, seed_livekit_provider, script_questionary
+from helpers import (
+    seed_creds,
+    seed_docs_yprovider_unit,
+    seed_livekit_provider,
+    script_questionary,
+)
 
 
 # --------------------------------------------------------------------------- host validation
@@ -1604,3 +1609,415 @@ def test_ask_core_sets_login_redirect_url_failure_for_non_drive(monkeypatch):
     # recording is always on now (no confirm) → RECORDING_* lines are always
     # present in the rendered env
     assert "RECORDING_ENABLE=True" in body
+
+
+# --------------------------------------------------------------------------- docs / yprovider
+
+
+def test_bootstrap_docs_full_deploys_yprovider(repo, monkeypatch):
+    """Full `bootstrap docs prod` (no -c) deploying yprovider on a single host:
+    the docs core generates COLLABORATION_SERVER_SECRET / Y_PROVIDER_API_KEY (never
+    prompted) and the yprovider deploy path mirrors them into its own vault WITHOUT
+    re-prompting (the core's backend buffer already holds the values); a single
+    yprovider host keeps a real host:port endpoint (not co-located with the core) and the
+    endpoints list lands in the core vars.yml via `_core_extra_vars` (computed, not
+    a str.format placeholder). Configuring SMTP also exercises the docs-only
+    DJANGO_EMAIL_LOGO_IMG / DJANGO_EMAIL_URL_APP derivation."""
+    seed_creds(repo)
+    sq = script_questionary(
+        monkeypatch,
+        [
+            ("select", "Secret backend:", "ansible-vault"),
+            ("text", "docs host(s)", "10.0.0.5"),
+            ("text", "workers (leave blank", ""),  # co-locate workers on core hosts
+            # core questionnaire (_ask_core)
+            ("text", "Public domain for docs", "docs.example.org"),
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("text", "DATABASE_URL", "postgres://docs"),
+            ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
+            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
+            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
+            ("text", "AWS_STORAGE_BUCKET_NAME", "docs-media"),
+            ("text", "AWS_S3_REGION_NAME (optional)", ""),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "docs-client-id"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", True),
+            ("text", "DJANGO_EMAIL_HOST", "smtp.example.org"),
+            ("text", "DJANGO_EMAIL_PORT", "587"),
+            ("text", "DJANGO_EMAIL_HOST_USER (optional)", ""),
+            ("password", "DJANGO_EMAIL_HOST_PASSWORD", "smtp-pass"),
+            ("confirm", "DJANGO_EMAIL_USE_TLS?", True),
+            ("confirm", "DJANGO_EMAIL_USE_SSL?", False),
+            ("text", "DJANGO_EMAIL_FROM", "noreply@docs.example.org"),
+            ("text", "DJANGO_EMAIL_BRAND_NAME (optional)", ""),
+            ("confirm", "cadvisor", True),  # docs core cadvisor
+            # deps loop — yprovider (required): deploy on a single host
+            ("select", "Bootstrap yprovider now?", "Yes — bootstrap now"),
+            ("text", "yprovider host(s)", "10.0.0.9"),
+            # NO "Public domain for docs" — _ensure_docs_domain sees DOMAIN set
+            # NO secret prompts — mirrored straight from the core's buffer
+            ("confirm", "cadvisor", True),  # yprovider cadvisor
+        ],
+    )
+
+    bootstrap.bootstrap("docs", "prod")
+
+    # docs core vars.yml: public host + the computed caddy upstream list, an env
+    # value in the caddy blob (caddy expands {$CADDY_YPROVIDER_ENDPOINTS} at
+    # parse time), NOT an ansible var.
+    core_data = tree.load_vars("docs", "prod", "docs")
+    assert core_data["st_docs_public_host"] == "docs.example.org"
+    assert "st_docs_yprovider_endpoints" not in core_data
+    assert (
+        "CADDY_YPROVIDER_ENDPOINTS=10.0.0.9:50601" in (core_data["st_docs_caddy_env"])
+    )
+
+    core_vars = (repo / "docs/prod/docs/vars.yml").read_text()
+    # the upstream docs Django package is "impress", not "docs"
+    assert "DJANGO_SETTINGS_MODULE=impress.settings" in core_vars
+    assert "DJANGO_SETTINGS_MODULE=docs.settings" not in core_vars
+    assert "DJANGO_ALLOWED_HOSTS={{ st_docs_public_host }}" in core_vars
+    assert (
+        'OIDC_REDIRECT_ALLOWED_HOSTS=["https://{{ st_docs_public_host }}"]' in core_vars
+    )
+    assert (
+        "COLLABORATION_WS_URL=wss://{{ st_docs_public_host }}/collaboration/ws/"
+        in core_vars
+    )
+    assert (
+        "COLLABORATION_API_URL=https://{{ st_docs_public_host }}/collaboration/api/"
+        in core_vars
+    )
+    assert (
+        "COLLABORATION_SERVER_SECRET={{ vault_collaboration_server_secret }}"
+        in core_vars
+    )
+    assert "Y_PROVIDER_API_KEY={{ vault_y_provider_api_key }}" in core_vars
+    # backend-only conversion base URL — the first yprovider endpoint
+    assert "Y_PROVIDER_API_BASE_URL=http://10.0.0.9:50601/api/" in core_vars
+    assert "# Backend-only (the browser never calls it)" in core_vars
+    # the import feature is on by default — docspec ships in the core compose
+    assert "CONVERSION_UPLOAD_ENABLED=true" in core_vars
+    assert "DOCSPEC_API_URL=http://docspec:4000/conversion" in core_vars
+    # docs-only email derivations (SMTP was configured above)
+    assert (
+        "DJANGO_EMAIL_LOGO_IMG=https://{{ st_docs_public_host }}"
+        "/assets/logo-suite-numerique.png" in core_vars
+    )
+    assert "DJANGO_EMAIL_URL_APP=https://{{ st_docs_public_host }}" in core_vars
+
+    core_vault = vault.decrypt_to_dict(paths.vault_path("docs", "prod", "docs"))
+    assert "vault_collaboration_server_secret" in core_vault
+    assert "vault_y_provider_api_key" in core_vault
+
+    # yprovider vars.yml: the manifest vars literal renders with the mirrored refs
+    yp_env = tree.load_vars("docs", "prod", "yprovider")["st_docs_yprovider_env"]
+    assert "COLLABORATION_SERVER_SECRET={{ vault_collaboration_server_secret }}" in (
+        yp_env
+    )
+    assert "COLLABORATION_SERVER_ORIGIN=https://docs.example.org" in yp_env
+    assert "COLLABORATION_BACKEND_BASE_URL=https://docs.example.org" in yp_env
+    assert "Y_PROVIDER_API_KEY={{ vault_y_provider_api_key }}" in yp_env
+    assert "COLLABORATION_LOGGING=true" in yp_env
+
+    # the secrets mirrored into yprovider's own vault EQUAL the core's values
+    yp_vault = vault.decrypt_to_dict(paths.vault_path("docs", "prod", "yprovider"))
+    assert (
+        yp_vault["vault_collaboration_server_secret"]
+        == core_vault["vault_collaboration_server_secret"]
+    )
+    assert (
+        yp_vault["vault_y_provider_api_key"] == core_vault["vault_y_provider_api_key"]
+    )
+
+    assert "10.0.0.9" in (repo / "docs/prod/yprovider/hosts").read_text()
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+
+    m = manifest.load_manifest()
+    by_comp = {u.component: u for u in m.units}
+    assert by_comp["docs"].mode == "managed"
+    assert by_comp["yprovider"].mode == "managed"
+
+
+def test_bootstrap_docs_yprovider_standalone_prompts_secrets(repo, monkeypatch):
+    """`bootstrap docs prod -c yprovider` with NO existing docs core prompts DOMAIN
+    (_ensure_docs_domain) and both core-owned secrets (no core buffer, no core
+    vault on disk yet) — mirrors
+    test_bootstrap_messages_mta_in_standalone_prompts_mda_api_secret."""
+    seed_creds(repo)
+    sq = script_questionary(
+        monkeypatch,
+        [
+            ("select", "Secret backend:", "ansible-vault"),
+            ("text", "yprovider host(s)", "10.0.0.9"),
+            (
+                "text",
+                "Public domain for docs (for the collaboration server origin)",
+                "docs.example.org",
+            ),
+            (
+                "password",
+                "COLLABORATION_SERVER_SECRET (shared with the docs core — must match it)",
+                "shared-collab-secret",
+            ),
+            (
+                "password",
+                "Y_PROVIDER_API_KEY (shared with the docs core — must match it)",
+                "shared-yprovider-key",
+            ),
+            ("confirm", "cadvisor", True),  # yprovider cadvisor
+        ],
+    )
+
+    bootstrap.bootstrap("docs", "prod", component="yprovider")
+
+    yp_env = tree.load_vars("docs", "prod", "yprovider")["st_docs_yprovider_env"]
+    assert "COLLABORATION_SERVER_SECRET={{ vault_collaboration_server_secret }}" in (
+        yp_env
+    )
+    assert "COLLABORATION_SERVER_ORIGIN=https://docs.example.org" in yp_env
+
+    yp_vault = vault.decrypt_to_dict(paths.vault_path("docs", "prod", "yprovider"))
+    assert yp_vault["vault_collaboration_server_secret"] == "shared-collab-secret"
+    assert yp_vault["vault_y_provider_api_key"] == "shared-yprovider-key"
+
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+    assert not paths.vars_path("docs", "prod", "docs").exists()
+    m = manifest.load_manifest()
+    assert [u.component for u in m.units] == ["yprovider"]
+
+
+def test_bootstrap_docs_reuse_yprovider_adopts_kept_secrets(repo, monkeypatch):
+    """Full `bootstrap docs prod` REUSING an existing yprovider unit: the core
+    must ADOPT the kept unit's vault values (COLLABORATION_SERVER_SECRET /
+    Y_PROVIDER_API_KEY) — _ask_core generates fresh ones, and keeping those
+    would diverge from the reused unit and break the backend↔yprovider auth.
+    The endpoints list rebuilds from the kept unit's
+    hosts file (single host → direct URL, no LB prompt, no secret prompts)."""
+    seed_docs_yprovider_unit(repo)
+    yp_vault_before = (repo / "docs/prod/yprovider/vault.yml").read_bytes()
+    sq = script_questionary(
+        monkeypatch,
+        [
+            ("text", "docs host(s)", "10.0.0.5"),
+            ("text", "workers (leave blank", ""),
+            ("text", "Public domain for docs", "docs.example.org"),
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("text", "DATABASE_URL", "postgres://docs"),
+            ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
+            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
+            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
+            ("text", "AWS_STORAGE_BUCKET_NAME", "docs-media"),
+            ("text", "AWS_S3_REGION_NAME (optional)", ""),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "docs-client-id"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", False),
+            ("confirm", "cadvisor", True),  # docs core cadvisor
+            ("select", "Bootstrap yprovider now?", "Reuse existing in the repo"),
+        ],
+    )
+
+    bootstrap.bootstrap("docs", "prod")
+
+    # core vault adopted the KEPT unit's values, not freshly generated ones
+    core_vault = vault.decrypt_to_dict(paths.vault_path("docs", "prod", "docs"))
+    assert core_vault["vault_collaboration_server_secret"] == "kept-collab-secret"
+    assert core_vault["vault_y_provider_api_key"] == "kept-yprovider-key"
+
+    # computed core values rebuilt from the kept unit's hosts file
+    core_data = tree.load_vars("docs", "prod", "docs")
+    assert (
+        "CADDY_YPROVIDER_ENDPOINTS=10.0.0.9:50601" in (core_data["st_docs_caddy_env"])
+    )
+    core_vars = (repo / "docs/prod/docs/vars.yml").read_text()
+    # backend-only conversion base URL — the first yprovider endpoint
+    assert "Y_PROVIDER_API_BASE_URL=http://10.0.0.9:50601/api/" in core_vars
+    assert "# Backend-only (the browser never calls it)" in core_vars
+
+    # the kept yprovider unit is untouched
+    assert (repo / "docs/prod/yprovider/vault.yml").read_bytes() == yp_vault_before
+
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+    m = manifest.load_manifest()
+    by_comp = {u.component: u.mode for u in m.units}
+    assert by_comp["yprovider"] == "managed"
+    assert by_comp["docs"] == "managed"
+
+
+def test_bootstrap_docs_yprovider_external_prompts_endpoints(repo, monkeypatch):
+    """`bootstrap docs prod` with an EXTERNAL yprovider ("Already deployed"):
+    the prompt asks for the endpoints (comma-separated, joined with spaces for
+    the caddy upstream list), Y_PROVIDER_API_BASE_URL, and the two secrets
+    COLLABORATION_SERVER_SECRET / Y_PROVIDER_API_KEY. These prompted secrets
+    OVERWRITE the values _ask_core generated. No yprovider unit is written;
+    the manifest records yprovider with mode "external"."""
+    seed_creds(repo)
+    sq = script_questionary(
+        monkeypatch,
+        [
+            ("select", "Secret backend:", "ansible-vault"),
+            ("text", "docs host(s)", "10.0.0.5"),
+            ("text", "workers (leave blank", ""),
+            ("text", "Public domain for docs", "docs.example.org"),
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("text", "DATABASE_URL", "postgres://docs"),
+            ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
+            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
+            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
+            ("text", "AWS_STORAGE_BUCKET_NAME", "docs-media"),
+            ("text", "AWS_S3_REGION_NAME (optional)", ""),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "docs-client-id"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", False),
+            ("confirm", "cadvisor", True),  # docs core cadvisor
+            (
+                "select",
+                "Bootstrap yprovider now?",
+                "Already deployed (enter URL + keys)",
+            ),
+            (
+                "text",
+                "yprovider endpoints (host:port, comma-separated)",
+                "10.0.0.9:50601, 10.0.0.10:50601",
+            ),
+            (
+                "text",
+                "Y_PROVIDER_API_BASE_URL (backend-only conversion API)",
+                "http://yprovider.internal:50601/api/",
+            ),
+            ("password", "COLLABORATION_SERVER_SECRET", "ext-collab-secret"),
+            ("password", "Y_PROVIDER_API_KEY", "ext-yprovider-key"),
+        ],
+    )
+
+    bootstrap.bootstrap("docs", "prod")
+
+    core_data = tree.load_vars("docs", "prod", "docs")
+    assert (
+        "CADDY_YPROVIDER_ENDPOINTS=10.0.0.9:50601 10.0.0.10:50601"
+        in core_data["st_docs_caddy_env"]
+    )
+
+    core_vars = (repo / "docs/prod/docs/vars.yml").read_text()
+    assert "Y_PROVIDER_API_BASE_URL=http://yprovider.internal:50601/api/" in core_vars
+
+    # the prompted secrets replace the ones _ask_core generated
+    core_vault = vault.decrypt_to_dict(paths.vault_path("docs", "prod", "docs"))
+    assert core_vault["vault_collaboration_server_secret"] == "ext-collab-secret"
+    assert core_vault["vault_y_provider_api_key"] == "ext-yprovider-key"
+
+    assert not paths.vars_path("docs", "prod", "yprovider").exists()
+
+    m = manifest.load_manifest()
+    by_comp = {u.component: u.mode for u in m.units}
+    assert by_comp["yprovider"] == "external"
+    assert by_comp["docs"] == "managed"
+
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+
+
+def test_bootstrap_docs_yprovider_skip_leaves_endpoints_empty(repo, monkeypatch):
+    """`bootstrap docs prod` SKIPPING yprovider ("No — bootstrap later") sets no
+    endpoint and no secret: CADDY_YPROVIDER_ENDPOINTS renders with an empty value
+    in the core caddy env. No yprovider unit is written, and the manifest
+    records no yprovider unit at all (unlike "external")."""
+    seed_creds(repo)
+    sq = script_questionary(
+        monkeypatch,
+        [
+            ("select", "Secret backend:", "ansible-vault"),
+            ("text", "docs host(s)", "10.0.0.5"),
+            ("text", "workers (leave blank", ""),
+            ("text", "Public domain for docs", "docs.example.org"),
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("text", "DATABASE_URL", "postgres://docs"),
+            ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
+            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
+            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
+            ("text", "AWS_STORAGE_BUCKET_NAME", "docs-media"),
+            ("text", "AWS_S3_REGION_NAME (optional)", ""),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "docs-client-id"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", False),
+            ("confirm", "cadvisor", True),  # docs core cadvisor
+            ("select", "Bootstrap yprovider now?", "No — bootstrap later"),
+        ],
+    )
+
+    bootstrap.bootstrap("docs", "prod")
+
+    core_data = tree.load_vars("docs", "prod", "docs")
+    assert "CADDY_YPROVIDER_ENDPOINTS=\n" in core_data["st_docs_caddy_env"]
+
+    m = manifest.load_manifest()
+    by_comp = {u.component: u.mode for u in m.units}
+    assert "yprovider" not in by_comp
+    assert by_comp["docs"] == "managed"
+
+    assert not paths.vars_path("docs", "prod", "yprovider").exists()
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+
+
+def test_docs_yprovider_endpoints_colocated_single_host():
+    """core and yprovider on the SAME single host → the podman host alias
+    (host.containers.internal): the caddy container cannot always hairpin the
+    host's public IP."""
+    answers = {"_core_hosts": ["10.0.0.5"]}
+    assert (
+        bootstrap._docs_yprovider_endpoints(
+            answers, "docs", "prod", "docs", ["10.0.0.5"]
+        )
+        == "host.containers.internal:50601"
+    )
+
+
+def test_docs_yprovider_endpoints_distinct_hosts():
+    answers = {"_core_hosts": ["10.0.0.5"]}
+    assert (
+        bootstrap._docs_yprovider_endpoints(
+            answers, "docs", "prod", "docs", ["10.0.0.9", "10.0.0.10"]
+        )
+        == "10.0.0.9:50601 10.0.0.10:50601"
+    )
+
+
+def test_docs_yprovider_endpoints_multi_colocated_keeps_real_hosts():
+    """several co-located hosts keep the real IPs — every caddy must share ONE
+    identical list so the room hash routes a room to the same node."""
+    answers = {"_core_hosts": ["10.0.0.5", "10.0.0.6"]}
+    assert (
+        bootstrap._docs_yprovider_endpoints(
+            answers, "docs", "prod", "docs", ["10.0.0.5", "10.0.0.6"]
+        )
+        == "10.0.0.5:50601 10.0.0.6:50601"
+    )
+
+
+def test_docs_yprovider_endpoints_reads_core_hosts_from_disk(repo):
+    """standalone/reuse runs carry no stash — the core hosts file on disk decides."""
+    tree.write_hosts("docs", "prod", "docs", "docs", ["10.0.0.5"])
+    assert (
+        bootstrap._docs_yprovider_endpoints({}, "docs", "prod", "docs", ["10.0.0.5"])
+        == "host.containers.internal:50601"
+    )
+
+
+def test_docs_yprovider_endpoints_rejects_empty_hosts(repo):
+    with pytest.raises(StCliError):
+        bootstrap._docs_yprovider_endpoints({}, "docs", "prod", "docs", [])
