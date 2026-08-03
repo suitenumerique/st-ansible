@@ -1,0 +1,182 @@
+---
+argument_specs:
+  main:
+    short_description: "Installs and configures the docs application from La Suite Territoriale on Debian systems."
+    options:
+      st_docs_uid:
+        type: "int"
+        description: "UID of the `docs` user, used for the podman role."
+        default: 1106
+      st_docs_gid:
+        type: "int"
+        description: "GID of the `docs` group, used for the podman role."
+        default: "{{ st_docs_uid }}"
+      st_docs_registries:
+        type: "list"
+        elements: "dict"
+        description: "Optional private container registries to login the `docs` user onto."
+      st_docs_public_host:
+        type: "str"
+        description: "The public hostname used to access the docs application."
+      st_docs_enabled:
+        type: "bool"
+        description: "Triggers the installation of docs."
+        default: false
+      st_docs_dir:
+        type: "str"
+        description: "Remote path to the base directory for docs app."
+        default: "/opt/docs/docs"
+      st_docs_port:
+        type: "str"
+        description: "The host published port for the docs frontend."
+        default: "50600"
+      st_docs_frontend_image:
+        type: "str"
+        description: "Image repository for the docs frontend."
+        default: "docker.io/lasuite/impress-frontend"
+      st_docs_backend_image:
+        type: "str"
+        description: "Image repository for the docs backend."
+        default: "docker.io/lasuite/impress-backend"
+      st_docs_yprovider_image:
+        type: "str"
+        description: "Image repository for the docs y-provider collaboration server."
+        default: "docker.io/lasuite/impress-y-provider"
+      st_docs_tag:
+        type: "str"
+        description: "Tag of the docs docker images to deploy."
+        # renovate: datasource=github-releases depName=suitenumerique/docs versioning=semver
+        default: "v5.4.1"
+      st_docs_backend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for docs backend env file."
+        default: "docs/backend_env.j2"
+      st_docs_backend_env:
+        type: "str"
+        description: "Content of the default backend_env_template, not used if st_docs_backend_env_template is defined."
+        default: ""
+      st_docs_backend_run_migrations:
+        type: "bool"
+        description: "Whether to run database migrations on docs backend startup."
+        default: true
+      st_docs_frontend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for docs frontend env file."
+        default: "docs/frontend_env.j2"
+      st_docs_frontend_env:
+        type: "str"
+        description: "Content of the default frontend_env_template, not used if st_docs_frontend_env_template is defined."
+        default: ""
+      st_docs_caddy_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for docs caddy env file."
+        default: "docs/caddy_env.j2"
+      st_docs_caddy_env:
+        type: "str"
+        description: "Content of the default caddy_env_template, not used if st_docs_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST, CADDY_S3_BUCKET and CADDY_YPROVIDER_ENDPOINTS (a space-separated host:port list of y-provider upstreams, load-balanced by document room)."
+        default: ""
+      st_docs_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for docs compose file."
+        default: "docs/compose.yaml.j2"
+      st_docs_caddy_image:
+        type: "str"
+        description: "Image repository for the docs caddy reverse-proxy."
+        default: "docker.io/caddy"
+      st_docs_caddy_tag:
+        type: "str"
+        description:
+          - "The tag of the caddy docker image to use."
+          - "See https://hub.docker.com/_/caddy/tags."
+        # renovate: datasource=docker depName=docker.io/caddy
+        default: "2.11.4-alpine"
+      st_docs_docspec_image:
+        type: "str"
+        description: "Image repository for the docspec conversion service."
+        default: "ghcr.io/docspecio/api"
+      st_docs_docspec_tag:
+        type: "str"
+        description: "Tag of the docspec docker image to deploy."
+        # renovate: datasource=docker depName=ghcr.io/docspecio/api
+        default: "3.0.1"
+      st_docs_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the docs deployment fails."
+        default: false
+      st_docs_frontend_logo_src:
+        type: "str"
+        description: "Local path to a custom logo file (svg) to mount over the docs frontend logo (/assets/icon-docs.svg). No validation is performed. Empty means use the image default."
+        default: ""
+      st_docs_theme_customization_src:
+        type: "str"
+        description: "Local path to a custom theme customization JSON file to mount over the docs backend default theme. No validation is performed. Empty means use the image default."
+        default: ""
+      st_docs_workers_enabled:
+        type: "bool"
+        description: "Triggers the installation of the docs workers."
+        default: false
+      st_docs_workers_dir:
+        type: "str"
+        description: "Remote path to the base directory for docs workers."
+        default: "/opt/docs/workers"
+      st_docs_workers_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for docs workers env file."
+        default: "workers/env.j2"
+      st_docs_workers_env:
+        type: "str"
+        description: "Content of the default workers_env_template, not used if st_docs_workers_env_template is defined."
+        default: "{{ st_docs_backend_env }}"
+      st_docs_workers_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the workers deployment fails."
+        default: false
+      st_docs_workers_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for workers compose file."
+        default: "workers/compose.yaml.j2"
+      st_docs_yprovider_enabled:
+        type: "bool"
+        description: "Triggers the installation of the docs y-provider collaboration server."
+        default: false
+      st_docs_yprovider_dir:
+        type: "str"
+        description: "Remote path to the base directory for the y-provider app."
+        default: "/opt/docs/yprovider"
+      st_docs_yprovider_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for y-provider env file."
+        default: "yprovider/env.j2"
+      st_docs_yprovider_env:
+        type: "str"
+        description: "Content of the default yprovider_env_template, not used if st_docs_yprovider_env_template is defined."
+        default: ""
+      st_docs_yprovider_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the y-provider deployment fails."
+        default: false
+      st_docs_yprovider_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for y-provider compose file."
+        default: "yprovider/compose.yaml.j2"
+      st_docs_yprovider_port:
+        type: "str"
+        description: "The host published port for the y-provider collaboration server."
+        default: "50601"
+      st_docs_cadvisor_image:
+        type: "str"
+        description: "Image repository for the cadvisor container."
+        default: "ghcr.io/google/cadvisor"
+      st_docs_cadvisor_tag:
+        type: "str"
+        description: "Tag of the cadvisor docker image to deploy."
+        # renovate: datasource=docker depName=ghcr.io/google/cadvisor
+        default: "v0.60.3"
+      st_docs_cadvisor_enabled:
+        type: "bool"
+        description: "Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server."
+        default: false
+      st_docs_cadvisor_port:
+        type: "str"
+        description: "The host published port of the cadvisor container."
+        default: "127.0.0.1:50699"

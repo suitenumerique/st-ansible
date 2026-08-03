@@ -80,6 +80,41 @@ def seed_livekit_provider(repo: Path) -> None:
     vault.encrypt_file(vp)
 
 
+def seed_docs_yprovider_unit(repo: Path) -> None:
+    """Seed a bootstrapped docs/prod/yprovider unit (vars/vault/hosts).
+
+    The vault carries distinctive secret values so an adoption test can tell the
+    kept unit's values apart from freshly generated ones.
+    """
+    seed_creds(repo)
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.20", "0.0.20", [UnitState("docs", "prod", "yprovider", "managed")]
+        )
+    )
+    data = tree.load_vars("docs", "prod", "yprovider")
+    data["st_docs_yprovider_env"] = (
+        "COLLABORATION_SERVER_SECRET={{ vault_collaboration_server_secret }}\n"
+        "COLLABORATION_SERVER_ORIGIN=https://docs.example.org\n"
+        "COLLABORATION_BACKEND_BASE_URL=https://docs.example.org\n"
+        "Y_PROVIDER_API_KEY={{ vault_y_provider_api_key }}\n"
+        "COLLABORATION_LOGGING=true\n"
+    )
+    tree.save_vars("docs", "prod", "yprovider", data)
+    tree.write_hosts("docs", "prod", "yprovider", "yprovider", ["10.0.0.9"])
+    vp = paths.vault_path("docs", "prod", "yprovider")
+    vp.parent.mkdir(parents=True, exist_ok=True)
+    with vp.open("w", encoding="utf-8") as fh:
+        tree.yaml().dump(
+            {
+                "vault_collaboration_server_secret": "kept-collab-secret",
+                "vault_y_provider_api_key": "kept-yprovider-key",
+            },
+            fh,
+        )
+    vault.encrypt_file(vp)
+
+
 class FakeQuestion:
     """A questionary Question stand-in returning a canned answer from .ask()."""
 
