@@ -2,6 +2,7 @@
 app: keycloak
 env_docs_url: "https://www.keycloak.org/server/all-config"
 arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/02-keycloak"
+requires: [postgresql]
 components:
   - key: keycloak
     role: suitenumerique.st.keycloak

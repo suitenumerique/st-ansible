@@ -80,6 +80,7 @@ def load_app(app: str) -> "AppMeta":
         arch_docs_url=data.get("arch_docs_url", ""),
         components=components,
         dependencies=deps,
+        requires=list(data.get("requires", []) or []),
         _component_raw=component_raw,
     )
 
@@ -101,6 +102,10 @@ class AppMeta:
     arch_docs_url: str
     components: list
     dependencies: list
+    # External infrastructure the operator must provision before bootstrapping,
+    # as capability keys ("postgresql", "redis", "s3", "oidc"). Drives the
+    # pre-questionnaire Requirements checklist; empty ⇒ the generic full list.
+    requires: list = field(default_factory=list)
     # private: the raw per-component dicts (kept for env_render lookups)
     _component_raw: dict = field(default_factory=dict, repr=False, compare=False)
 
