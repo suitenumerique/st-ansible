@@ -17,7 +17,7 @@ throwaway Ansible scaffolding, and drives deploy (ansible) plus restart / ps / o
 > [!NOTE]
 > `st-cli` runs on your computer or on an "Orchestrator VM", with SSH access to
 > the application VMs like ansible would.
-> It is not designed to be run on the application VMs directly.
+> **It is not designed to be run on the application VMs directly.**
 
 ### Installing the Collection
 

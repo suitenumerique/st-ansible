@@ -5,6 +5,10 @@ versionable config tree (with `ansible-vault`-encrypted secrets), generates the 
 Ansible scaffolding, and drives deploy (ansible) plus restart / ps / one-off / reset /
 logs (ssh).
 
+## Quick start
+
+See [getting-started/st-cli.md](../docs/00-getting-started/01-st-cli.md).
+
 ## Running via container (recommended)
 
 We recommend using `st-cli` container, you can safely make a *shrc alias
@@ -115,10 +119,6 @@ Host 10.0.0.*
   DATABASE_URL  →  postgres://app:@openbao(kv/data/db:pw)@db.host/app
   REDIS_URL  →  redis://@vault(kv/data/redis:user):@openbao(kv/data/redis:pw)@redis.host
   ```
-
-## Quick start
-
-See [getting-started/st-cli.md](../docs/00-getting-started/01-st-cli.md).
 
 ## Upgrading
 

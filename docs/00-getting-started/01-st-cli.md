@@ -11,11 +11,12 @@ For the full command reference (all flags, secret backends, native pipx install)
 
 ## Prerequisites
 
-- **podman** (rootless, recommended) or **docker** on your host.
+- **podman** (rootless, recommended) or **docker** on your host or on the Orchestration VM.
 - 2 Servers (one for livekit, one for meet) with at least 2 cores, 2G of RAM, 10G of disk space and public IPs attached.
   This example will use [Scaleway Development Instances](https://www.scaleway.com/en/development-instances/).
 - 3 Public Subdomains (one for livekit, one for livekit TURN, one for meet).
-- A running **ssh-agent** loaded with the key that reaches your servers (`ssh-add -l` should list it).
+- A running **ssh-agent** loaded with the key that reaches your servers (`ssh-add -l` should list it)
+  see [this Github documentation](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent) for help.
 - Optionally, Proconnect integration credentials. You can create one by connecting at
   [https://partenaires.proconnect.gouv.fr](https://partenaires.proconnect.gouv.fr) and create an application.
   The redirections URLs should be `https://\<your_domain\>/api/v1.0/callback/`
@@ -83,7 +84,7 @@ exit
 
 ## Step 1 — Add a shell alias
 
-**On your computer**, add the alias to your `~/.bashrc` or `~/.zshrc`.
+**On your computer or Orchestration VM**, add the alias to your `~/.bashrc` or `~/.zshrc`.
 
 **Podman (recommended):**
 

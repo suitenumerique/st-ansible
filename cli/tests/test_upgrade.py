@@ -22,7 +22,7 @@ def test_upgrade_bumps_pin_and_cleans_scaffolding(repo, mocker):
     seed_scaffolding_artifacts()
 
     # avoid shelling out to pipx; read a NEWER version from on-disk metadata
-    mocker.patch.object(upgrade_mod.shutil, "which", return_value=None)
+    mocker.patch.object(upgrade_mod.upstream, "owning_pipx", return_value=None)
     mocker.patch("importlib.metadata.version", return_value="0.0.99")
 
     gen_spy = mocker.patch.object(generate, "generate_all")
@@ -64,7 +64,9 @@ def test_upgrade_no_change_leaves_scaffolding_intact(repo, mocker):
     seed_scaffolding_artifacts()
 
     # pipx present — mock the subprocess so no real pipx runs.
-    mocker.patch.object(upgrade_mod.shutil, "which", return_value="/usr/bin/pipx")
+    mocker.patch.object(
+        upgrade_mod.upstream, "owning_pipx", return_value="/usr/bin/pipx"
+    )
     mocker.patch.object(
         upgrade_mod.subprocess, "run", return_value=mocker.MagicMock(returncode=0)
     )
@@ -101,7 +103,7 @@ def test_upgrade_no_change_no_pipx_warns_pip_hint(repo, mocker):
     )
     seed_scaffolding_artifacts()
 
-    mocker.patch.object(upgrade_mod.shutil, "which", return_value=None)
+    mocker.patch.object(upgrade_mod.upstream, "owning_pipx", return_value=None)
     mocker.patch("importlib.metadata.version", return_value="0.0.20")
     warn_spy = mocker.patch.object(ui, "warn")
 
@@ -116,6 +118,89 @@ def test_upgrade_no_change_no_pipx_warns_pip_hint(repo, mocker):
     assert paths.collections_dir().exists()
 
 
+def test_upgrade_behind_no_pipx_warns_docker_pull(repo, mocker):
+    """Upstream behind, no pipx → docker-pull warn; no pipx subprocess call;
+    the 'nothing to do' info line is not printed (the warn already told the
+    user what to do)."""
+    from st_cli.cmd import upgrade as upgrade_mod
+
+    seed_creds(repo)
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.20", "0.0.20", [UnitState("meet", "prod", "meet", "managed")]
+        )
+    )
+    seed_scaffolding_artifacts()
+
+    mocker.patch.object(upgrade_mod, "_upstream_latest", return_value="99.0.0")
+    mocker.patch.object(upgrade_mod.upstream, "owning_pipx", return_value=None)
+    mocker.patch("importlib.metadata.version", return_value="0.0.20")
+    run_spy = mocker.patch.object(upgrade_mod.subprocess, "run")
+    warn_spy = mocker.patch.object(ui, "warn")
+    info_spy = mocker.patch.object(ui, "info")
+
+    upgrade_mod.upgrade()
+
+    run_spy.assert_not_called()
+    assert any(
+        "docker pull ghcr.io/suitenumerique/st-cli:latest" in str(c)
+        for c in warn_spy.call_args_list
+    )
+    assert not any("nothing to do" in str(c) for c in info_spy.call_args_list)
+
+
+def test_upgrade_behind_with_pipx_runs_pipx_upgrade(repo, mocker):
+    """Upstream behind, pipx present → the pipx upgrade subprocess runs."""
+    from st_cli.cmd import upgrade as upgrade_mod
+
+    seed_creds(repo)
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.19", "0.0.19", [UnitState("meet", "prod", "meet", "managed")]
+        )
+    )
+
+    mocker.patch.object(upgrade_mod, "_upstream_latest", return_value="99.0.0")
+    mocker.patch.object(
+        upgrade_mod.upstream, "owning_pipx", return_value="/usr/bin/pipx"
+    )
+    mocker.patch("importlib.metadata.version", return_value="0.0.99")
+    run_spy = mocker.patch.object(
+        upgrade_mod.subprocess, "run", return_value=mocker.MagicMock(returncode=0)
+    )
+
+    upgrade_mod.upgrade()
+
+    run_spy.assert_called_once_with(["/usr/bin/pipx", "upgrade", "st-cli"])
+
+
+def test_upgrade_uptodate_with_pipx_skips_pipx_run(repo, mocker):
+    """Installed matches upstream + pipx present → no pipx subprocess call;
+    'nothing to do' still printed."""
+    from st_cli.cmd import upgrade as upgrade_mod
+
+    seed_creds(repo)
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.20", "0.0.20", [UnitState("meet", "prod", "meet", "managed")]
+        )
+    )
+    seed_scaffolding_artifacts()
+
+    mocker.patch.object(upgrade_mod, "_upstream_latest", return_value="0.0.20")
+    mocker.patch.object(
+        upgrade_mod.upstream, "owning_pipx", return_value="/usr/bin/pipx"
+    )
+    mocker.patch("importlib.metadata.version", return_value="0.0.20")
+    run_spy = mocker.patch.object(upgrade_mod.subprocess, "run")
+    info_spy = mocker.patch.object(ui, "info")
+
+    upgrade_mod.upgrade()
+
+    run_spy.assert_not_called()
+    assert any("nothing to do" in str(c) for c in info_spy.call_args_list)
+
+
 def test_upgrade_final_message_hints_bare_doctor(repo, mocker):
     """After a real upgrade, upgrade's final success message hints the
     parameterless `st-cli doctor` (no <app> placeholder)."""
@@ -128,7 +213,7 @@ def test_upgrade_final_message_hints_bare_doctor(repo, mocker):
         )
     )
     # no pipx; read a NEWER version from on-disk metadata → real upgrade path
-    mocker.patch.object(upgrade_mod.shutil, "which", return_value=None)
+    mocker.patch.object(upgrade_mod.upstream, "owning_pipx", return_value=None)
     mocker.patch("importlib.metadata.version", return_value="0.0.99")
     success_spy = mocker.patch.object(ui, "success")
 

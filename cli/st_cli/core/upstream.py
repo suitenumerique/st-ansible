@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -103,7 +105,7 @@ def _write_cache(data: dict) -> None:
         pass
 
 
-def _get_latest_cached() -> str | None:
+def get_latest_cached() -> str | None:
     """Return the latest upstream version, using the cache when fresh.
 
     If the cache was checked within the TTL, return its ``latest`` without any
@@ -120,12 +122,42 @@ def _get_latest_cached() -> str | None:
     return latest
 
 
+def is_behind(latest: str | None) -> bool | None:
+    """Return whether the installed CLI is older than `latest`.
+
+    Return None (unknown) when `latest` is None or when either version fails
+    to parse. Return True only when the installed version is strictly older.
+    """
+    if latest is None:
+        return None
+    cur = _parse_version(__version__)
+    up = _parse_version(latest)
+    if cur is None or up is None:
+        return None
+    return cur < up
+
+
+def owning_pipx() -> str | None:
+    """Return the pipx executable when pipx manages this install, else None.
+
+    pipx writes ``pipx_metadata.json`` at the root of each venv it owns, so
+    the check on ``sys.prefix`` confirms ownership. pipx on the PATH alone
+    does not mean pipx installed the running st-cli.
+    """
+    if not (Path(sys.prefix) / "pipx_metadata.json").is_file():
+        return None
+    return shutil.which("pipx")
+
+
 def maybe_warn_upgrade(invoked_subcommand: str | None) -> None:
     """Best-effort: if a newer upstream version exists, warn to upgrade.
 
     Never raises. Warn-only — it never prompts, never auto-runs
     ``upgrade``, and never exits. Any failure is swallowed silently so the
-    original command proceeds untouched.
+    original command proceeds untouched. The hint branches on pipx ownership
+    (``owning_pipx``): when pipx manages this install, ``st-cli upgrade``
+    alone works; otherwise (the container image), the user must pull a new
+    image first.
     """
     if os.environ.get("ST_CLI_NO_UPSTREAM_CHECK"):
         return
@@ -133,19 +165,16 @@ def maybe_warn_upgrade(invoked_subcommand: str | None) -> None:
     if invoked_subcommand in (None, "upgrade"):
         return
 
-    latest = _get_latest_cached()
-    if latest is None:
+    latest = get_latest_cached()
+    if not is_behind(latest):
         return
 
-    cur = _parse_version(__version__)
-    up = _parse_version(latest)
-    if cur is None or up is None:
-        return
-    if cur >= up:  # up-to-date or ahead
-        return
-
-    # Behind — warn only (no prompt, no auto-run, no exit).
-    ui.warn(
-        f"st-cli {__version__} is behind upstream {latest}, pull latest container if necessary "
-        "and run `st-cli upgrade`."
-    )
+    if owning_pipx():
+        ui.warn(
+            f"st-cli {__version__} is behind upstream {latest} — run `st-cli upgrade`."
+        )
+    else:
+        ui.warn(
+            f"st-cli {__version__} is behind upstream {latest}, run "
+            "`docker pull ghcr.io/suitenumerique/st-cli:latest` and then `st-cli upgrade`."
+        )
