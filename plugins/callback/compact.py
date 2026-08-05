@@ -12,6 +12,7 @@ description:
   - This callback prints one line for each task and host, in place of the noisy default banners.
   - On a TTY it shows a live pending line for the task and host that run, and it rewrites the line in place when the task ends.
   - It prints a diff block after a changed task, and the full default-style error block after a failed or unreachable task.
+  - It prints the C(msg) of a M(ansible.builtin.debug) task in a green box, so a banner message stands out.
   - It suppresses the result line for a dynamic include, such as C(include_tasks) or C(include_role).
 version_added: "0.3.0"
 author: Suite Territoriale (@suitenumerique)
@@ -25,6 +26,7 @@ extends_documentation_fragment:
 import sys
 
 from ansible import constants as C
+from ansible.module_utils.common.text.converters import to_text
 from ansible.playbook.task_include import TaskInclude
 from ansible.plugins.callback.default import CallbackModule as Default
 from ansible.utils.color import stringc
@@ -44,6 +46,24 @@ class CallbackModule(Default):
         if state:
             line += u' ' + stringc(u'— %s' % state, color)
         return line
+
+    def _msg_box(self, msg):
+        if isinstance(msg, (list, tuple)):
+            lines = [to_text(item) for item in msg] or [u'']
+        else:
+            lines = to_text(msg).splitlines() or [u'']
+        width = max(min(max(len(line) for line in lines), self._display.columns - 4), 1)
+        wrapped = []
+        for line in lines:
+            while len(line) > width:
+                wrapped.append(line[:width])
+                line = line[width:]
+            wrapped.append(line)
+        border = u'─' * (width + 2)
+        rows = [u'┌%s┐' % border]
+        rows += [u'│ %s │' % line.ljust(width) for line in wrapped]
+        rows.append(u'└%s┘' % border)
+        return u'\n'.join(rows)
 
     def __init__(self):
         super().__init__()
@@ -96,7 +116,9 @@ class CallbackModule(Default):
         self._item_counts.pop(key, None)
         if self._is_tty and self._visible_key == key:
             self._clear()
-            self._visible_key = None
+            self._visible_key = next(iter(self._pending), None)
+            if self._visible_key is not None:
+                self._draw(self._current_text(self._visible_key))
 
     def _flush_diffs(self, key):
         diffs = self._diffs.pop(key, None)
@@ -162,6 +184,7 @@ class CallbackModule(Default):
         self._suffix.pop(key, None)
         self._item_counts.pop(key, None)
         self._visible_key = key
+        self._clear()
         self._draw(self._current_text(key))
 
     def v2_runner_on_ok(self, result):
@@ -170,6 +193,14 @@ class CallbackModule(Default):
         if isinstance(result.task, TaskInclude):
             self._finalize(key)
             self._diffs.pop(key, None)
+            return
+
+        if result.task.action in C._ACTION_DEBUG and 'msg' in result.result:
+            self._finalize(key)
+            self._diffs.pop(key, None)
+            self._display.display(self._status_line(u'✔', result.task.get_name().strip(), self.host_label(result), None, C.COLOR_OK))
+            self._display.display(self._msg_box(result.result['msg']), color=C.COLOR_OK)
+            self._handle_warnings_and_exception(result)
             return
 
         host_label = self.host_label(result)
