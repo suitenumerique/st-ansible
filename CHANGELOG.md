@@ -2,17 +2,29 @@
 
 **Topics**
 
+- <a href="#v0-2-1">v0\.2\.1</a>
+    - <a href="#minor-changes">Minor Changes</a>
 - <a href="#v0-2-0">v0\.2\.0</a>
     - <a href="#release-summary">Release Summary</a>
-    - <a href="#minor-changes">Minor Changes</a>
+    - <a href="#minor-changes-1">Minor Changes</a>
     - <a href="#bugfixes">Bugfixes</a>
 - <a href="#v0-1-1">v0\.1\.1</a>
-    - <a href="#minor-changes-1">Minor Changes</a>
+    - <a href="#minor-changes-2">Minor Changes</a>
     - <a href="#bugfixes-1">Bugfixes</a>
 - <a href="#v0-1-0">v0\.1\.0</a>
     - <a href="#release-summary-1">Release Summary</a>
     - <a href="#major-changes">Major Changes</a>
-    - <a href="#minor-changes-2">Minor Changes</a>
+    - <a href="#minor-changes-3">Minor Changes</a>
+
+<a id="v0-2-1"></a>
+## v0\.2\.1
+
+<a id="minor-changes"></a>
+### Minor Changes
+
+* \(callback\) added the suitenumerique\.st\.compact stdout callback\, one line per task and host\, a live progress line on a TTY\, diffs for changed tasks\, and full default\-style error output
+* 1. the generated ansible\.cfg now selects suitenumerique\.st\.compact as the stdout callback
+* 1. the generated ansible\.cfg silences the Python interpreter discovery warning with <em class="title-reference">interpreter\_python \= auto\_silent</em>
 
 <a id="v0-2-0"></a>
 ## v0\.2\.0
@@ -23,7 +35,7 @@
 Adds support for meet recordings\, fix openbao markers on st\-cli bootstrap
 and multiple versions upgrades\.
 
-<a id="minor-changes"></a>
+<a id="minor-changes-1"></a>
 ### Minor Changes
 
 * \(meet\) added custom logo handling
@@ -44,7 +56,7 @@ and multiple versions upgrades\.
 <a id="v0-1-1"></a>
 ## v0\.1\.1
 
-<a id="minor-changes-1"></a>
+<a id="minor-changes-2"></a>
 ### Minor Changes
 
 * Added Renovate configuration \(<code>renovate\.json5</code>\) and renovate Makefile target
@@ -76,7 +88,7 @@ Added st\-cli to manage LST environments bootstraps and deployments\, refactored
 * 1. added st\-cli \#27
 * \(roles\) refactor every uid\, gid and ports to allow single\-host deployments \#26
 
-<a id="minor-changes-2"></a>
+<a id="minor-changes-3"></a>
 ### Minor Changes
 
 * \(changelog\) added antsibull\-changelog config\, Makefile targets and CI job \#13

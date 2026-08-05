@@ -77,3 +77,16 @@ releases:
     - renovate-pr-48.yml
     - renovate-pr-55.yml
     release_date: '2026-07-26'
+  0.2.1:
+    changes:
+      minor_changes:
+      - (callback) added the suitenumerique.st.compact stdout callback, one line per
+        task and host, a live progress line on a TTY, diffs for changed tasks, and
+        full default-style error output
+      - (cli) the generated ansible.cfg now selects suitenumerique.st.compact as the
+        stdout callback
+      - (cli) the generated ansible.cfg silences the Python interpreter discovery
+        warning with `interpreter_python = auto_silent`
+    fragments:
+    - cli-ansible-summary.yml
+    release_date: '2026-08-05'
