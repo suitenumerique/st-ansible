@@ -110,7 +110,7 @@ argument_specs:
         type: "str"
         description: "Tag of the livekit docker image to deploy."
         # renovate: datasource=docker depName=docker.io/livekit/livekit-server
-        default: "v1.13.4"
+        default: "v1.13.5"
       st_meet_livekit_caddyl4_tag:
         type: "str"
         description: "Tag of the livekit caddyl4 docker image to deploy."
