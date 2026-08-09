@@ -45,6 +45,20 @@ __all__ = ["bootstrap"]
 
 _OIDC_PROVIDERS = ["keycloak", "proconnect-prod", "proconnect-integ", "custom"]
 
+# Requirements-checklist lines, keyed by the capability names apps declare in
+# their `requires` (apps/<app>.yml). Insertion order is the display order; the
+# VM line is unconditional and printed separately.
+_REQUIREMENT_LINES = {
+    "postgresql": "[bold]PostgreSQL[/bold] host and credentials",
+    "redis": "[bold]Redis[/bold] host and credentials",
+    "s3": "[bold]S3[/bold] endpoint, bucket and credentials",
+    "oidc": (
+        "[bold]Identity provider[/bold] URLs and credentials\n"
+        "    (For ProConnect Integration environment: create an app at "
+        "https://partenaires.proconnect.gouv.fr/)"
+    ),
+}
+
 # Apps that carry upstream DJANGO_EMAIL_* settings; messages is skipped (no such
 # settings upstream) so its questionnaire never prompts for SMTP config.
 _EMAIL_APPS = {"drive", "meet"}
@@ -175,6 +189,204 @@ def _ask_keycloak(meta, backend: SecretBackend) -> dict:
     backend.env_secret(
         answers, "KC_BOOTSTRAP_ADMIN_PASSWORD", component=core_key, value=value
     )
+    return answers
+
+
+def _ask_projects_oidc(answers: dict, backend: SecretBackend, component: str) -> None:
+    """Choose an identity provider and derive projects' single ``OIDC_ISSUER``.
+
+    Same provider switch as the Django apps (:func:`_ask_oidc`), but projects is
+    a Sails app: it takes one issuer URL and discovers the endpoints itself,
+    instead of the explicit ``OIDC_RP_*``/``OIDC_OP_*`` set. The ProConnect
+    issuers are bundled, so those providers need no URL prompt at all.
+    """
+    provider = _ask_select("Identity provider:", _OIDC_PROVIDERS)
+    answers["OIDC_PROVIDER"] = provider
+    base_url = realm = None
+    if provider == "keycloak":
+        base_url = _ask("Keycloak base URL", placeholder="https://idp.example.org")
+        realm = _ask("Keycloak realm", "master")
+    elif provider == "custom":
+        # Required here (unlike the Django flow, which can fall back to explicit
+        # per-endpoint answers): with no issuer, projects cannot discover anything.
+        base_url = _ask(
+            "OIDC issuer URL (discovery base)",
+            placeholder="https://idp.example.org/realms/main",
+        )
+    answers["OIDC_ISSUER"] = envrender.oidc_issuer(provider, base_url, realm)
+    if provider.startswith("proconnect"):
+        # ProConnect specifics (override the generic keycloak-ish defaults set in
+        # _ask_projects): it returns the userinfo as a signed JWT (RS256, not JSON),
+        # and exposes given_name/usual_name/email/siret via per-claim scopes — there
+        # is no `profile` scope nor a `name` claim. Without these, login loops back
+        # to the landing page (userinfo parse error, then the fullname check fails).
+        answers["OIDC_SCOPES"] = "openid given_name usual_name email siret"
+        answers["OIDC_USERINFO_SIGNED_RESPONSE_ALG"] = "RS256"
+        answers["OIDC_FULLNAME_ATTRIBUTES"] = "given_name,usual_name"
+    answers["OIDC_CLIENT_ID"] = _ask("OIDC_CLIENT_ID")
+    value = _password("OIDC_CLIENT_SECRET") if backend.prompts_values() else None
+    backend.env_secret(answers, "OIDC_CLIENT_SECRET", component=component, value=value)
+
+
+def _ask_projects_storage(
+    answers: dict, backend: SecretBackend, component: str, *, scaling: bool = False
+) -> None:
+    """Prompt S3 object storage for projects uploads (the recommended target).
+
+    S3 is where avatars / project backgrounds / attachments should live in
+    production; the role still bind-mounts local dirs as a fallback. The secret
+    access key routes through the secret backend like every other credential;
+    the access key id stays plaintext (matches the Django S3 questionnaire).
+    With ``scaling=True`` (horizontal scaling accepted) the opt-out confirm is
+    skipped: uploads on local disk are not shared between instances, so S3 is
+    mandatory as soon as more than one instance runs. Declining still warns
+    that local storage rules out going multi-instance later.
+    """
+    if scaling:
+        ui.info(
+            "Horizontal scaling requires S3 object storage (local uploads are "
+            "not shared between instances)."
+        )
+    elif not _confirm(
+        "Configure S3 object storage for uploads (recommended)?", default=True
+    ):
+        ui.warn(
+            "Local storage keeps uploads on this host's disk: scaling to "
+            "several instances later will first require moving them to S3."
+        )
+        return
+    answers["S3_ENDPOINT"] = _ask(
+        "S3_ENDPOINT", placeholder="https://s3.fr-par.scw.cloud"
+    )
+    region = _ask("S3_REGION (optional)", required=False)
+    if region:
+        answers["S3_REGION"] = region
+    answers["S3_ACCESS_KEY_ID"] = _ask("S3_ACCESS_KEY_ID")
+    value = _password("S3_SECRET_ACCESS_KEY") if backend.prompts_values() else None
+    backend.env_secret(
+        answers, "S3_SECRET_ACCESS_KEY", component=component, value=value
+    )
+    answers["S3_BUCKET"] = _ask("S3_BUCKET", "projects")
+    answers["S3_FORCE_PATH_STYLE"] = (
+        "true" if _confirm("S3_FORCE_PATH_STYLE?", default=True) else "false"
+    )
+
+
+def _ask_projects_scaling(
+    answers: dict, backend: SecretBackend, component: str
+) -> bool:
+    """Prompt the optional Redis wiring for horizontal scaling.
+
+    Upstream enables its Redis adapters (``@sailshq/connect-redis`` for sessions,
+    ``@sailshq/socket.io-redis`` for realtime broadcasts) only when ``REDIS_URL``
+    is set — required as soon as more than one instance runs behind a load
+    balancer, useless for a single instance, hence opt-in and default-declined.
+    The URL can embed a password (``redis://user:password@host``) so it routes
+    through the secret backend whole, like ``DATABASE_URL``. Replicas already
+    share SECRET_KEY/DATABASE_URL (one env blob for every host of the unit).
+    Returns whether scaling was accepted, so the caller can make the remaining
+    prerequisite — S3, local uploads are not visible across instances — required.
+    """
+    if not _confirm(
+        "Configure Redis for horizontal scaling (multiple instances)?",
+        default=False,
+    ):
+        return False
+    value = (
+        _ask(
+            "REDIS_URL",
+            placeholder="redis://user:password@redis.example.org:6379/0",
+        )
+        if backend.prompts_values()
+        else None
+    )
+    backend.env_secret(answers, "REDIS_URL", component=component, value=value)
+    return True
+
+
+def _ask_projects_email(answers: dict, backend: SecretBackend, component: str) -> None:
+    """Prompt optional transactional email (SMTP) settings for projects.
+
+    projects uses nodemailer's ``SMTP_*`` keys (not Django's ``DJANGO_EMAIL_*``).
+    The password is a secret routed through the backend; optional fields land in
+    ``answers`` only when filled in so the template guards stay clean.
+    """
+    if not _confirm("Configure transactional email (SMTP) settings?", default=False):
+        return
+    answers["SMTP_HOST"] = _ask("SMTP_HOST", placeholder="smtp.example.org")
+    answers["SMTP_PORT"] = _ask("SMTP_PORT", "587")
+    answers["SMTP_SECURE"] = (
+        "true" if _confirm("SMTP_SECURE (implicit TLS)?", default=False) else "false"
+    )
+    user = _ask("SMTP_USER (optional)", required=False)
+    if user:
+        answers["SMTP_USER"] = user
+        value = _password("SMTP_PASSWORD") if backend.prompts_values() else None
+        backend.env_secret(answers, "SMTP_PASSWORD", component=component, value=value)
+    answers["SMTP_FROM"] = _ask(
+        "SMTP_FROM", placeholder='"Projects" <noreply@example.org>'
+    )
+
+
+def _ask_projects(meta, backend: SecretBackend) -> dict:
+    """Collect the projects core answers → the ``st_projects_env`` blob.
+
+    projects (a Planka fork) is a Sails.js app, not Django: its role consumes a
+    single free-form ``st_projects_env`` blob (no DJANGO_*/Celery; Redis appears
+    only as the optional horizontal-scaling ``REDIS_URL``). Login is
+    OIDC-enforced (SSO only, no local accounts) and uploads target S3. Secrets
+    (DATABASE_URL, SECRET_KEY, the OIDC client secret, S3/SMTP credentials) route
+    through the secret backend exactly like the Django apps' DB_PASSWORD.
+    """
+    core_key = meta.core().key
+    domain = _ask("Public domain for projects", placeholder="projects.example.org")
+    # DOMAIN feeds _print_summary; BASE_URL is the actual env key.
+    answers: dict = {
+        "DOMAIN": domain,
+        "BASE_URL": f"https://{domain}",
+        # OIDC-enforced SSO defaults (mirrors the upstream docker-compose).
+        "ALLOW_ALL_TO_CREATE_PROJECTS": "true",
+        "OIDC_ENFORCED": "true",
+        "OIDC_SCOPES": "openid email profile",
+        "OIDC_USE_DEFAULT_RESPONSE_MODE": "true",
+        "OIDC_FULLNAME_ATTRIBUTES": "name",
+        "OIDC_IGNORE_USERNAME": "true",
+        "OIDC_IGNORE_ROLES": "true",
+    }
+
+    # SECRET_KEY: generated like the Django apps' DJANGO_SECRET_KEY.
+    backend.env_secret(
+        answers,
+        "SECRET_KEY",
+        component=core_key,
+        value=secrets.gen_secret() if backend.prompts_values() else None,
+    )
+
+    # DATABASE_URL embeds the DB password → routed through the secret backend.
+    value = (
+        _ask(
+            "DATABASE_URL",
+            placeholder="postgresql://user:password@db.example.org:5432/projects",
+        )
+        if backend.prompts_values()
+        else None
+    )
+    backend.env_secret(answers, "DATABASE_URL", component=core_key, value=value)
+
+    # OpenID Connect — required (login has no local fallback when OIDC_ENFORCED).
+    _ask_projects_oidc(answers, backend, core_key)
+    org_claim = _ask(
+        "ORGANIZATION_ID_CLAIM (optional OIDC claim for org mode; blank for free mode)",
+        required=False,
+    )
+    if org_claim:
+        answers["ORGANIZATION_ID_CLAIM"] = org_claim
+
+    # Scaling before storage: accepting it makes the S3 questionnaire mandatory
+    # (uploads must be shared between instances), skipping its opt-out confirm.
+    scaling = _ask_projects_scaling(answers, backend, core_key)
+    _ask_projects_storage(answers, backend, core_key, scaling=scaling)
+    _ask_projects_email(answers, backend, core_key)
     return answers
 
 
@@ -719,7 +931,7 @@ def _bundle_egress(
     writer.apply_component_vars(ev, meta, meta.component("egress"), answers)
     ev[writer.cadvisor_var(meta.app)] = _ask_cadvisor("egress")
     ev.yaml_set_start_comment(
-        writer.vars_header(meta.app, meta, meta.component("egress"))
+        writer.vars_header(meta.app, meta, meta.component("egress"), backend)
     )
     tree.save_vars(meta.app, env, "egress", ev)
     writer.write_vault(meta.app, env, "egress", backend)
@@ -772,7 +984,7 @@ def _reuse_egress(meta, answers, backend, env) -> None:
     writer.apply_component_vars(ev, meta, meta.component("egress"), answers)
     ev[writer.cadvisor_var(meta.app)] = _ask_cadvisor("egress")
     ev.yaml_set_start_comment(
-        writer.vars_header(meta.app, meta, meta.component("egress"))
+        writer.vars_header(meta.app, meta, meta.component("egress"), backend)
     )
     tree.save_vars(meta.app, env, "egress", ev)
     writer.write_vault(meta.app, env, "egress", backend)
@@ -998,7 +1210,7 @@ def _handle_dependency(
         # Q8 redis (address/username/password, only when NOT co-located) + Q9
         # egress cadvisor; runs before save_vars so the redis vars land in pvars.
         _bundle_egress(meta, pvars, answers, backend, env, egress_hosts, valkey_enabled)
-    pvars.yaml_set_start_comment(writer.vars_header(meta.app, meta, provider))
+    pvars.yaml_set_start_comment(writer.vars_header(meta.app, meta, provider, backend))
     tree.save_vars(meta.app, env, provider.key, pvars)
     writer.write_vault(meta.app, env, provider.key, backend)
     tree.write_hosts(meta.app, env, provider.key, provider.app_name, hosts)
@@ -1076,14 +1288,15 @@ def _print_bootstrap_intro(meta) -> None:
             f"  {meta.arch_docs_url}",
             title="Bootstrap",
         )
+    # Only list the infrastructure THIS app actually needs (apps/<app>.yml
+    # `requires`): telling a projects/keycloak operator to provision a Redis they
+    # never use is noise. An app declaring nothing falls back to the full list.
+    keys = meta.requires or list(_REQUIREMENT_LINES)
+    bullets = "\n".join(
+        f"  • {_REQUIREMENT_LINES[k]}" for k in keys if k in _REQUIREMENT_LINES
+    )
     ui.note(
-        "Depending on the app, make sure you've prepared:\n"
-        "  • [bold]IP[/bold] or hostname of the VM(s)\n"
-        "  • [bold]PostgreSQL[/bold] host and credentials\n"
-        "  • [bold]Redis[/bold] host and credentials\n"
-        "  • [bold]S3[/bold] endpoint, bucket and credentials\n"
-        "  • [bold]Identity provider[/bold] URLs and credentials\n"
-        "    (For ProConnect Integration environment: create an app at https://partenaires.proconnect.gouv.fr/)",
+        f"Make sure you've prepared:\n  • [bold]IP[/bold] or hostname of the VM(s)\n{bullets}",
         title="Requirements",
     )
     _confirm_ready("Do you have all of the above ready to continue?")
@@ -1201,12 +1414,14 @@ def bootstrap(app: str, env: str, component: str | None = None) -> None:
                     f"workers (leave blank to run on the {core.key} hosts)",
                     allow_empty=True,
                 )
-            # keycloak is not a Django app — it takes its own (raw-env) questionnaire.
-            answers = (
-                _ask_keycloak(meta, backend)
-                if app == "keycloak"
-                else _ask_core(meta, backend)
-            )
+            # keycloak and projects are not Django apps — each takes its own
+            # (raw-env) questionnaire instead of the shared Django core one.
+            if app == "keycloak":
+                answers = _ask_keycloak(meta, backend)
+            elif app == "projects":
+                answers = _ask_projects(meta, backend)
+            else:
+                answers = _ask_core(meta, backend)
             core_cadvisor = _ask_cadvisor(core.key)  # last core question
         else:
             ui.info(f"{core.key}: kept existing.")

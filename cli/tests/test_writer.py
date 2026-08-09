@@ -206,3 +206,52 @@ def test_expand_var_markers_ansible_vault_is_noop():
 
     assert {k: str(v) for k, v in data.items()} == before
     assert isinstance(data["st_x_env"], LiteralScalarString)
+
+
+def test_vars_header_secrets_line_matches_the_backend():
+    """The header must describe the backend actually in use: the hashi_vault
+    backend writes no vault.yml, so pointing the operator at one (and at
+    {{ vault_* }} refs that don't exist) would be a wild goose chase."""
+    from st_cli.core import appmeta, writer
+    from st_cli.core.secretbackend import AnsibleVaultBackend, HashiVaultBackend
+
+    meta = appmeta.load_app("projects")
+    comp = meta.core()
+
+    vault_hdr = writer.vars_header("projects", meta, comp, AnsibleVaultBackend())
+    assert "{{ vault_* }}" in vault_hdr
+    assert "vault.yml" in vault_hdr and "OpenBao" not in vault_hdr
+
+    hashi_hdr = writer.vars_header(
+        "projects", meta, comp, HashiVaultBackend("projects")
+    )
+    assert "OpenBao" in hashi_hdr and "no vault.yml" in hashi_hdr
+    assert "{{ vault_* }}" not in hashi_hdr
+
+    # no backend passed → unchanged ansible-vault wording (the default)
+    assert "{{ vault_* }}" in writer.vars_header("projects", meta, comp)
+
+
+def test_write_core_success_message_reflects_whether_vault_written(repo, capfd):
+    """write_core reports `vault.yml` only when the backend actually buffers
+    secrets for the core. ansible-vault (a buffered secret) → vault.yml is written
+    and named; hashi_vault (no vault.yml at all) → the success line must not claim
+    one, or it sends the operator hunting for a file that does not exist."""
+    from st_cli.core import appmeta, writer
+    from st_cli.core.secretbackend import AnsibleVaultBackend, HashiVaultBackend
+
+    meta = appmeta.load_app("projects")
+    (repo / ".vault-pass").write_text("pw\n", encoding="utf-8")  # for encrypt_file
+
+    # ansible-vault with a buffered secret → vault.yml written and reported
+    av = AnsibleVaultBackend()
+    answers: dict = {}
+    av.env_secret(answers, "SECRET_KEY", component="projects", value="x")
+    writer.write_core(meta, answers, av, ["10.0.0.1"], [], "prod")
+    assert "wrote vars.yml + vault.yml + hosts" in capfd.readouterr().out
+
+    # hashi_vault buffers nothing and writes no vault.yml → don't name it
+    writer.write_core(meta, {}, HashiVaultBackend("projects"), ["10.0.0.2"], [], "pp")
+    out = capfd.readouterr().out
+    assert "wrote vars.yml + hosts" in out
+    assert "vault.yml" not in out
