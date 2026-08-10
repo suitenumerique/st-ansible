@@ -69,7 +69,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mpa_caddy_port | The host published port for the caddy /checkv2 endpoint. | str | no | 50402 |
 | st_messages_mpa_caddy_healthcheck_port | The host published port for the caddy /healthcheck endpoint. | str | no | 50403 |
 | st_messages_mpa_rspamd_image | Image repository for the mpa rspamd. | str | no | docker.io/rspamd/rspamd |
-| st_messages_mpa_rspamd_tag | The tag of the rspamd docker image to use. See https://hub.docker.com/r/rspamd/rspamd/tags. | str | no | 4.1.1 |
+| st_messages_mpa_rspamd_tag | The tag of the rspamd docker image to use. See https://hub.docker.com/r/rspamd/rspamd/tags. | str | no | 4.1.4 |
 | st_messages_mpa_rspamd_controller_password | Password of the rspamd controller webui. | str | no |  |
 | st_messages_mpa_rspamd_controller_port | The host published port for the rspamd controller/webui. | str | no | 50404 |
 | st_messages_mpa_rspamd_add_header_score | The score triggering the add_header action on Messages. | str | no | 4 |
