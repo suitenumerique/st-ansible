@@ -1,7 +1,0 @@
-# Sections: major_changes, minor_changes, breaking_changes,
-# deprecated_features, removed_features, security_fixes, bugfixes,
-# known_issues, release_summary, trivial. Entries are Markdown strings.
-# Use `trivial:` for changes that should NOT appear in the changelog.
-minor_changes:
-  - (cli) `st-cli upgrade` now checks upstream first and, without pipx (container installs), tells the user to run `docker pull ghcr.io/suitenumerique/st-cli:latest` and re-run `st-cli upgrade` instead of the pip hint
-  - (cli) the behind-upstream warning on other commands now branches on pipx — without pipx it names the exact `docker pull ghcr.io/suitenumerique/st-cli:latest` command to run before `st-cli upgrade`

@@ -90,3 +90,33 @@ releases:
     fragments:
     - cli-ansible-summary.yml
     release_date: '2026-08-05'
+  0.2.2:
+    changes:
+      bugfixes:
+      - (cli) only push latest on new tags to follow the st-cli collection tags
+      - (plugins) the compact callback no longer concatenates the pending task lines
+        on one row when a task runs on multiple hosts, and it keeps a live pending
+        line while other hosts still run
+      minor_changes:
+      - (cli) `st-cli upgrade` now checks upstream first and, without pipx (container
+        installs), tells the user to run `docker pull ghcr.io/suitenumerique/st-cli:latest`
+        and re-run `st-cli upgrade` instead of the pip hint
+      - "(cli) the behind-upstream warning on other commands now branches on pipx
+        \u2014 without pipx it names the exact `docker pull ghcr.io/suitenumerique/st-cli:latest`
+        command to run before `st-cli upgrade`"
+      - (plugins) the compact callback now prints the `msg` of a `debug` task in a
+        green box in place of the ok line and the JSON dump
+      - Update docker.io/clamav/clamav Docker tag to v1.5.4
+      - Update docker.io/rspamd/rspamd Docker tag to v4.1.4
+      - Update docker.io/valkey/valkey Docker tag to v9.1.1
+      - Update docker/login-action digest to dbcb813
+    fragments:
+    - cli-latest-tags.yml
+    - cli-upgrade-container.yml
+    - compact-debug-box.yml
+    - compact-multi-host-pending.yml
+    - renovate-pr-49.yml
+    - renovate-pr-61.yml
+    - renovate-pr-64.yml
+    - renovate-pr-66.yml
+    release_date: '2026-08-10'
