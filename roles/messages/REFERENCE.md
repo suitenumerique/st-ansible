@@ -86,7 +86,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mpa_unbound_tag | Tag of the unbound docker image to use. alpinelinux/unbound publishes no versioned tags, only latest. | str | no | latest |
 | st_messages_mpa_unbound_config_template | Local path to the unbound.conf template. | str | no | mpa/unbound.conf.j2 |
 | st_messages_mpa_clamav_image | Image repository for the mpa clamav. | str | no | docker.io/clamav/clamav |
-| st_messages_mpa_clamav_tag | The tag of the clamav docker image to use. See https://hub.docker.com/r/clamav/clamav/tags. | str | no | 1.5.3 |
+| st_messages_mpa_clamav_tag | The tag of the clamav docker image to use. See https://hub.docker.com/r/clamav/clamav/tags. | str | no | 1.5.4 |
 | st_messages_mpa_clamav_config_template | Local path to the clamd.conf template. | str | no | mpa/clamd.conf.j2 |
 | st_messages_mpa_valkey_image | Image repository for the mpa valkey. | str | no | docker.io/valkey/valkey |
 | st_messages_mpa_valkey_tag | The tag of the valkey docker image to use. See https://hub.docker.com/r/valkey/valkey/tags. | str | no | 9.1.1 |

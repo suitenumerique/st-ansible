@@ -122,7 +122,7 @@ st_messages_mpa_unbound_config_template: mpa/unbound.conf.j2
 st_messages_mpa_clamav_image: docker.io/clamav/clamav
 # The tag of the clamav docker image to use.
 # See https://hub.docker.com/r/clamav/clamav/tags.
-st_messages_mpa_clamav_tag: 1.5.3
+st_messages_mpa_clamav_tag: 1.5.4
 # Local path to the clamd.conf template.
 st_messages_mpa_clamav_config_template: mpa/clamd.conf.j2
 # Image repository for the mpa valkey.
