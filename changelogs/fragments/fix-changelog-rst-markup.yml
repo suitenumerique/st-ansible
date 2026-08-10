@@ -1,0 +1,7 @@
+# Sections: major_changes, minor_changes, breaking_changes,
+# deprecated_features, removed_features, security_fixes, bugfixes,
+# known_issues, release_summary, trivial. Entries are reStructuredText:
+# write a code span with double backticks, and never start with "(".
+# Use `trivial:` for changes that should NOT appear in the changelog.
+trivial:
+  - Fixed the reStructuredText markup of the released changelog entries and documented it.

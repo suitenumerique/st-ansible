@@ -67,18 +67,23 @@ Every pull request must add a fragment: a small YAML file in `changelogs/fragmen
 make changelog.fragment name=fix-rspamd-port
 ```
 
-This creates `changelogs/fragments/fix-rspamd-port.yml`. Open it and fill in the relevant section(s), then remove the placeholder. Valid sections (each value is a list of Markdown strings): `major_changes`, `minor_changes`, `breaking_changes`, `deprecated_features`, `removed_features`, `security_fixes`, `bugfixes`, `known_issues`, plus `release_summary` and `trivial`. For example :
+This creates `changelogs/fragments/fix-rspamd-port.yml`. Open it and fill in the relevant section(s), then remove the placeholder. Valid sections (each value is a list of reStructuredText strings): `major_changes`, `minor_changes`, `breaking_changes`, `deprecated_features`, `removed_features`, `security_fixes`, `bugfixes`, `known_issues`, plus `release_summary` and `trivial`. For example :
 
 ```yaml
 bugfixes:
   - Fixed the default rspamd controller port for single-host deployments.
 ```
 
-The `st-cli` subproject shares the collection's version, so it shares this same changelog. Prefix cli entries so readers know the scope :
+An entry is **reStructuredText, not Markdown**. Two rules matter :
+
+- Write a code span with **double** backticks: ` ``st-cli upgrade`` `. A single backtick is an RST title reference and renders as italics.
+- Do not start an entry with `(`. RST reads `(cli)` as a list enumerator (`cli` is the roman numeral 151), drops it, and prints `1.` in its place.
+
+The `st-cli` subproject shares the collection's version, so it shares this same changelog. Prefix an entry with its scope, followed by a colon, so readers know where the change applies :
 
 ```yaml
 minor_changes:
-  - "st-cli: added a --dry-run flag to the deploy command."
+  - "cli: added a ``--dry-run`` flag to the deploy command."
 ```
 
 For changes that should NOT appear in the released changelog (CI tweaks, chores, refactors with no user-facing effect), use a `trivial:` fragment. It still satisfies the PR check but is dropped from the released changelog.

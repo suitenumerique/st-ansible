@@ -82,7 +82,8 @@ endif
 	  printf '%s\n' \
 	    '# Sections: major_changes, minor_changes, breaking_changes,' \
 	    '# deprecated_features, removed_features, security_fixes, bugfixes,' \
-	    '# known_issues, release_summary, trivial. Entries are Markdown strings.' \
+	    '# known_issues, release_summary, trivial. Entries are reStructuredText:' \
+	    '# write a code span with double backticks, and never start with "(".' \
 	    '# Use `trivial:` for changes that should NOT appear in the changelog.' \
 	    'minor_changes:' \
 	    '  - Describe your change here.' \
