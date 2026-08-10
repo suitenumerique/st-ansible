@@ -52,7 +52,7 @@ st_meet_livekit_tag: v1.13.4
 # Tag of the livekit caddyl4 docker image to deploy.
 st_meet_livekit_caddyl4_tag: v2.11.3
 # Tag of the valkey docker image to deploy for livekit when using the full compose template.
-st_meet_livekit_valkey_tag: 9.0.4
+st_meet_livekit_valkey_tag: 9.1.1
 # Deploy a local valkey in the livekit compose (single-node co-located egress). Set false when using an external shared redis.
 st_meet_livekit_valkey_enabled: true
 # Redis/valkey address (host:port) the livekit server connects to. Defaults to the local valkey; set to a shared external redis when egress runs on a different node.

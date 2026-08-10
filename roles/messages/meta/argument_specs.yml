@@ -307,7 +307,7 @@ argument_specs:
           - "The tag of the valkey docker image to use."
           - "See https://hub.docker.com/r/valkey/valkey/tags."
         # renovate: datasource=docker depName=docker.io/valkey/valkey
-        default: "9.0.4"
+        default: "9.1.1"
       st_messages_mpa_rollback_enabled:
         type: "bool"
         description: "Whether or not to trigger the rollback tasks if the mpa deployment fails."

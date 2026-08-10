@@ -48,7 +48,7 @@ Installs and configures the meet application from La Suite Territoriale on Debia
 | st_meet_livekit_valkey_image | Image repository for the livekit valkey. | str | no | docker.io/valkey/valkey |
 | st_meet_livekit_tag | Tag of the livekit docker image to deploy. | str | no | v1.13.4 |
 | st_meet_livekit_caddyl4_tag | Tag of the livekit caddyl4 docker image to deploy. | str | no | v2.11.3 |
-| st_meet_livekit_valkey_tag | Tag of the valkey docker image to deploy for livekit when using the full compose template. | str | no | 9.0.4 |
+| st_meet_livekit_valkey_tag | Tag of the valkey docker image to deploy for livekit when using the full compose template. | str | no | 9.1.1 |
 | st_meet_livekit_valkey_enabled | Deploy a local valkey in the livekit compose (single-node co-located egress). Set false when using an external shared redis. | bool | no | True |
 | st_meet_livekit_redis_address | Redis/valkey address (host:port) the livekit server connects to. Defaults to the local valkey; set to a shared external redis when egress runs on a different node. | str | no | 127.0.0.1:6379 |
 | st_meet_livekit_redis_username | Username for the external shared redis used by livekit and egress. Not used by the co-located local valkey, which has no auth. | str | no |  |

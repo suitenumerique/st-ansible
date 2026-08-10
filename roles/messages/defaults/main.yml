@@ -129,7 +129,7 @@ st_messages_mpa_clamav_config_template: mpa/clamd.conf.j2
 st_messages_mpa_valkey_image: docker.io/valkey/valkey
 # The tag of the valkey docker image to use.
 # See https://hub.docker.com/r/valkey/valkey/tags.
-st_messages_mpa_valkey_tag: 9.0.4
+st_messages_mpa_valkey_tag: 9.1.1
 # Whether or not to trigger the rollback tasks if the mpa deployment fails.
 st_messages_mpa_rollback_enabled: false
 # Local path to the custom template to use for mpa compose file.

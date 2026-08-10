@@ -1,0 +1,2 @@
+minor_changes:
+  - "Update docker.io/valkey/valkey Docker tag to v9.1.1"
