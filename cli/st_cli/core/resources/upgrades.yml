@@ -1,0 +1,33 @@
+# Per-release upgrade requirements: which units `st-cli upgrade` must
+# rebootstrap (`st-cli bootstrap <app> <env>`), and which newly declared
+# components it should offer to bootstrap.
+#
+# `baseline` is the oldest supported bootstrap stamp. A unit stamped below it
+# is flagged wholesale ("no longer supported — rebootstrap"), and one replay
+# clears everything, so entries at or below the baseline carry no information.
+#
+# Prune rule: delete an entry ONLY when you raise `baseline` to or above its
+# version. Never delete an entry above the baseline — a repo that has not
+# caught up yet would silently skip the step. CI enforces this invariant.
+#
+# Only add an entry when operators MUST act. Adding an env var to a template or
+# a var to apps/<app>.yml needs no entry — a rebootstrap picks those up anyway.
+#
+# Schema (see core/upgrades.py):
+#   baseline: "0.0.0"                   # stamps below this are unsupported
+#   flags:
+#     - version: "0.3.0"                # the release that introduced the need
+#       apps: [meet, drive]             # a list of app names, or the string: all
+#       reason: "meet 1.5 adds mandatory recording env vars"
+#       link: "https://github.com/suitenumerique/st-ansible/blob/main/CHANGELOG.md#v030"
+#       interactive: true                # optional, default false: forces a
+#                                         # full pre-filled replay instead of
+#                                         # a silent one
+#       new_components: [livekit]        # optional: component keys newly
+#                                         # declared for `apps` (must be an
+#                                         # explicit list, not "all"); each
+#                                         # key must be a real dependencies[].on
+#                                         # target (e.g. "livekit", "mta-in");
+#                                         # upgrade offers to bootstrap them once
+baseline: "0.0.0"
+flags: []

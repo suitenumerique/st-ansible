@@ -1,4 +1,4 @@
-"""`st-cli deploy` — preflight (doctor) + run the ansible playbooks."""
+"""`st-cli deploy` — preflight (doctor) + env-key diff + run the ansible playbooks."""
 
 from __future__ import annotations
 
@@ -23,9 +23,39 @@ def run(
     to ansible as ``--limit <alias>`` (default: all hosts, one at a time via
     ``serial: 1``). With ``components`` set, a missing host raises; without it, a
     component that lacks the host is skipped.
+
+    Hard-gates on a pending rebootstrap: if any of the components being
+    deployed still needs the bootstrap questionnaire replayed (see
+    ``core/upgrades.py``), this raises before any remote or network side
+    effect (ssh-user setup, collection install) — there is no override flag,
+    deliberately. Because the rebootstrap questionnaire is interactive, a
+    non-interactive/CI deploy must have it run beforehand (e.g. as a
+    separate, manual step).
+
+    After the hard gate passes, ensures the ssh user, materializes the
+    scaffolding + pinned collection (``drift.preflight``), then runs the
+    offline env-key diff (``drift.env_key_report``) and prints its
+    advisories/infos — warn-only, never blocks the deploy.
     """
     _, units = manifest.managed_units(app_name, env, components)
     meta = appmeta.load_app(app_name)
+
+    # Hard gate: managed_units above already guarantees `units` is non-empty and
+    # non-external, so every check_app warning here is a rebootstrap-needed
+    # message (never the "all units are external" one) — scoped to exactly the
+    # components this deploy was asked to act on. No override flag: deliberate.
+    # The warnings are NOT also emitted via ui.warn — they are reproduced
+    # verbatim in the error below, and printing both makes the operator read the
+    # same paragraph twice and hunt for the difference between them. Runs
+    # before any ssh/network side effect below, so a pending rebootstrap never
+    # touches a host.
+    warnings = drift.check_app(app_name, env, components)
+    if warnings:
+        raise StCliError(
+            "Rebootstrap required before deploying:\n"
+            + "\n".join(f"  - {w}" for w in warnings)
+        )
+
     hosts = [
         ip
         for u in units
@@ -34,8 +64,14 @@ def run(
         )
     ]
     sshuser.ensure_ssh_user(hosts)
-    for w in drift.preflight(app_name, env, components):
-        ui.warn(w)
+    drift.preflight(app_name, env)
+
+    advisories, infos = drift.env_key_report(app_name, env, components)
+    for a in advisories:
+        ui.warn(a)
+    for i in infos:
+        ui.info(i)
+
     tags = ["deploy"] if deploy_only else None
     prefix = "(dry-run) " if dry_run else ("(deploy-only) " if deploy_only else "")
     deployed_any = False

@@ -155,9 +155,10 @@ def maybe_warn_upgrade(invoked_subcommand: str | None) -> None:
     Never raises. Warn-only — it never prompts, never auto-runs
     ``upgrade``, and never exits. Any failure is swallowed silently so the
     original command proceeds untouched. The hint branches on pipx ownership
-    (``owning_pipx``): when pipx manages this install, ``st-cli upgrade``
-    alone works; otherwise (the container image), the user must pull a new
-    image first.
+    (``owning_pipx``): when pipx manages this install, it proposes
+    ``pipx upgrade st-cli`` then ``st-cli upgrade`` (``upgrade`` itself no
+    longer self-upgrades); otherwise (the container image), the user must
+    pull a new image first.
     """
     if os.environ.get("ST_CLI_NO_UPSTREAM_CHECK"):
         return
@@ -171,7 +172,8 @@ def maybe_warn_upgrade(invoked_subcommand: str | None) -> None:
 
     if owning_pipx():
         ui.warn(
-            f"st-cli {__version__} is behind upstream {latest} — run `st-cli upgrade`."
+            f"st-cli {__version__} is behind upstream {latest} — run "
+            "`pipx upgrade st-cli`, then `st-cli upgrade`."
         )
     else:
         ui.warn(
