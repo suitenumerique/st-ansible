@@ -122,15 +122,50 @@ Host 10.0.0.*
 
 ## Upgrading
 
-### Using the container
+`st-cli` and the collection use the same version number, and the upgrade always
+happens in two steps: first update the CLI itself, then let it realign your config.
 
-`st-cli` and the collection use the same version number. To move to a newer release:
+### Step 1 — update the CLI
+
+Using the container:
 
 ```bash
 podman pull ghcr.io/suitenumerique/st-cli:latest
 # or docker pull ghcr.io/suitenumerique/st-cli:latest
-st-cli upgrade  # bumps the .st-cli.yml pin, regenerates the scaffoldings
 ```
+
+Using pipx:
+
+```bash
+pipx upgrade st-cli
+```
+
+`st-cli upgrade` no longer updates the CLI itself. If a newer release is available,
+it warns you with the exact command above and stops — it never replays your
+questionnaire with an old version's templates.
+
+### Step 2 — realign your config
+
+```bash
+st-cli upgrade
+```
+
+This does three things:
+
+1. Realigns the `.st-cli.yml` version pin to the CLI you just installed.
+2. Replays every unit a release flagged as needing attention (see below), pre-filled
+   from your current config, **silently**: an already-known answer is kept without a
+   prompt, and only a genuinely new *required* question stops to ask (a new
+   optional question is answered blank). If a flag declares a new
+   optional component (for example a new `livekit` sidecar), the replay also offers to
+   bootstrap it once — declining leaves it alone and the offer stays quiet afterwards.
+3. Cleans the trashable `.st-cli/` scaffolding, but only when the pin actually changed.
+
+Silent does not always mean silent: when recovery has a gap — a value st-cli cannot
+reconstruct from the committed tree — it still stops and asks, the same as a normal
+rebootstrap would. A flag can also mark itself `interactive: true`, which forces the
+full pre-filled questionnaire instead of the quiet replay (used for changes too broad
+for a silent pass).
 
 We maintain the tags for all tools in the default values of the collection variable,
 which means at this point upgrading the actual LST applications is just a deploy:
@@ -139,13 +174,86 @@ which means at this point upgrading the actual LST applications is just a deploy
 st-cli deploy meet prod # roll out the new blessed image tags
 ```
 
-### Using pipx
+### Keeping your config up to date (rebootstrap)
+
+Some releases add configuration an app now requires — a new mandatory environment
+variable, a new Ansible variable. When that happens, `st-cli doctor` tells you which
+apps need attention, `st-cli upgrade` replays them for you (see above), and
+`st-cli deploy` refuses to run until it is done:
 
 ```bash
-st-cli upgrade          # automatically updates pipx package, bumps the .st-cli.yml pin,
-                        # and regenerates the scaffoldings
-st-cli deploy meet prod # roll out the new blessed image tags
+st-cli doctor           # e.g. "meet/prod/meet: rebootstrap needed (0.3.0 — …)"
+st-cli upgrade           # or: st-cli bootstrap meet prod
 ```
+
+`doctor` also prints an offline advisory diff for every unit, separate from the
+rebootstrap flag above: a "new env keys available" warning when a template offers a
+key your committed blob does not have yet (run `bootstrap` to add it), and an info
+note when your blob has a key no template recognizes (a custom var, or a leftover —
+remove it only if you did not add it yourself). Neither advisory blocks `deploy`;
+only a pending rebootstrap flag does, and there is no way around it — no override
+flag, no environment variable. `deploy` prints the same advisories, as warnings,
+once its gate passes.
+
+**Re-running `bootstrap` on an existing deployment asks what to do.** It offers a
+3-way choice:
+
+- **Modify** (default) — replays the same questionnaire with **answers pre-filled
+  from your current config**: press Enter to keep a recovered value, or edit it
+  inline. Recovery is best-effort: a value st-cli cannot recover falls back to a
+  normal prompt, alongside genuinely new questions. An Enter-through run leaves your
+  config byte-identical when every answer was recovered, so `git diff` shows exactly
+  what changed and nothing else.
+- **Reuse** — keeps the unit exactly as it is. Nothing is written, and the
+  `bootstrapped_with` stamp does not move: a pending rebootstrap flag stays pending,
+  and `deploy` still refuses to run until you Modify or Override for real.
+- **Override** — rebuilds the unit from scratch. This is destructive: it regenerates
+  the core's own generated secrets (for example `DJANGO_SECRET_KEY`), discards any
+  hand-edits to `vars.yml`/`vault.yml`, and breaks deployed services until you
+  redeploy. A secret owned by a kept provider (for example the LiveKit API key/secret
+  pair) is re-imported unchanged — Override never rotates it. A managed unit that
+  mirrors a core-owned secret (for example messages' mta-in copy of `MDA_API_SECRET`)
+  is replayed in the same run and picks up the regenerated value. st-cli asks for a
+  hard confirmation before it does any of this. Override needs the full
+  `st-cli bootstrap <app> <env>` run — a wire-only `-c <core>` run does not offer it.
+
+A gate that applies only sometimes reads accordingly: if SMTP is already configured,
+the questionnaire asks "SMTP is configured — review its settings?" instead of asking
+whether to set it up from scratch (messages blobs offloading follows the same pattern).
+Answering no keeps the current setting unchanged — it never removes it.
+
+If you deliberately switch mode — for example from a `DATABASE_URL` to discrete
+`DB_*` vars, or messages outbound from relay to direct — st-cli warns you and lists
+the exact committed lines to remove by hand. The merge never deletes a committed line
+on its own, so the old lines stay until you remove them.
+
+**Dependencies get their own prompt.** For an existing dependency (for example
+`livekit` under `meet`) with no pending rebootstrap flag, `bootstrap` asks whether to
+reuse it as-is (default, untouched) or modify it (replay its questionnaire,
+pre-filled). When a dependency DOES carry a pending flag, there is no prompt: st-cli
+prints the reason and replays that dependency's questionnaire directly — this is the
+only way to clear the flag. A `-c <core>`-only run (wiring, no deploy) always reuses
+an existing dependency automatically; if it carries a pending flag, st-cli warns that
+the flag stays pending, since a wire-only run never deploys a dependency.
+
+What survives a rebootstrap:
+
+- your own `st_*` variables, and any comments you added to `vars.yml`;
+- your own `KEY=value` lines inside the `*_env` blocks (new keys from the release are
+  appended under an `# added by st-cli <version>` marker — nothing is ever deleted);
+- your secrets. Already-answered secrets are never re-prompted and never regenerated, so
+  `vault.yml` is left alone unless a release genuinely introduces a new one. If the vault
+  cannot be decrypted, the run aborts *before* the questionnaire rather than failing at
+  the end.
+
+**What st-cli cannot keep in sync.** If you point a role at your own template — for
+example `st_drive_backend_env_template`, a `*_compose_template`, or an overridden
+`st_meet_livekit_files` — then the blob st-cli renders is no longer what gets deployed.
+A rebootstrap keeps that blob correct but cannot touch your file; keeping it current is
+up to you. See the role's `REFERENCE.md` for what upstream expects.
+
+Since the questionnaire is interactive, a non-interactive/CI deploy needs the rebootstrap
+done beforehand.
 
 ## Uninstall
 

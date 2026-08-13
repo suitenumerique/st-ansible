@@ -8,14 +8,12 @@ before the core. No flag = the full interactive questionnaire.
 from __future__ import annotations
 
 import pytest
+from helpers import script_questionary, seed_creds, seed_livekit_provider
 
 from st_cli.cmd import bootstrap
 from st_cli.core import appmeta, envrender, manifest, paths, prompts, tree, vault
 from st_cli.core.errors import StCliError
 from st_cli.core.secretbackend import AnsibleVaultBackend
-
-from helpers import seed_creds, seed_livekit_provider, script_questionary
-
 
 # --------------------------------------------------------------------------- host validation
 
@@ -302,13 +300,11 @@ def test_bootstrap_component_livekit_external_redis_blank_auth(repo, monkeypatch
     external redis (``_ask``/``_password`` are called with ``required=False`` for
     both). A blank username is dropped entirely: ``if username:`` in
     ``_bundle_egress`` is a truthiness check, so ``""`` never lands in either the
-    livekit or the egress vars.yml. A blank password is a different story: it is
-    ALWAYS stored via ``backend.var_secret(...)`` (unconditional, no truthiness
-    guard) and then mirrored into egress's own vault by
-    ``_mirror_livekit_creds_to_egress``, whose guard is ``val is None`` — NOT
-    falsiness — precisely so an intentionally-blank password survives the mirror
-    instead of being (mis)treated as "missing". This pins that an empty string is
-    carried through both vaults verbatim rather than silently dropped."""
+    livekit or the egress vars.yml. A blank password is dropped the same way: it
+    is stored only when it is truthy, so an empty string is never written to
+    ``backend.var_secret`` and never mirrored into egress's vault — an
+    unauthenticated external redis carries no password key in either vault, only
+    the mirrored api key/secret."""
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
@@ -358,16 +354,14 @@ def test_bootstrap_component_livekit_external_redis_blank_auth(repo, monkeypatch
     ev = tree.load_vars("meet", "prod", "egress")
     assert "st_meet_livekit_redis_username" not in ev
 
-    # the blank password IS stored (unconditional backend.var_secret call) in
-    # livekit's own vault, and mirrored — still empty, not dropped — into
-    # egress's own vault (the mirror guard is `is None`, not truthiness).
+    # the blank password is dropped entirely: no password key in either vault,
+    # only the mirrored api key/secret (both vaults still exist).
     lvault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "livekit"))
-    assert lvault["st_meet_livekit_redis_password"] == ""
+    assert "st_meet_livekit_redis_password" not in lvault
     evault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "egress"))
-    assert (
-        evault["st_meet_livekit_redis_password"]
-        == lvault["st_meet_livekit_redis_password"]
-    )
+    assert "st_meet_livekit_redis_password" not in evault
+    assert evault["st_meet_livekit_api_key"] == lvault["st_meet_livekit_api_key"]
+    assert evault["st_meet_livekit_api_secret"] == lvault["st_meet_livekit_api_secret"]
 
     # every scripted answer was consumed — including both blank prompts.
     assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
@@ -469,8 +463,7 @@ def test_bootstrap_component_core_wires_deps_only(repo, monkeypatch):
             ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
             ("confirm", "Configure transactional email (SMTP) settings?", False),
             ("confirm", "cadvisor", True),
-            # dep: wire-only reuse (no "Yes — bootstrap now" option offered)
-            ("select", "Bootstrap livekit now?", "Reuse existing in the repo"),
+            # dep: wire-only + existing livekit — reused automatically, no select.
         ],
     )
     bootstrap.bootstrap("meet", "prod", component="meet")
@@ -499,10 +492,9 @@ def test_bootstrap_component_core_wires_deps_only(repo, monkeypatch):
     assert (repo / "meet/prod/livekit/vars.yml").read_text() == livekit_vars_before
     assert (repo / "meet/prod/livekit/vault.yml").read_bytes() == livekit_vault_before
 
-    # no "Yes — bootstrap now" option was offered for the livekit dep (wire-only)
+    # wire-only + existing livekit: reused automatically, no dep select at all
     dep_offers = [c for msg, c in sq.select_calls if "Bootstrap livekit now?" in msg]
-    assert dep_offers, "expected a livekit deploy/reuse select"
-    assert not any("Yes — bootstrap now" in opt for opt in dep_offers[0])
+    assert not dep_offers, "wire-only must reuse an existing provider without a select"
 
     # both units registered; livekit mode unchanged (managed)
     m = manifest.load_manifest()

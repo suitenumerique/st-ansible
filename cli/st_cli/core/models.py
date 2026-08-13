@@ -41,6 +41,13 @@ class UnitState:
     mode: str  # "managed" (deployed by us) | "external" (runs elsewhere)
     # NB: hosts are NOT stored here — the <app>/<env>/<component>/hosts ini file
     # is the single source of truth (read via tree.read_hosts()).
+    # The st-cli version whose bootstrap questionnaire last ran for this unit.
+    # Stamped by `bootstrap` itself on every run (including a rebootstrap) —
+    # it records an action st-cli performed, never a claim that an operator
+    # did some matching manual work. Empty ("") means the unit predates this
+    # field (bootstrapped before rebootstrap tracking existed); see
+    # `core/upgrades.py` for how that default is treated.
+    bootstrapped_with: str = ""
 
 
 @dataclass
@@ -65,3 +72,41 @@ class StCliManifest:
     cli_version: str
     units: list[UnitState] = field(default_factory=list)
     secrets: list[SecretConfig] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class UpgradeNeed:
+    """One outstanding rebootstrap flag matched against a bootstrapped unit.
+
+    Produced by ``core/upgrades.needed()`` (one flag x one unit, when the
+    flag's version outranks the unit's ``bootstrapped_with`` stamp). Pure data
+    — no I/O — hence its home here alongside the other manifest-shaped holders
+    rather than in ``core/upgrades.py``, which owns the matching logic.
+    """
+
+    app: str
+    env: str
+    component: str
+    version: str  # the flagged release version, e.g. "0.3.0"
+    reason: str
+    link: str
+    # True forces a full pre-filled replay (ReplayAction.MODIFY) instead of a
+    # silent one — a unit that old, or a change that big, needs a full review.
+    interactive: bool = False
+
+
+@dataclass(frozen=True)
+class NewComponentOffer:
+    """A component newly declared by a flag that a unit could now bootstrap.
+
+    Produced by ``core/upgrades.new_component_offers()``: the flag names
+    ``component`` as newly available for ``app``, and ``(app, env)`` has no
+    unit for it yet. Pure data, same rationale as :class:`UpgradeNeed`.
+    """
+
+    app: str
+    env: str
+    component: str
+    version: str  # the flag version that introduced the component
+    reason: str
+    link: str

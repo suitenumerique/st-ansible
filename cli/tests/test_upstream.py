@@ -154,11 +154,11 @@ def test_maybe_warn_upgrade_behind_no_pipx_warns_docker_pull(
     assert "st-cli upgrade" in msg
 
 
-def test_maybe_warn_upgrade_behind_with_pipx_warns_plain_upgrade(
+def test_maybe_warn_upgrade_behind_with_pipx_warns_pipx_upgrade_then_st_cli_upgrade(
     tmp_path, mocker, monkeypatch
 ):
-    """Behind, pipx present → ui.warn tells the user to run `st-cli upgrade`,
-    with no docker-pull mention."""
+    """Behind, pipx present → ui.warn proposes the concrete self-upgrade first
+    (`pipx upgrade st-cli`), then `st-cli upgrade`; no docker-pull mention."""
     _enable_upstream(tmp_path, monkeypatch)
     newer = _newer(st_cli.__version__)
     mocker.patch.object(upstream, "get_latest_cached", return_value=newer)
@@ -171,7 +171,9 @@ def test_maybe_warn_upgrade_behind_with_pipx_warns_plain_upgrade(
     msg = warn_spy.call_args[0][0]
     assert st_cli.__version__ in msg
     assert newer in msg
+    assert "pipx upgrade st-cli" in msg
     assert "st-cli upgrade" in msg
+    assert msg.index("pipx upgrade st-cli") < msg.index("st-cli upgrade")
     assert "docker pull" not in msg
 
 

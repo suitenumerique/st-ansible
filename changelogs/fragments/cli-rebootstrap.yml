@@ -1,0 +1,32 @@
+# Sections: major_changes, minor_changes, breaking_changes,
+# deprecated_features, removed_features, security_fixes, bugfixes,
+# known_issues, release_summary, trivial. Entries are Markdown strings.
+# Use ``trivial:`` for changes that should NOT appear in the changelog.
+minor_changes:
+  - >-
+    cli: re-running ``st-cli bootstrap`` over an existing unit now **rebootstraps** it — the questionnaire replays with answers pre-filled from the committed config (best-effort; an unrecoverable answer is asked fresh), so pressing Enter keeps a recovered value. Answers (including ``{{ vault_* }}`` refs) are recovered from the tree, so recovered secrets are not re-prompted and not rotated.
+  - >-
+    cli: ``bootstrap`` now merges into the committed tree instead of rebuilding it — hand-added ``st_*`` vars, comments, ``*_env_template``/``*_compose_template`` overrides and custom ``KEY=value`` lines inside the ``*_env`` blobs all survive. New env keys are appended under an ``# added by st-cli <version>`` marker; nothing is ever deleted.
+  - >-
+    cli: ``vault.yml`` is now merged rather than overwritten, and an unreadable vault aborts a rebootstrap before the questionnaire runs instead of failing at write time.
+  - >-
+    cli: releases can declare that operators must rebootstrap (``upgrades.yml``); ``doctor`` reports which apps need it, ``upgrade`` replays them, and ``deploy`` refuses to run until it is done. Each unit records the st-cli version whose questionnaire last ran for it. A ``baseline`` in the same file marks the oldest supported bootstrap stamp: older units are flagged wholesale, and flag entries at or below the baseline can be pruned.
+  - >-
+    cli: a dependency provider with a pending rebootstrap flag replays its questionnaire directly (pre-filled) — no select; only an actual replay clears the flag. An existing provider without a pending flag offers exactly two choices: "Reuse existing in the repo" (default) or "Modify (replay the questionnaire)".
+  - >-
+    cli: ``doctor`` now also diffs each unit's committed env blobs against the current templates (offline): new template keys missing from the blob produce a warn-only "new env keys available" advisory, and blob keys unknown to the templates are listed as custom vars or leftovers. These advisories never block ``deploy`` — only rebootstrap flags do.
+  - >-
+    cli: ``doctor`` no longer installs the pinned collection — it is now fully offline and fast.
+  - >-
+    cli: re-running ``st-cli bootstrap`` over an existing unit now offers a 3-way choice — **Modify** (default, the pre-filled replay above), **Reuse** (keep everything as-is; nothing is written and the stamp does not move, so a pending rebootstrap flag stays pending), or **Override** (rebuild the unit from scratch; regenerates the core's own generated secrets such as ``DJANGO_SECRET_KEY`` — a kept provider's secret is re-imported unchanged, never rotated — and asks for a hard confirmation first).
+  - >-
+    cli: ``st-cli upgrade`` now replays every unit a release flags as needing attention, **silently**: an already-known answer is kept without a prompt, and only a genuinely new *required* question stops to ask (a new optional question is answered blank). A flag in ``upgrades.yml`` can set ``interactive: true`` to force the full pre-filled questionnaire instead, and ``new_components`` to offer bootstrapping a newly declared optional component once.
+breaking_changes:
+  - >-
+    cli: ``st-cli upgrade`` no longer runs ``pipx upgrade`` itself. When a newer release is available it now warns with the exact command to run (``pipx upgrade st-cli`` or ``docker pull ghcr.io/suitenumerique/st-cli:latest``) and stops, instead of self-upgrading and continuing — run that command yourself, then re-run ``st-cli upgrade``.
+bugfixes:
+  - >-
+    cli: ``@openbao()``/``@vault()`` markers typed into a provider prompt are now expanded instead of being written to ``vars.yml`` as literal text.
+removed_features:
+  - >-
+    cli: ``doctor`` no longer reports ``st_*`` vars that are absent from a role's ``argument_specs.yml``. The check flagged deliberate hand-edits in a tree operators are explicitly invited to edit, so it produced noise rather than signal.
