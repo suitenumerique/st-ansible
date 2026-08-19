@@ -1,0 +1,39 @@
+---
+app: transfers
+env_docs_url: "https://github.com/suitenumerique/transfers/tree/main/env.d"
+arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/07-transfers"
+components:
+  - key: transfers
+    role: suitenumerique.st.transfers
+    user: transfers
+    app_name: transfers
+    dir_var: st_transfers_dir
+    enabled_var: st_transfers_enabled
+    deploy_order: 20
+    is_core: true
+    # component-level ansible vars derived from questionnaire answers ({DOMAIN} etc.)
+    vars:
+      st_transfers_public_host: "{DOMAIN}"   # required by the transfers role (healthcheck Host header)
+      # Run DB migrations only once across a multi-host deploy. Plays are serial:1,
+      # so the role's run_once migrations task fires on every host — gate it to the
+      # first play host. Braces are quadrupled so str.format emits literal {{ }}.
+      st_transfers_backend_run_migrations: "{{{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}}}"
+    env_render:
+      backend:
+        blob_var: st_transfers_backend_env
+        templates:
+          - transfers.backend.env.j2
+      frontend:
+        blob_var: st_transfers_frontend_env
+        templates:
+          - transfers.frontend.env.j2
+  - key: workers
+    role: suitenumerique.st.transfers
+    user: transfers
+    app_name: workers          # role systemd --user unit + /opt/transfers/workers
+    dir_var: st_transfers_workers_dir
+    enabled_var: st_transfers_workers_enabled
+    deploy_order: 30
+    is_core: false
+    is_worker: true
+dependencies: []

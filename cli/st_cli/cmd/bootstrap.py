@@ -90,7 +90,7 @@ _REQUIREMENT_LINES = {
 
 # Apps that carry upstream DJANGO_EMAIL_* settings; messages is skipped (no such
 # settings upstream) so its questionnaire never prompts for SMTP config.
-_EMAIL_APPS = {"drive", "meet", "docs"}
+_EMAIL_APPS = {"drive", "meet", "docs", "transfers"}
 
 # Inverse of _ask_keycloak's "jdbc:postgresql://host:port/name" composition, so
 # the 3 separate DB prompts can be pre-filled from the single recovered
@@ -792,6 +792,12 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             "DJANGO_CONFIGURATION": "Production",
         }
     )
+    if app == "transfers":
+        # The app's Python package is `transferts` (French spelling), so the
+        # generic f"{app}.settings" set above would import the nonexistent
+        # transfers.settings. Its public URLs stay domain-derived (else below).
+        answers["DJANGO_SETTINGS_MODULE"] = "transferts.settings"
+
     if app == "meet":
         # Single source of truth: every public-domain var references
         # st_meet_public_host so the operator changes the domain in one place.
@@ -918,6 +924,17 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
                 answers.setdefault("COLLABORA_DOMAIN", m.group("domain"))
         elif app == "docs":
             answers["MEDIA_BASE_URL"] = "https://{{ st_docs_public_host }}"
+        elif app == "transfers":
+            # Uploads and downloads use presigned URLs straight to S3, so the
+            # frontend Caddy's CSP must allow the S3 origin — derived from the
+            # endpoint above (single source of truth), Jinja-safe like the
+            # CADDY_S3_* pair.
+            protocol, host = caddy_s3_parts(endpoint)
+            answers["AWS_S3_SIGNATURE_VERSION"] = "s3v4"
+            answers["TRANSFERTS_FRONTEND_S3_ORIGIN"] = f"{protocol}://{host}"
+            # transfers sits behind the frontend Caddy, which sets
+            # X-Forwarded-For; enable request-IP logging from that proxy header.
+            answers["USE_X_FORWARDED_FOR"] = "true"
 
     if app == "docs":
         # derived answers, never prompted; single source of truth via
@@ -975,6 +992,15 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             _recall(answers, "MESSAGES_TECHNICAL_DOMAIN"),
             placeholder="mail.example.org",
         )
+
+    if app == "transfers":
+        # Optional Drive integration (file picker). Left unset → integration off.
+        drive_url = _ask(
+            "DRIVE_BASE_URL — enable the Drive file picker (optional)",
+            required=False,
+        )
+        if drive_url:
+            answers["DRIVE_BASE_URL"] = drive_url
 
     _ask_oidc(answers, backend, core_key)
     _ask_email(answers, backend, core_key, app)
