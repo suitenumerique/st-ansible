@@ -30,7 +30,7 @@ argument_specs:
         type: "str"
         description: "Tag of the drive docker images to deploy."
         # renovate: datasource=github-releases depName=suitenumerique/drive versioning=semver
-        default: "v0.19.0"
+        default: "v0.21.0"
       st_drive_enabled:
         type: "bool"
         description: "Triggers the installation of the drive application."
