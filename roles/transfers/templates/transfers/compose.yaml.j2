@@ -1,0 +1,28 @@
+---
+{{ ansible_managed | comment }}
+
+name: transfers
+services:
+  frontend:
+    container_name: transfers-frontend
+    image: "{{ st_transfers_frontend_image }}:{{ st_transfers_tag }}"
+    env_file: ./frontend_env
+    ports:
+      - "{{ st_transfers_port }}:8080"
+    # The frontend image bundles Caddy, which serves the built SPA and
+    # reverse-proxies /api, /static, /admin and /__heartbeat__ to the backend
+    # (see frontend_env: TRANSFERTS_FRONTEND_BACKEND_SERVER). It is a distroless
+    # image (no shell / curl / wget), so no compose-level healthcheck is defined —
+    # instead it waits for the backend to report healthy before starting.
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  backend:
+    container_name: transfers-backend
+    image: "{{ st_transfers_backend_image }}:{{ st_transfers_tag }}"
+    env_file: ./backend_env
+    # gunicorn binds 0.0.0.0:8000; the (debian runtime-prod) image ships its own
+    # working HEALTHCHECK (python urllib GET :8000/__heartbeat__/ with the Host
+    # header from DJANGO_ALLOWED_HOSTS), which drives the frontend's
+    # service_healthy gate above — so the role does not redefine one.

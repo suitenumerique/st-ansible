@@ -1,0 +1,9 @@
+minor_changes:
+  - transfers role - add a ``transfers`` role deploying the Transfers application
+    (suitenumerique/transfers) - a Django backend, a Caddy-served React frontend and an
+    optional Celery worker (with the beat scheduler embedded) - on the rootless podman
+    base, with S3-backed uploads and OIDC login.
+  - st-cli - add ``transfers`` app support (backend core + workers) to bootstrap,
+    reusing the django-lasuite base env with transfers-specific overrides
+    (``transferts.settings`` module, frontend Caddy S3 origin, ``USE_X_FORWARDED_FOR``,
+    optional Drive file-picker integration).

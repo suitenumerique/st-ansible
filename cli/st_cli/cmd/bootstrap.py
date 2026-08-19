@@ -61,7 +61,7 @@ _REQUIREMENT_LINES = {
 
 # Apps that carry upstream DJANGO_EMAIL_* settings; messages is skipped (no such
 # settings upstream) so its questionnaire never prompts for SMTP config.
-_EMAIL_APPS = {"drive", "meet", "docs"}
+_EMAIL_APPS = {"drive", "meet", "docs", "transfers"}
 
 
 # --------------------------------------------------------------------------- #
@@ -435,6 +435,10 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
         answers["LOGIN_REDIRECT_URL"] = f"https://{host}/"
         answers["LOGIN_REDIRECT_URL_FAILURE"] = f"https://{host}/"
         answers["LOGOUT_REDIRECT_URL"] = f"https://{host}/"
+    elif app == "transfers":
+        # The app's Python package is `transferts` (French spelling), so the
+        # Django settings module differs from the st-cli app name `transfers`.
+        answers["DJANGO_SETTINGS_MODULE"] = "transferts.settings"
     backend.env_secret(
         answers,
         "DJANGO_SECRET_KEY",
@@ -529,6 +533,21 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
             answers["AWS_S3_ENDPOINT_URL"] = endpoint
             answers["AWS_STORAGE_BUCKET_NAME"] = bucket
             answers["MEDIA_BASE_URL"] = "https://{{ st_docs_public_host }}"
+        elif app == "transfers":
+            # transfers uses the django-lasuite default AWS_STORAGE_BUCKET_NAME (via
+            # base), plus a few extras: uploads/downloads use presigned URLs straight
+            # to S3, so the frontend Caddy CSP must allow the S3 origin; derive it from
+            # the endpoint (single source of truth).
+            parts = urlsplit(endpoint if "://" in endpoint else f"https://{endpoint}")
+            answers["AWS_S3_ENDPOINT_URL"] = endpoint
+            answers["AWS_STORAGE_BUCKET_NAME"] = bucket
+            answers["AWS_S3_SIGNATURE_VERSION"] = "s3v4"
+            answers["TRANSFERTS_FRONTEND_S3_ORIGIN"] = (
+                f"{parts.scheme or 'https'}://{parts.netloc}"
+            )
+            # transfers sits behind the frontend Caddy, which sets X-Forwarded-For;
+            # enable request-IP logging from that proxy header.
+            answers["USE_X_FORWARDED_FOR"] = "true"
         else:
             answers["AWS_S3_ENDPOINT_URL"] = endpoint
             answers["AWS_STORAGE_BUCKET_NAME"] = bucket
@@ -595,6 +614,15 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
         answers["MESSAGES_TECHNICAL_DOMAIN"] = _ask(
             "MESSAGES_TECHNICAL_DOMAIN", placeholder="mail.example.org"
         )
+
+    if app == "transfers":
+        # Optional Drive integration (file picker). Left unset → integration off.
+        drive_url = _ask(
+            "DRIVE_BASE_URL — enable the Drive file picker (optional)",
+            required=False,
+        )
+        if drive_url:
+            answers["DRIVE_BASE_URL"] = drive_url
 
     _ask_oidc(answers, backend, core_key)
     _ask_email(answers, backend, core_key, app)
