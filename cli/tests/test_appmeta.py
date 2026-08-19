@@ -10,7 +10,7 @@ from st_cli.core.models import Component
 
 
 def test_all_apps_load_with_core_and_components():
-    for app in ["meet", "drive", "messages", "keycloak"]:
+    for app in ["meet", "drive", "messages", "keycloak", "transfers"]:
         a = appmeta.load_app(app)
         assert a.components
         assert a.core().is_core
@@ -103,12 +103,38 @@ def test_meet_and_livekit_component_vars_carry_public_host():
     assert meta.component_vars("livekit")["st_meet_public_host"] == "{DOMAIN}"
 
 
+def test_transfers_component_metadata():
+    """transfers is a django-lasuite app (like drive): a backend core rendering
+    both a backend and a frontend env blob, plus a workers component (Celery worker
+    with embedded beat). No collabora-style dependencies."""
+    meta = appmeta.load_app("transfers")
+    core = meta.core()
+    assert core.key == "transfers"
+    assert core.role == "suitenumerique.st.transfers"
+    assert core.user == "transfers"
+    assert core.enabled_var == "st_transfers_enabled"
+    assert meta.dependencies == []
+    # the core renders two env layers (backend + frontend Caddy runtime env)
+    spec = meta.env_render_spec("transfers")
+    assert spec["backend"]["blob_var"] == "st_transfers_backend_env"
+    assert spec["backend"]["templates"] == ["transfers.backend.env.j2"]
+    assert spec["frontend"]["blob_var"] == "st_transfers_frontend_env"
+    assert spec["frontend"]["templates"] == ["transfers.frontend.env.j2"]
+    # public-host var (healthcheck Host header) + run-once migration gate
+    cvars = meta.component_vars("transfers")
+    assert cvars["st_transfers_public_host"] == "{DOMAIN}"
+    assert "ansible_play_hosts_all[0]" in cvars["st_transfers_backend_run_migrations"]
+    # workers reuse the core's files/role
+    assert meta.files_component("workers").key == "transfers"
+    assert meta.worker().is_worker is True
+
+
 # --------------------------------------------------------------------------- workers component
 
 
 def test_worker_component_metadata():
     """Each app exposes a first-class workers component (is_worker, app_name, enabled_var)."""
-    for app in ("drive", "messages", "meet"):
+    for app in ("drive", "messages", "meet", "transfers"):
         w = appmeta.load_app(app).worker()
         assert w is not None, f"{app} has no workers component"
         assert w.is_worker is True
