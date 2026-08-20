@@ -33,6 +33,7 @@ You can find the documentation of the collection under the [docs/](docs/) direct
 - **[02-keycloak/](docs/02-keycloak/)** keycloak identity provider
 - **[03-meet/](docs/03-meet/)** meet app, livekit, egress (recording)
 - **[04-messages/](docs/04-messages/)** messages app, workers, mta-in, socks-proxy, mpa
+- **[07-transfers/](docs/07-transfers/)** transfers app, workers
 - **[monitoring.md](docs/monitoring.md)** cAdvisor + Grafana Alloy
 - **[backup.md](docs/backup.md)** Restic backup
 - **[troubleshooting.md](docs/troubleshooting.md)** common issues and debug commands
@@ -49,6 +50,7 @@ You can find the documentation of the collection under the [docs/](docs/) direct
 | drive | Drive application | [REFERENCE.md](roles/drive/REFERENCE.md) |
 | keycloak | Keycloak identity provider | [REFERENCE.md](roles/keycloak/REFERENCE.md) |
 | meet | Meet video conferencing | [REFERENCE.md](roles/meet/REFERENCE.md) |
+| transfers | Transfers application | [REFERENCE.md](roles/transfers/REFERENCE.md) |
 | alloy | Grafana Alloy telemetry | [REFERENCE.md](roles/alloy/REFERENCE.md) |
 | restic | Restic backup | [REFERENCE.md](roles/restic/REFERENCE.md) |
 

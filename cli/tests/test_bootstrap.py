@@ -1604,3 +1604,101 @@ def test_ask_core_sets_login_redirect_url_failure_for_non_drive(monkeypatch):
     # recording is always on now (no confirm) → RECORDING_* lines are always
     # present in the rendered env
     assert "RECORDING_ENABLE=True" in body
+
+
+def test_ask_core_transfers_overrides_settings_bucket_and_s3_origin(monkeypatch):
+    """`_ask_core` for transfers diverges from the django-lasuite defaults in a few
+    app-specific ways: the Django settings module is the French package name
+    `transferts.settings` (not `transfers.settings`); the S3 endpoint origin is
+    mirrored into TRANSFERTS_FRONTEND_S3_ORIGIN (the frontend Caddy CSP needs it) and
+    USE_X_FORWARDED_FOR is enabled (transfers sits behind the frontend proxy). The
+    optional DRIVE_BASE_URL is emitted only when answered, and the sender address is
+    exposed as DEFAULT_FROM_EMAIL. The frontend Caddy env points at the backend
+    service. Object storage uses the standard AWS_STORAGE_BUCKET_NAME (via base)."""
+    script_questionary(
+        monkeypatch,
+        [
+            ("text", "Public domain for transfers", "transfers.example.org"),
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("text", "DATABASE_URL", "postgres://transfers"),
+            ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.fr-par.scw.cloud"),
+            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
+            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
+            ("text", "AWS_STORAGE_BUCKET_NAME", "transfers-prod"),
+            ("text", "AWS_S3_REGION_NAME (optional)", "fr-par"),
+            ("text", "DRIVE_BASE_URL", "https://drive.example.org"),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "transfers-client"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", True),
+            ("text", "DJANGO_EMAIL_HOST", "smtp.example.org"),
+            ("text", "DJANGO_EMAIL_PORT", "587"),
+            ("text", "DJANGO_EMAIL_HOST_USER (optional)", ""),
+            ("password", "DJANGO_EMAIL_HOST_PASSWORD", "smtp-pass"),
+            ("confirm", "DJANGO_EMAIL_USE_TLS?", True),
+            ("confirm", "DJANGO_EMAIL_USE_SSL?", False),
+            ("text", "DJANGO_EMAIL_FROM", "noreply@example.org"),
+            ("text", "DJANGO_EMAIL_BRAND_NAME (optional)", ""),
+        ],
+    )
+    meta = appmeta.load_app("transfers")
+    answers = bootstrap._ask_core(meta, AnsibleVaultBackend())
+
+    # Django package is `transferts` (French spelling), not the st-cli app name.
+    assert answers["DJANGO_SETTINGS_MODULE"] == "transferts.settings"
+    # bucket uses the django-lasuite default AWS_STORAGE_BUCKET_NAME (via base)
+    assert answers["AWS_STORAGE_BUCKET_NAME"] == "transfers-prod"
+    assert answers["AWS_S3_SIGNATURE_VERSION"] == "s3v4"
+    assert answers["TRANSFERTS_FRONTEND_S3_ORIGIN"] == "https://s3.fr-par.scw.cloud"
+    assert answers["USE_X_FORWARDED_FOR"] == "true"
+    assert answers["DRIVE_BASE_URL"] == "https://drive.example.org"
+
+    backend = envrender.render_env("transfers", "transfers", answers)
+    body = backend["st_transfers_backend_env"]
+    assert "DJANGO_SETTINGS_MODULE=transferts.settings" in body
+    assert "AWS_STORAGE_BUCKET_NAME=transfers-prod" in body
+    assert "AWS_S3_SIGNATURE_VERSION=s3v4" in body
+    assert "USE_X_FORWARDED_FOR=true" in body
+    assert "DRIVE_BASE_URL=https://drive.example.org" in body
+    # sender exposed as DEFAULT_FROM_EMAIL (transfers reads that, not DJANGO_EMAIL_FROM)
+    assert "DEFAULT_FROM_EMAIL=noreply@example.org" in body
+
+    frontend = backend["st_transfers_frontend_env"]
+    assert "TRANSFERTS_FRONTEND_BACKEND_SERVER=transfers-backend:8000" in frontend
+    assert "TRANSFERTS_FRONTEND_S3_ORIGIN=https://s3.fr-par.scw.cloud" in frontend
+
+
+def test_ask_core_transfers_drive_url_optional(monkeypatch):
+    """DRIVE_BASE_URL is optional: leaving it blank omits the key entirely, so the
+    rendered backend env carries no DRIVE_BASE_URL line (integration stays off)."""
+    script_questionary(
+        monkeypatch,
+        [
+            ("text", "Public domain for transfers", "transfers.example.org"),
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("text", "DATABASE_URL", "postgres://transfers"),
+            ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.fr-par.scw.cloud"),
+            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
+            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
+            ("text", "AWS_STORAGE_BUCKET_NAME", "transfers-prod"),
+            ("text", "AWS_S3_REGION_NAME (optional)", ""),
+            ("text", "DRIVE_BASE_URL", ""),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "transfers-client"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", False),
+        ],
+    )
+    meta = appmeta.load_app("transfers")
+    answers = bootstrap._ask_core(meta, AnsibleVaultBackend())
+    assert "DRIVE_BASE_URL" not in answers
+    body = envrender.render_env("transfers", "transfers", answers)[
+        "st_transfers_backend_env"
+    ]
+    assert "DRIVE_BASE_URL" not in body
