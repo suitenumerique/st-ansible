@@ -99,7 +99,7 @@ single-`-c`._
 Bundled under `st_cli/core/resources/`, packaged automatically by hatchling
 (`packages = ["st_cli"]`).
 
-### App manifests — `resources/apps/{meet,drive,messages,keycloak}.yml`
+### App manifests — `resources/apps/{meet,drive,messages,keycloak,docs}.yml`
 
 Single source of truth for the app/component map (loaded by `appmeta.load_app()`):
 - `app`, `env_docs_url`
@@ -207,7 +207,8 @@ CWD), not this collection repo — `paths.py` anchors at `Path.cwd()`.
 - **Hosts live only in the INI `hosts` file**, never in `.st-cli.yml`
   (`tree.read_hosts` parses `ansible_host=` per line). Each app role ships a distinct
   default uid/gid + host-port block (drive 1101/50100, keycloak 1102/50200, meet
-  1103/50300, messages 1104/50400) so co-located stacks don't collide.
+  1103/50300, messages 1104/50400, docs 1106/50600) so co-located stacks don't
+  collide.
 - **Two-phase deploy**: `base` task (root: podman + user install, idempotent) +
   `deploy` task (app-user: render config + start systemd unit); `-d`/`--deploy-only`
   runs only `--tags deploy` (no root, for routine updates).

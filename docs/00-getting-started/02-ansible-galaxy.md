@@ -102,9 +102,10 @@ multiple roles can run **on the same host** without conflicting. The defaults ar
 | `keycloak` | `1102` | `50200` |
 | `meet` | `1103` | `50300` |
 | `messages` | `1104` | `50400` |
+| `docs` | `1106` | `50600` |
 
 Each role owns a `50<n>00`–`50<n>99` port block (where `<n>` is the role's index — drive
-`1`, keycloak `2`, meet `3`, messages `4`). The frontend sits at `50<n>00`, auxiliary
+`1`, keycloak `2`, meet `3`, messages `4`, docs `6`). The frontend sits at `50<n>00`, auxiliary
 services increment from there (e.g. `messages` mpa/rspamd on `50402`–`50404`, mta-in on
 `50425`), and cAdvisor is
 pinned at `50<n>99`. This layout leaves room to grow: an 11th–20th role would carry into

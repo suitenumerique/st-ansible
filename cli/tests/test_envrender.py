@@ -251,3 +251,83 @@ def test_render_email_block_absent_when_unconfigured():
         blobs = envrender.render_env(app, component, {})
         body = blobs[f"st_{app}_backend_env"]
         assert "DJANGO_EMAIL_" not in body
+
+
+# --------------------------------------------------------------------------- docs
+
+
+def test_render_docs_backend_references_public_host_and_collaboration_urls():
+    """docs backend emits OIDC_REDIRECT_ALLOWED_HOSTS + the collaboration URLs
+    verbatim (the {{ st_docs_public_host }} ref travels through the answer value
+    unresolved — the jinja2 env template just prints the string; ANSIBLE resolves
+    it at deploy from the core vars.yml, same pattern as meet's public-host refs)."""
+    blobs = envrender.render_env(
+        "docs",
+        "docs",
+        {
+            "OIDC_REDIRECT_ALLOWED_HOSTS": '["https://{{ st_docs_public_host }}"]',
+            "COLLABORATION_WS_URL": "wss://{{ st_docs_public_host }}/collaboration/ws/",
+            "COLLABORATION_API_URL": (
+                "https://{{ st_docs_public_host }}/collaboration/api/"
+            ),
+            "COLLABORATION_SERVER_SECRET": "{{ vault_collaboration_server_secret }}",
+            "Y_PROVIDER_API_BASE_URL": "http://10.0.0.9:50601/api/",
+            "Y_PROVIDER_API_KEY": "{{ vault_y_provider_api_key }}",
+        },
+    )
+    body = blobs["st_docs_backend_env"]
+    assert 'OIDC_REDIRECT_ALLOWED_HOSTS=["https://{{ st_docs_public_host }}"]' in body
+    assert (
+        "COLLABORATION_WS_URL=wss://{{ st_docs_public_host }}/collaboration/ws/" in body
+    )
+    assert (
+        "COLLABORATION_API_URL=https://{{ st_docs_public_host }}/collaboration/api/"
+        in body
+    )
+    assert "COLLABORATION_SERVER_SECRET={{ vault_collaboration_server_secret }}" in body
+    assert "Y_PROVIDER_API_BASE_URL=http://10.0.0.9:50601/api/" in body
+    assert "Y_PROVIDER_API_KEY={{ vault_y_provider_api_key }}" in body
+
+
+def test_render_docs_backend_optional_keys_absent_when_unset():
+    """Y_PROVIDER_API_BASE_URL and the frontend theme keys are guarded — absent
+    from the rendered body when not set in answers."""
+    body = envrender.render_env("docs", "docs", {"DOMAIN": "docs.example.org"})[
+        "st_docs_backend_env"
+    ]
+    assert "Y_PROVIDER_API_BASE_URL" not in body
+    assert "FRONTEND_THEME" not in body
+    assert "FRONTEND_CSS_URL" not in body
+    assert "DJANGO_EMAIL_URL_APP" not in body
+
+
+def test_render_docs_backend_theme_customization():
+    body = envrender.render_env(
+        "docs",
+        "docs",
+        {"FRONTEND_THEME": "custom", "FRONTEND_CSS_URL": "https://cdn/theme.css"},
+    )["st_docs_backend_env"]
+    assert "FRONTEND_THEME=custom" in body
+    assert "FRONTEND_CSS_URL=https://cdn/theme.css" in body
+
+
+def test_render_docs_caddy_env_s3_and_yprovider_values():
+    """docs' Caddy ingress proxies /media/* straight to S3 via CADDY_S3_* container
+    env vars and /collaboration/* to the y-provider upstreams via
+    CADDY_YPROVIDER_ENDPOINTS (a space-separated host:port list caddy expands at
+    parse time), all fed through the caddy_env file."""
+    blobs = envrender.render_env(
+        "docs",
+        "docs",
+        {
+            "CADDY_S3_PROTOCOL": "https",
+            "CADDY_S3_HOST": "minio.example.org:9000",
+            "CADDY_S3_BUCKET": "docs-media",
+            "CADDY_YPROVIDER_ENDPOINTS": "10.0.0.9:50601 10.0.0.10:50601",
+        },
+    )
+    body = blobs["st_docs_caddy_env"]
+    assert "CADDY_S3_PROTOCOL=https" in body
+    assert "CADDY_S3_HOST=minio.example.org:9000" in body
+    assert "CADDY_S3_BUCKET=docs-media" in body
+    assert "CADDY_YPROVIDER_ENDPOINTS=10.0.0.9:50601 10.0.0.10:50601" in body

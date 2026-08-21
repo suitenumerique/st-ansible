@@ -1,0 +1,67 @@
+---
+app: docs
+env_docs_url: "https://github.com/suitenumerique/docs/blob/main/documentation/env.md"
+arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/06-docs"
+components:
+  - key: docs
+    role: suitenumerique.st.docs
+    user: docs
+    app_name: docs
+    dir_var: st_docs_dir
+    enabled_var: st_docs_enabled
+    deploy_order: 20
+    is_core: true
+    vars:
+      # single source of truth for the public docs domain: every public-facing env
+      # var (DJANGO_ALLOWED_HOSTS, LOGIN/LOGOUT_REDIRECT_URL*, OIDC_REDIRECT_ALLOWED_HOSTS,
+      # COLLABORATION_WS_URL/API_URL, …) references this verbatim so an operator
+      # changes the domain in ONE place. Mirrors meet's st_meet_public_host.
+      st_docs_public_host: "{DOMAIN}"
+      # Run DB migrations only once across a multi-host deploy. Plays are serial:1,
+      # so the role's run_once migrations task fires on every host — gate it to the
+      # first play host. Braces are quadrupled so str.format emits literal {{ }}.
+      st_docs_backend_run_migrations: "{{{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}}}"
+    env_render:
+      backend:
+        blob_var: st_docs_backend_env
+        templates:
+          - docs.backend.env.j2
+      caddy:
+        blob_var: st_docs_caddy_env
+        templates:
+          - docs.caddy.env.j2
+  - key: yprovider
+    role: suitenumerique.st.docs
+    user: docs
+    app_name: yprovider
+    dir_var: st_docs_yprovider_dir
+    enabled_var: st_docs_yprovider_enabled
+    deploy_order: 10
+    is_core: false
+    vars:
+      # the collaboration server env: {COLLABORATION_SERVER_SECRET} and
+      # {Y_PROVIDER_API_KEY} are core-owned secrets mirrored in at bootstrap (see
+      # cmd/bootstrap.py's _ask_docs_yprovider); {DOMAIN} comes from the same
+      # answer the docs core uses.
+      st_docs_yprovider_env: |
+        COLLABORATION_SERVER_SECRET={COLLABORATION_SERVER_SECRET}
+        COLLABORATION_SERVER_ORIGIN=https://{DOMAIN}
+        COLLABORATION_BACKEND_BASE_URL=https://{DOMAIN}
+        Y_PROVIDER_API_KEY={Y_PROVIDER_API_KEY}
+        COLLABORATION_LOGGING=true
+  - key: workers
+    role: suitenumerique.st.docs
+    user: docs
+    app_name: workers          # role systemd --user unit + /opt/docs/workers
+    dir_var: st_docs_workers_dir
+    enabled_var: st_docs_workers_enabled
+    deploy_order: 30
+    is_core: false
+    is_worker: true
+dependencies:
+  - of: docs
+    on: yprovider
+    # COLLABORATION_SERVER_SECRET and Y_PROVIDER_API_KEY are owned by the docs
+    # core (generated in _ask_core) and mirrored into yprovider's vault at
+    # deploy — the messages -> mta-in MDA_API_SECRET pattern.
+    shared: []
