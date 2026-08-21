@@ -195,7 +195,7 @@ argument_specs:
         type: "str"
         description: "Tag of the livekit egress docker image to deploy."
         # renovate: datasource=docker depName=docker.io/livekit/egress
-        default: "v1.13.0"
+        default: "v1.14.1"
       st_meet_egress_cpus:
         type: "str"
         description: "Optional CPU limit for the livekit egress container (podman-compose `cpus`, e.g. '2' or '1.5'). Recommended on single-node setups so starting a recording (CPU-heavy transcoding) cannot starve the livekit server. Empty means no limit."
