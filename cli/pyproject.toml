@@ -22,7 +22,7 @@ dependencies = [
 dev = ["pytest==9.1.1", "pytest-mock==3.15.1"]
 ansible = ["ansible-core==2.21.2"]
 hashivault = ["hvac==2.4.0"]
-full = ["ansible-core==2.21.2", "hvac==2.4.0"]
+full = ["ansible-core==2.21.3", "hvac==2.4.0"]
 
 [project.scripts]
 st-cli = "st_cli.main:app"
