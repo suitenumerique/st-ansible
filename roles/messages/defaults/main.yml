@@ -9,7 +9,7 @@ st_messages_frontend_image: ghcr.io/suitenumerique/messages-frontend
 # Image repository for the messages backend.
 st_messages_backend_image: ghcr.io/suitenumerique/messages-backend
 # Tag of the messages docker images to deploy.
-st_messages_tag: 0.5.0
+st_messages_tag: 0.9.0
 # Triggers the installation of the messages application.
 st_messages_enabled: false
 # Remote path to the base directory for messages app.
@@ -47,7 +47,7 @@ st_messages_mta_in_enabled: false
 # Image repository for mta-in.
 st_messages_mta_in_image: ghcr.io/suitenumerique/messages-mta-in
 # Tag of the mta-in docker image to deploy.
-st_messages_mta_in_tag: 0.5.0
+st_messages_mta_in_tag: 0.9.0
 # Remote path to the base directory for mta-in app.
 st_messages_mta_in_dir: /opt/messages/mta-in
 # The host published port for the mta-in SMTP endpoint.
@@ -63,7 +63,7 @@ st_messages_socks_proxy_enabled: false
 # Image repository for socks-proxy.
 st_messages_socks_proxy_image: ghcr.io/suitenumerique/messages-socks-proxy
 # Tag of the socks-proxy docker image to deploy.
-st_messages_socks_proxy_tag: 0.5.0
+st_messages_socks_proxy_tag: 0.9.0
 # Remote path to the base directory for socks-proxy app.
 st_messages_socks_proxy_dir: /opt/messages/socks-proxy
 # Local path to the custom template to use for socks-proxy env file.

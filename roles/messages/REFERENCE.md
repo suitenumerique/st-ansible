@@ -26,7 +26,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_registries | Optional private container registries to login the `messages` user onto. | list of 'dict' | no |  |
 | st_messages_frontend_image | Image repository for the messages frontend. | str | no | ghcr.io/suitenumerique/messages-frontend |
 | st_messages_backend_image | Image repository for the messages backend. | str | no | ghcr.io/suitenumerique/messages-backend |
-| st_messages_tag | Tag of the messages docker images to deploy. | str | no | 0.5.0 |
+| st_messages_tag | Tag of the messages docker images to deploy. | str | no | 0.9.0 |
 | st_messages_enabled | Triggers the installation of the messages application. | bool | no | False |
 | st_messages_dir | Remote path to the base directory for messages app. | str | no | /opt/messages/messages |
 | st_messages_port | The host published port for the messages frontend. | str | no | 50400 |
@@ -45,7 +45,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_workers_compose_template | Local path to the custom template to use for messages workers compose file. | str | no | workers/compose.yaml.j2 |
 | st_messages_mta_in_enabled | Triggers the installation of the mta-in. | bool | no | False |
 | st_messages_mta_in_image | Image repository for mta-in. | str | no | ghcr.io/suitenumerique/messages-mta-in |
-| st_messages_mta_in_tag | Tag of the mta-in docker image to deploy. | str | no | 0.5.0 |
+| st_messages_mta_in_tag | Tag of the mta-in docker image to deploy. | str | no | 0.9.0 |
 | st_messages_mta_in_dir | Remote path to the base directory for mta-in app. | str | no | /opt/messages/mta-in |
 | st_messages_mta_in_port | The host published port for the mta-in SMTP endpoint. | str | no | 50425 |
 | st_messages_mta_in_env_template | Local path to the custom template to use for mta-in env file. | str | no | mta_in/env.j2 |
@@ -55,7 +55,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mta_in_rollback_enabled | Whether or not to trigger the rollback tasks if the mta-in deployment fails. | bool | no | False |
 | st_messages_socks_proxy_enabled | Triggers the installation of the socks-proxy. | bool | no | False |
 | st_messages_socks_proxy_image | Image repository for socks-proxy. | str | no | ghcr.io/suitenumerique/messages-socks-proxy |
-| st_messages_socks_proxy_tag | Tag of the socks-proxy docker image to deploy. | str | no | 0.5.0 |
+| st_messages_socks_proxy_tag | Tag of the socks-proxy docker image to deploy. | str | no | 0.9.0 |
 | st_messages_socks_proxy_dir | Remote path to the base directory for socks-proxy app. | str | no | /opt/messages/socks-proxy |
 | st_messages_socks_proxy_env_template | Local path to the custom template to use for socks-proxy env file. | str | no | socks_proxy/env.j2 |
 | st_messages_socks_proxy_env | Content of the default socks_proxy_env_template, not used if st_messages_socks_proxy_env_template is defined. | str | no |  |
