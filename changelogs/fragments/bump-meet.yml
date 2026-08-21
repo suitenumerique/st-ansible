@@ -1,0 +1,4 @@
+minor_changes:
+  - "Update docker.io/livekit/livekit-server Docker tag to v1.13.5"
+  - "Update dependency suitenumerique/meet to v1.27.0"
+  - "Update docker.io/livekit/egress Docker tag to v1.14.1"
