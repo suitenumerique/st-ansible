@@ -15,7 +15,7 @@ st_meet_frontend_image: docker.io/lasuite/meet-frontend
 # Image repository for the meet backend.
 st_meet_backend_image: docker.io/lasuite/meet-backend
 # Tag of the meet docker image to deploy.
-st_meet_tag: v1.23.0
+st_meet_tag: v1.27.0
 # Local path to the custom template to use for meet env file.
 st_meet_backend_env_template: meet/backend_env.j2
 # Content of the default backend_env_template, not used if st_meet_backend_env_template is defined.
@@ -48,7 +48,7 @@ st_meet_livekit_image: docker.io/livekit/livekit-server
 # Image repository for the livekit valkey.
 st_meet_livekit_valkey_image: docker.io/valkey/valkey
 # Tag of the livekit docker image to deploy.
-st_meet_livekit_tag: v1.13.4
+st_meet_livekit_tag: v1.13.5
 # Tag of the livekit caddyl4 docker image to deploy.
 st_meet_livekit_caddyl4_tag: v2.11.3
 # Tag of the valkey docker image to deploy for livekit when using the full compose template.
@@ -84,7 +84,7 @@ st_meet_livekit_directories:
 # Image repository for livekit egress.
 st_meet_egress_image: docker.io/livekit/egress
 # Tag of the livekit egress docker image to deploy.
-st_meet_egress_tag: v1.13.0
+st_meet_egress_tag: v1.14.1
 # Optional CPU limit for the livekit egress container (podman-compose `cpus`, e.g. '2' or '1.5'). Recommended on single-node setups so starting a recording (CPU-heavy transcoding) cannot starve the livekit server. Empty means no limit.
 st_meet_egress_cpus: ''
 # Optional memory limit for the livekit egress container (podman-compose `mem_limit`, e.g. '2g'). Recommended on single-node setups so a recording cannot OOM the node and take down the livekit server. Empty means no limit.

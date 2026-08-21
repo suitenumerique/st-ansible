@@ -30,7 +30,7 @@ Installs and configures the meet application from La Suite Territoriale on Debia
 | st_meet_port | The host published port for the meet frontend. | str | no | 50300 |
 | st_meet_frontend_image | Image repository for the meet frontend. | str | no | docker.io/lasuite/meet-frontend |
 | st_meet_backend_image | Image repository for the meet backend. | str | no | docker.io/lasuite/meet-backend |
-| st_meet_tag | Tag of the meet docker image to deploy. | str | no | v1.23.0 |
+| st_meet_tag | Tag of the meet docker image to deploy. | str | no | v1.27.0 |
 | st_meet_backend_env_template | Local path to the custom template to use for meet env file. | str | no | meet/backend_env.j2 |
 | st_meet_backend_env | Content of the default backend_env_template, not used if st_meet_backend_env_template is defined. | str | no |  |
 | st_meet_backend_run_migrations | Whether to run database migrations on meet backend startup. | bool | no | True |
@@ -46,7 +46,7 @@ Installs and configures the meet application from La Suite Territoriale on Debia
 | st_meet_livekit_caddyl4_image | Image repository for livekit caddyl4. | str | no | docker.io/livekit/caddyl4 |
 | st_meet_livekit_image | Image repository for the livekit server. | str | no | docker.io/livekit/livekit-server |
 | st_meet_livekit_valkey_image | Image repository for the livekit valkey. | str | no | docker.io/valkey/valkey |
-| st_meet_livekit_tag | Tag of the livekit docker image to deploy. | str | no | v1.13.4 |
+| st_meet_livekit_tag | Tag of the livekit docker image to deploy. | str | no | v1.13.5 |
 | st_meet_livekit_caddyl4_tag | Tag of the livekit caddyl4 docker image to deploy. | str | no | v2.11.3 |
 | st_meet_livekit_valkey_tag | Tag of the valkey docker image to deploy for livekit when using the full compose template. | str | no | 9.1.1 |
 | st_meet_livekit_valkey_enabled | Deploy a local valkey in the livekit compose (single-node co-located egress). Set false when using an external shared redis. | bool | no | True |
@@ -64,7 +64,7 @@ Installs and configures the meet application from La Suite Territoriale on Debia
 | st_meet_livekit_files | List of files to deploy for the livekit application. By default deploys livekit.yaml, caddy.yaml and valkey_config/valkey.conf from the default templates. Override this entirely to deploy a custom livekit configuration. | list of 'dict' | no | [{'src': 'livekit/livekit.default.yaml.j2', 'dest': 'livekit.yaml'}, {'src': 'livekit/caddy.default.yaml.j2', 'dest': 'caddy.yaml'}, {'src': 'livekit/valkey.default.conf.j2', 'dest': 'valkey_config/valkey.conf', 'when': '{{ st_meet_livekit_valkey_enabled }}'}] |
 | st_meet_livekit_directories | List of directories to create for the livekit application. By default creates caddy_data for the caddy file_system storage module. Override this entirely for custom setups. | list of 'dict' | no | [{'name': 'caddy_data'}, {'name': 'valkey_data', 'container_uid': '999', 'when': '{{ st_meet_livekit_valkey_enabled }}'}, {'name': 'valkey_config', 'when': '{{ st_meet_livekit_valkey_enabled }}'}] |
 | st_meet_egress_image | Image repository for livekit egress. | str | no | docker.io/livekit/egress |
-| st_meet_egress_tag | Tag of the livekit egress docker image to deploy. | str | no | v1.13.0 |
+| st_meet_egress_tag | Tag of the livekit egress docker image to deploy. | str | no | v1.14.1 |
 | st_meet_egress_cpus | Optional CPU limit for the livekit egress container (podman-compose `cpus`, e.g. '2' or '1.5'). Recommended on single-node setups so starting a recording (CPU-heavy transcoding) cannot starve the livekit server. Empty means no limit. | str | no |  |
 | st_meet_egress_memory | Optional memory limit for the livekit egress container (podman-compose `mem_limit`, e.g. '2g'). Recommended on single-node setups so a recording cannot OOM the node and take down the livekit server. Empty means no limit. | str | no |  |
 | st_meet_egress_enabled | Triggers the installation of the livekit egress recorder as a separate component. | bool | no | False |
