@@ -6,4 +6,5 @@ minor_changes:
   - st-cli - add ``transfers`` app support (backend core + workers) to bootstrap,
     reusing the django-lasuite base env with transfers-specific overrides
     (``transferts.settings`` module, frontend Caddy S3 origin, ``USE_X_FORWARDED_FOR``,
-    optional Drive file-picker integration).
+    optional Drive file-picker integration, and an optional file-scanner / antivirus
+    integration — ``CLAMAV_*`` / ``SCAN_*`` with the EdDSA signing key kept in the vault).

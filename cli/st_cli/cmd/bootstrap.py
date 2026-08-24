@@ -389,6 +389,47 @@ def _ask_email(answers: dict, backend: SecretBackend, component: str, app: str) 
     )
 
 
+def _ask_transfers_scanner(
+    answers: dict, backend: SecretBackend, component: str
+) -> None:
+    """Optional file-scanner (antivirus) integration for transfers.
+
+    When enabled, completed uploads are submitted to an external file-scanner
+    service (ClamAV REST) for an async virus scan; the verdict returns via a webhook
+    and gates downloads. Declining leaves every key unset, so the app keeps its
+    ``CLAMAV_SCAN_ENABLED=false`` default. The EdDSA signing key is a secret routed
+    through the backend; the rest is plain config (numeric knobs keep upstream
+    defaults, editable at the prompt).
+    """
+    if not _confirm(
+        "Configure the file-scanner (antivirus) integration?", default=False
+    ):
+        return
+    answers["CLAMAV_SCAN_ENABLED"] = "true"
+    answers["CLAMAV_SERVICE_URL"] = _ask(
+        "CLAMAV_SERVICE_URL (file-scanner REST base URL, no trailing slash)",
+        placeholder="http://clamav_rest:8090",
+    )
+    # Public base URL of THIS backend as the scanner reaches it (webhook callback).
+    answers["SCAN_WEBHOOK_BASE_URL"] = _ask(
+        "SCAN_WEBHOOK_BASE_URL (this backend, as seen by the scanner)",
+        placeholder="http://transfers-backend:8000",
+    )
+    # EdDSA (Ed25519) private key minting request-bound scan JWTs — a secret.
+    value = _password("SCAN_JWT_PRIVATE_KEY") if backend.prompts_values() else None
+    backend.env_secret(
+        answers, "SCAN_JWT_PRIVATE_KEY", component=component, value=value
+    )
+    answers["SCAN_JWT_ISSUER"] = _ask("SCAN_JWT_ISSUER", "transferts")
+    answers["SCAN_JWT_AUDIENCE"] = _ask("SCAN_JWT_AUDIENCE", "file-scanner")
+    answers["SCAN_JWT_TTL"] = _ask("SCAN_JWT_TTL (seconds)", "300")
+    answers["SCAN_MAX_FILE_SIZE"] = _ask("SCAN_MAX_FILE_SIZE (bytes)", "2147483648")
+    answers["SCAN_PRESIGNED_URL_EXPIRY"] = _ask(
+        "SCAN_PRESIGNED_URL_EXPIRY (seconds)", "3600"
+    )
+    answers["SCAN_PENDING_REAP_MINUTES"] = _ask("SCAN_PENDING_REAP_MINUTES", "15")
+
+
 def _ask_cadvisor(label: str, default: bool = True) -> bool:
     """Prompt whether to enable the cadvisor monitoring sidecar for a component.
 
@@ -1009,6 +1050,8 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             "https://{{ st_docs_public_host }}/assets/logo-suite-numerique.png"
         )
         answers["DJANGO_EMAIL_URL_APP"] = "https://{{ st_docs_public_host }}"
+    if app == "transfers":
+        _ask_transfers_scanner(answers, backend, core_key)
     if app == "messages":
         _ask_messages_outbound(answers, backend, core_key)
     if app == "meet":

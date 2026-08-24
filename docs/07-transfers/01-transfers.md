@@ -110,6 +110,27 @@ dedicated worker hosts (`st-cli` prompts for optional worker IPs at bootstrap).
 Setting `DRIVE_BASE_URL` (asked optionally at bootstrap) enables the Drive file picker
 so users can attach files straight from their Drive. Left unset, the integration is off.
 
+## File scanning / antivirus (optional)
+
+Transfers can submit every completed upload to an external **file-scanner** (ClamAV
+REST) service for an asynchronous virus scan; the verdict comes back through a webhook
+and gates downloads. It is **off by default** (`CLAMAV_SCAN_ENABLED=false`). The
+`st-cli bootstrap transfers` questionnaire asks *"Configure the file-scanner (antivirus)
+integration?"*; answering yes collects:
+
+| Variable | Meaning |
+|----------|---------|
+| `CLAMAV_SERVICE_URL` | Base URL of the file-scanner REST service, reachable from the backend **and** worker (e.g. `http://clamav_rest:8090`) |
+| `SCAN_WEBHOOK_BASE_URL` | Public base URL of this backend as the scanner reaches it (webhook callback), e.g. `http://transfers-backend:8000` |
+| `SCAN_JWT_PRIVATE_KEY` | EdDSA (Ed25519) private key minting request-bound scan JWTs — **secret** (routed through the vault). Mint the keypair with the scanner's `deploy/scripts/new-issuer.py` and register the public key on the scanner's `JWT_ISSUER_KEYS` |
+| `SCAN_JWT_ISSUER` / `SCAN_JWT_AUDIENCE` | JWT `iss` / `aud` claims (defaults `transferts` / `file-scanner`) |
+| `SCAN_JWT_TTL`, `SCAN_MAX_FILE_SIZE`, `SCAN_PRESIGNED_URL_EXPIRY`, `SCAN_PENDING_REAP_MINUTES` | Tuning knobs (upstream defaults pre-filled) |
+
+The keys land in `st_transfers_backend_env`, which the worker unit reuses — so the
+scan-submit and stale-scan reap Celery tasks see the same config. The scanner service
+itself is **not** provisioned by this collection (like PostgreSQL / Redis / S3); run it
+externally and point `CLAMAV_SERVICE_URL` at it.
+
 ## Upgrades & rollback
 
 Migrations run as a one-shot `podman-compose run --rm backend python manage.py migrate`
