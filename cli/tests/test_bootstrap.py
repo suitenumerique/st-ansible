@@ -2315,6 +2315,7 @@ def test_ask_core_transfers_overrides_settings_bucket_and_s3_origin(monkeypatch)
             ("confirm", "DJANGO_EMAIL_USE_SSL?", False),
             ("text", "DJANGO_EMAIL_FROM", "noreply@example.org"),
             ("text", "DJANGO_EMAIL_BRAND_NAME (optional)", ""),
+            ("confirm", "file-scanner", False),
         ],
     )
     meta = appmeta.load_app("transfers")
@@ -2336,8 +2337,10 @@ def test_ask_core_transfers_overrides_settings_bucket_and_s3_origin(monkeypatch)
     assert "AWS_S3_SIGNATURE_VERSION=s3v4" in body
     assert "USE_X_FORWARDED_FOR=true" in body
     assert "DRIVE_BASE_URL=https://drive.example.org" in body
-    # sender exposed as DEFAULT_FROM_EMAIL (transfers reads that, not DJANGO_EMAIL_FROM)
-    assert "DEFAULT_FROM_EMAIL=noreply@example.org" in body
+    # sender comes from the base DJANGO_EMAIL_FROM (transfers maps DEFAULT_FROM_EMAIL
+    # onto that env var), so the overlay adds no DEFAULT_FROM_EMAIL of its own
+    assert "DJANGO_EMAIL_FROM=noreply@example.org" in body
+    assert "DEFAULT_FROM_EMAIL=" not in body
 
     frontend = backend["st_transfers_frontend_env"]
     assert "TRANSFERTS_FRONTEND_BACKEND_SERVER=transfers-backend:8000" in frontend
@@ -2366,12 +2369,73 @@ def test_ask_core_transfers_drive_url_optional(monkeypatch):
             ("text", "OIDC_RP_CLIENT_ID", "transfers-client"),
             ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
             ("confirm", "Configure transactional email (SMTP) settings?", False),
+            ("confirm", "file-scanner", False),
         ],
     )
     meta = appmeta.load_app("transfers")
     answers = bootstrap._ask_core(meta, AnsibleVaultBackend())
     assert "DRIVE_BASE_URL" not in answers
+    # file-scanner declined → no CLAMAV/SCAN keys at all (app keeps its disabled default)
+    assert "CLAMAV_SCAN_ENABLED" not in answers
     body = envrender.render_env("transfers", "transfers", answers)[
         "st_transfers_backend_env"
     ]
     assert "DRIVE_BASE_URL" not in body
+    assert "CLAMAV" not in body and "SCAN_JWT" not in body
+
+
+def test_ask_core_transfers_file_scanner_enabled(monkeypatch):
+    """Accepting the file-scanner questionnaire enables the ClamAV integration: the
+    CLAMAV_*/SCAN_* keys are set, the EdDSA signing key is routed through the secret
+    backend (a vault ref, not the raw value), and the whole block renders into the
+    backend env."""
+    script_questionary(
+        monkeypatch,
+        [
+            ("text", "Public domain for transfers", "transfers.example.org"),
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("text", "DATABASE_URL", "postgres://transfers"),
+            ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.fr-par.scw.cloud"),
+            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
+            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
+            ("text", "AWS_STORAGE_BUCKET_NAME", "transfers-prod"),
+            ("text", "AWS_S3_REGION_NAME (optional)", ""),
+            ("text", "DRIVE_BASE_URL", ""),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "transfers-client"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", False),
+            ("confirm", "file-scanner", True),
+            ("text", "CLAMAV_SERVICE_URL", "http://clamav_rest:8090"),
+            ("text", "SCAN_WEBHOOK_BASE_URL", "http://transfers-backend:8000"),
+            ("password", "SCAN_JWT_PRIVATE_KEY", "eddsa-private-key"),
+            ("text", "SCAN_JWT_ISSUER", "transferts"),
+            ("text", "SCAN_JWT_AUDIENCE", "file-scanner"),
+            ("text", "SCAN_JWT_TTL", "300"),
+            ("text", "SCAN_MAX_FILE_SIZE", "2147483648"),
+            ("text", "SCAN_PRESIGNED_URL_EXPIRY", "3600"),
+            ("text", "SCAN_PENDING_REAP_MINUTES", "15"),
+        ],
+    )
+    meta = appmeta.load_app("transfers")
+    answers = bootstrap._ask_core(meta, AnsibleVaultBackend())
+    assert answers["CLAMAV_SCAN_ENABLED"] == "true"
+    assert answers["CLAMAV_SERVICE_URL"] == "http://clamav_rest:8090"
+    assert answers["SCAN_WEBHOOK_BASE_URL"] == "http://transfers-backend:8000"
+    # the EdDSA key is a secret → a vault ref, not the raw value
+    assert answers["SCAN_JWT_PRIVATE_KEY"].startswith("{{ vault")
+    assert "eddsa-private-key" not in answers["SCAN_JWT_PRIVATE_KEY"]
+
+    body = envrender.render_env("transfers", "transfers", answers)[
+        "st_transfers_backend_env"
+    ]
+    assert "CLAMAV_SCAN_ENABLED=true" in body
+    assert "CLAMAV_SERVICE_URL=http://clamav_rest:8090" in body
+    assert "SCAN_WEBHOOK_BASE_URL=http://transfers-backend:8000" in body
+    assert "SCAN_JWT_ISSUER=transferts" in body
+    assert "SCAN_JWT_AUDIENCE=file-scanner" in body
+    assert "SCAN_JWT_TTL=300" in body
+    assert "SCAN_JWT_PRIVATE_KEY={{ vault_scan_jwt_private_key }}" in body
