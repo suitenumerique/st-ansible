@@ -669,7 +669,12 @@ def test_bootstrap_file_scanner_writes_env_blob_and_vault(repo, monkeypatch):
     assert len(fvault["vault_jwt_signing_key"]) == 43  # token_urlsafe(32)
     assert len(fvault["vault_prometheus_api_key"]) == 43
 
-    assert "10.0.0.20" in (repo / "file-scanner/prod/file-scanner/hosts").read_text()
+    hosts = (repo / "file-scanner/prod/file-scanner/hosts").read_text()
+    # inventory group + alias prefix are dash-normalised (ansible warns on '-'
+    # in group names); the systemd unit / dirs keep the dashed app_name.
+    assert "[file_scanner]" in hosts
+    assert "file_scanner1 ansible_host=10.0.0.20" in hosts
+    assert "[file-scanner]" not in hosts
     m = manifest.load_manifest()
     assert [u.component for u in m.units] == ["file-scanner"]
     assert m.units[0].mode == "managed"
