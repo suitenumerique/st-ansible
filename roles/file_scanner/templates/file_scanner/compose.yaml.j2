@@ -1,0 +1,65 @@
+---
+{{ ansible_managed | comment }}
+
+name: file-scanner
+services:
+  app:
+    container_name: file-scanner-app
+    image: "{{ st_file_scanner_image }}:{{ st_file_scanner_tag }}"
+    env_file: ./env
+    ports:
+      - "{{ st_file_scanner_port }}:8090"
+    # The published image is distroless but ships its own working HEALTHCHECK
+    # (exec-form python urllib GET :8090/check), so the role does not redefine
+    # one — a compose-defined probe would be wrapped in `/bin/sh -c` by
+    # podman-compose 1.3.0 (Debian Trixie) and fail on the shell-less image.
+    depends_on:
+      clamav:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  worker:
+    container_name: file-scanner-worker
+    image: "{{ st_file_scanner_image }}:{{ st_file_scanner_tag }}"
+    env_file: ./env
+    # dramatiq worker consuming both queues (webhooks + scans) — required for
+    # /scan-async: without it jobs sit in the queue and no webhook is delivered.
+    command: ["python", "-m", "worker"]
+    depends_on:
+      clamav:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    # The image's HEALTHCHECK probes the web API on :8090, which this worker
+    # does not serve; disable it (see the transfers workers unit for the full
+    # podman-compose shell-less-image rationale).
+    healthcheck:
+      disable: true
+
+  clamav:
+    container_name: file-scanner-clamav
+    image: "{{ st_file_scanner_clamav_image }}:{{ st_file_scanner_clamav_tag }}"
+    # Signature database (~300 MB, downloaded by freshclam on first start and
+    # kept fresh by the daemon) — persisted so restarts don't re-download it.
+    volumes:
+      - clamav_data:/var/lib/clamav
+    # The clamav image is shell-ful, so the podman-compose `/bin/sh -c` wrapping
+    # of this exec-form probe is harmless. The generous start_period covers the
+    # first-start signature download + load.
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
+  # dramatiq broker between the API and the worker (Redis 7+ for the
+  # redis-streams consumer groups). Queue state only — scan results are pushed
+  # via webhook (stateless service), so no persistence volume is needed.
+  redis:
+    container_name: file-scanner-redis
+    image: "{{ st_file_scanner_redis_image }}:{{ st_file_scanner_redis_tag }}"
+
+volumes:
+  clamav_data:

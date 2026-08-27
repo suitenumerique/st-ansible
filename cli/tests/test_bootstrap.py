@@ -861,6 +861,84 @@ def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
     assert m.units[0].mode == "managed"
 
 
+def test_bootstrap_file_scanner_writes_env_blob_and_vault(repo, monkeypatch):
+    """Full `bootstrap file-scanner prod` runs the file-scanner questionnaire (no
+    DOMAIN/DB/S3/OIDC prompts): the env blob wires the bundled clamav/redis compose
+    services, carries the caller public keys verbatim, refs the generated webhook
+    signing seed + /metrics token as {{ vault_* }}, and skips ALLOWED_URL_HOSTS
+    when left blank. The generated secrets land in vault.yml as 32 random bytes
+    base64url (43 chars — a valid Ed25519 seed for JWT_SIGNING_KEY)."""
+    seed_creds(repo)
+    script_questionary(
+        monkeypatch,
+        [
+            ("select", "Secret backend:", "ansible-vault"),
+            ("text", "file-scanner host(s)", "10.0.0.20"),
+            ("text", "JWT_ISSUER_KEYS", "transferts:pubkeyAAA"),
+            ("text", "JWT_SIGNING_KID", "v1"),
+            ("confirm", "PROMETHEUS_API_KEY", True),
+            ("text", "ALLOWED_URL_HOSTS", ""),
+            ("text", "SSRF_ALLOWED_HOSTS", ""),
+            ("confirm", "cadvisor", True),
+        ],
+    )
+
+    bootstrap.bootstrap("file-scanner", "prod")
+
+    body = (repo / "file-scanner/prod/file-scanner/vars.yml").read_text()
+    # dash-normalised cadvisor toggle (st_file-scanner_* would be an invalid var)
+    assert "st_file_scanner_cadvisor_enabled" in body
+    assert "st_file-scanner" not in body
+    # fixed wiring to the in-compose clamav/redis services
+    assert "CLAMAV_HOSTS=clamav:3310" in body
+    assert "WORKER_BROKER_URL=redis://redis:6379/0" in body
+    assert "JWT_ISSUER_KEYS=transferts:pubkeyAAA" in body
+    assert "JWT_SIGNING_KEY={{ vault_jwt_signing_key }}" in body
+    assert "JWT_SIGNING_KID=v1" in body
+    assert "PROMETHEUS_API_KEY={{ vault_prometheus_api_key }}" in body
+    # left blank → keys not emitted (the app keeps its no-allowlist defaults)
+    assert "ALLOWED_URL_HOSTS" not in body
+    assert "SSRF_ALLOWED_HOSTS" not in body
+
+    assert vault.is_encrypted(paths.vault_path("file-scanner", "prod", "file-scanner"))
+    fvault = vault.decrypt_to_dict(
+        paths.vault_path("file-scanner", "prod", "file-scanner")
+    )
+    assert len(fvault["vault_jwt_signing_key"]) == 43  # token_urlsafe(32)
+    assert len(fvault["vault_prometheus_api_key"]) == 43
+
+    assert "10.0.0.20" in (repo / "file-scanner/prod/file-scanner/hosts").read_text()
+    m = manifest.load_manifest()
+    assert [u.component for u in m.units] == ["file-scanner"]
+    assert m.units[0].mode == "managed"
+
+
+def test_ask_file_scanner_allowlist_reuses_hosts_for_ssrf(repo, monkeypatch):
+    """With ALLOWED_URL_HOSTS set, the SSRF question becomes a yes/no reusing the
+    same list (no re-typing): answering yes emits both keys with one value.
+    Declining the /metrics confirm leaves PROMETHEUS_API_KEY out entirely."""
+    script_questionary(
+        monkeypatch,
+        [
+            ("text", "JWT_ISSUER_KEYS", "transferts:pubkeyAAA"),
+            ("text", "JWT_SIGNING_KID", "v1"),
+            ("confirm", "PROMETHEUS_API_KEY", False),
+            ("text", "ALLOWED_URL_HOSTS", "s3.fr-par.scw.cloud"),
+            ("confirm", "private IPs", True),
+        ],
+    )
+    meta = appmeta.load_app("file-scanner")
+    answers = bootstrap._ask_file_scanner(meta, AnsibleVaultBackend())
+
+    assert answers["SSRF_ALLOWED_HOSTS"] == "s3.fr-par.scw.cloud"
+    body = envrender.render_env("file-scanner", "file-scanner", answers)[
+        "st_file_scanner_env"
+    ]
+    assert "ALLOWED_URL_HOSTS=s3.fr-par.scw.cloud" in body
+    assert "SSRF_ALLOWED_HOSTS=s3.fr-par.scw.cloud" in body
+    assert "PROMETHEUS_API_KEY" not in body
+
+
 def test_bootstrap_component_invalid_raises(repo, monkeypatch):
     """`bootstrap -c foo` raises StCliError mentioning the valid targets."""
     seed_creds(repo)
@@ -1535,9 +1613,10 @@ def test_bootstrap_messages_relay_outbound_mode(repo, monkeypatch):
 
 
 def test_bootstrap_intro_guidance_for_core_not_provider(repo, monkeypatch, capfd):
-    """Pre-questionnaire guidance (arch-docs URL + a 'Requirements' checklist with
-    the ProConnect pointer) is printed before the 'Bootstrapped' line for a full/
-    core/workers run, and is ABSENT for a provider-only `-c <provider>` run."""
+    """Pre-questionnaire guidance (arch-docs URL + the app-tailored 'Requirements'
+    checklist) is printed before the 'Bootstrapped' line for a full/core/workers
+    run, and is ABSENT for a provider-only `-c <provider>` run. keycloak's list
+    keeps PostgreSQL but drops the Redis/S3/ProConnect lines (it IS the IdP)."""
     seed_creds(repo)
     # --- part 1: keycloak full run → guidance present before "Bootstrapped" ---
     script_questionary(
@@ -1563,9 +1642,9 @@ def test_bootstrap_intro_guidance_for_core_not_provider(repo, monkeypatch, capfd
     flat = " ".join(intro.replace("│", " ").split())
     assert "st-ansible/tree/main/docs/02-keycloak" in flat
     assert "Requirements" in flat
-    # The checklist is app-aware (apps/<app>.yml `requires`): keycloak needs only
-    # a database — it IS the identity provider, and uses no Redis/S3 — so the
-    # OIDC/ProConnect pointer and the Redis/S3 lines must NOT be shown here.
+    # The checklist is app-tailored (apps/<app>.yml `requirements`): keycloak
+    # needs only a database — it IS the identity provider, and uses no Redis/S3 —
+    # so the OIDC/ProConnect pointer and the Redis/S3 lines must NOT be shown here.
     assert "PostgreSQL" in flat
     assert "partenaires.proconnect.gouv.fr" not in flat
     assert "Redis" not in flat and "S3" not in flat
@@ -1603,6 +1682,38 @@ def test_bootstrap_intro_guidance_for_core_not_provider(repo, monkeypatch, capfd
     flat2 = " ".join(out2.replace("│", " ").split())
     assert "Requirements" not in flat2
     assert "partenaires.proconnect.gouv.fr" not in flat2
+
+
+def test_bootstrap_intro_requirements_tailored_for_file_scanner(
+    repo, monkeypatch, capfd
+):
+    """An app with a manifest ``requirements:`` list gets a tailored checklist in
+    the Requirements box: file-scanner shows IPs + caller public keys and NONE of
+    the generic PostgreSQL/Redis/S3/ProConnect lines (its stack is self-contained)."""
+    seed_creds(repo)
+    script_questionary(
+        monkeypatch,
+        [
+            ("select", "Secret backend:", "ansible-vault"),
+            ("text", "file-scanner host(s)", "10.0.0.20"),
+            ("text", "JWT_ISSUER_KEYS", "transferts:pubkeyAAA"),
+            ("text", "JWT_SIGNING_KID", "v1"),
+            ("confirm", "PROMETHEUS_API_KEY", True),
+            ("text", "ALLOWED_URL_HOSTS", ""),
+            ("text", "SSRF_ALLOWED_HOSTS", ""),
+            ("confirm", "cadvisor", True),
+        ],
+    )
+    bootstrap.bootstrap("file-scanner", "prod")
+
+    out = capfd.readouterr().out
+    intro = out.split("Bootstrapped file-scanner/prod.", 1)[0]
+    flat = " ".join(intro.replace("│", " ").split())
+    assert "Requirements" in flat
+    assert "JWT_ISSUER_KEYS" in flat
+    assert "PostgreSQL" not in flat
+    assert "S3" not in flat
+    assert "partenaires.proconnect.gouv.fr" not in flat
 
 
 def test_confirm_ready_gate_aborts_on_decline_or_interrupt(monkeypatch):
@@ -2104,30 +2215,26 @@ def test_docs_yprovider_endpoints_rejects_empty_hosts(repo):
 # --------------------------------------------------------------------------- projects
 
 
-def test_requirements_checklist_is_app_aware(capsys, monkeypatch):
-    """The pre-questionnaire Requirements panel lists only the infra the app
-    declares: projects (a Sails app) must NOT be told to prepare a Redis, while
-    the Django apps still are. An app declaring nothing gets the full list."""
+def test_requirements_checklist_is_app_tailored(capsys, monkeypatch):
+    """The pre-questionnaire Requirements panel renders the app's own
+    ``requirements`` checklist (apps/<app>.yml): projects (a Sails app) must NOT
+    be told to prepare a Redis or S3 as hard prerequisites — they only appear in
+    its "Optionally:" scaling line — while the Django apps still list them."""
     monkeypatch.setattr(bootstrap, "_confirm_ready", lambda *a, **k: None)
+
     bootstrap._print_bootstrap_intro(appmeta.load_app("projects"))
-    out = capsys.readouterr().out
-    # projects requires only PostgreSQL + an IdP; S3 is opt-in (local storage by
-    # default) so it must NOT be listed as required prep, and it uses no Redis.
-    assert "PostgreSQL" in out and "Identity provider" in out
-    assert "Redis" not in out and "S3" not in out
+    flat = " ".join(capsys.readouterr().out.replace("│", " ").split())
+    assert "PostgreSQL" in flat and "Identity provider" in flat
+    assert "Redis host and credentials" not in flat
+    assert "S3 endpoint" not in flat
+    assert "Optionally" in flat  # the scaling S3/Redis prep is opt-in only
 
     bootstrap._print_bootstrap_intro(appmeta.load_app("keycloak"))
-    out = capsys.readouterr().out
-    assert "PostgreSQL" in out
-    assert "Redis" not in out and "S3" not in out
+    flat = " ".join(capsys.readouterr().out.replace("│", " ").split())
+    assert "PostgreSQL" in flat
+    assert "Redis" not in flat and "S3" not in flat
 
     bootstrap._print_bootstrap_intro(appmeta.load_app("meet"))
-    assert "Redis" in capsys.readouterr().out
-
-    # an app that declares no `requires` falls back to the full generic list
-    meta = appmeta.load_app("projects")
-    meta.requires = []
-    bootstrap._print_bootstrap_intro(meta)
     assert "Redis" in capsys.readouterr().out
 
 

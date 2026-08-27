@@ -42,6 +42,16 @@ def note(body: str, title: str = "Note") -> None:
     console.print(Panel(body, title=title))
 
 
+def value(val: str) -> None:
+    """Print a raw value on its own line, copy-paste safe.
+
+    No markup, no highlighting, and ``soft_wrap`` so rich inserts no hard line
+    breaks — a long key/URL wraps visually in the terminal but stays one
+    logical line when copied (a Panel would fold it with real newlines).
+    """
+    console.print(val, markup=False, highlight=False, soft_wrap=True)
+
+
 def host_header(name: str, host: str) -> None:
     """Print a compact, colored ``<name> on <host>`` section header (e.g. for ``ps``).
 

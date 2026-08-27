@@ -28,7 +28,7 @@ st_cli/core/*.py       Business logic: generation, rendering, running ansible,
 st_cli/core/resources/ Bundled Jinja2 templates + app manifests (read-only)
 ```
 
-`main.py` registers 10 subcommands. A global `@app.callback()` runs a best-effort
+`main.py` registers 11 subcommands. A global `@app.callback()` runs a best-effort
 upstream-version check before every subcommand (`core/upstream.py`); warn-only,
 swallows every exception. Each command body is wrapped by `_run(fn)`, which
 catches `StCliError` → clean `typer.Exit(1)` (no traceback).
@@ -64,6 +64,7 @@ deploy-only with `-d`).
 | `cmd/remote.py` | `restart`/`ps`/`oneoff`/`reset`/`logs` | Direct `ssh` (no Ansible). Hosts come from the component's `hosts` file; `-H/--host` is the inventory **alias** (validated via `tree.find_host`), ssh connects to its `ansible_host` ip. `restart`/`ps` loop ssh over each host; their `-c` is **repeatable**, `oneoff`/`logs`/`reset` keep single-`-c`. `restart` bare restarts ALL components and **warns + confirms** (`-y/--yes` skips, non-TTY raises); `restart -p/--parallel` restarts components concurrently (each still rolls hosts one at a time), ignores `deploy_order`, aggregates failures. `restart` drives `ui.progress_reporter` (per-component spinner on TTY, plain lines off-TTY); `_ssh(quiet=True)` discards ssh stdout+stderr so chatter can't garble the spinner — failed host surfaces via aggregated error (`unit@alias (rc=…)`, `st-cli logs` hint). `ps` runs `podman ps -a` per host, **skips `is_worker`**, prints `ui.host_header`. `logs`/`oneoff`/`reset` hit exactly one host (`resolve_target` + `_select_host` prompt; no-TTY + no `-H` raises); run the app-user command via `_as_user` (`sudo -iu <user> …` login shell). `reset` is destructive (stop + `down -v` + `rm -rf` + redeploy). `logs`: `journalctl --user -u` (15 min default, `--since`, live `-f`). **ssh noise suppression**: non-interactive commands use `_ssh(capture_stderr=True)` (stdout live, stderr replayed via `ui.warn` on failure); every `_ssh` passes `-o LogLevel=ERROR`. `_ssh` modes: `quiet` (discard both, restart), `capture_stderr` (mutually exclusive, quiet wins), default (inherit both, interactive). |
 | `cmd/upgrade.py` | `upgrade` | Only upgrade path. Checks upstream first (`upstream.get_latest_cached` + `upstream.is_behind`, skipped when `ST_CLI_NO_UPSTREAM_CHECK` set): behind + pipx-owned (`upstream.owning_pipx`) → `pipx upgrade st-cli`; behind + not pipx-owned (container/pip installs) → warns `docker pull ghcr.io/suitenumerique/st-cli:latest` then `st-cli upgrade`, no pipx call; upstream unknown + pipx-owned → best-effort `pipx upgrade st-cli` (old behavior); up-to-date → skips pipx. Then realigns `.st-cli.yml` pin from freshly-installed `importlib.metadata` version → cleans trashable scaffolding. Realign + clean ONLY on real version change; no-op leaves `.st-cli/` intact + informs (pip-upgrade hint only when upstream is unknown AND pipx absent; the docker-pull warn above covers the behind-and-no-pipx case, so no redundant "nothing to do" line there). Does NOT generate/install/doctor. |
 | `cmd/version.py` | `version` | Print installed CLI version + `.st-cli.yml` pin; warn on mismatch. |
+| `cmd/generate_keypairs.py` | `generate-keypairs APP ENV` | Mint Ed25519 caller keypairs (file-scanner only; other/unknown apps raise). Issuer-name loop (`':'`/`','`/duplicates re-prompt) → guidance panel + values via `ui.value`: the `iss:pubkey` JWT_ISSUER_KEYS line (merged with the bootstrapped unit's existing value, if any) and each private key — shown once, never stored. Crypto in `core/keypairs.py`. |
 | `cmd/secrets.py` | `secrets APP ENV` | Edit an (app,env)'s ansible-vault secrets in `$EDITOR` via `ansible-vault edit`; prompts for component when several have `vault.yml`; ansible-vault backend only (hashi_vault refuses, points to OpenBao). `-c/--component` narrows to one. |
 
 _`main.py` also defines `restart`/`ps`/`oneoff`/`reset`/`logs` (→ `cmd/remote.py`)
@@ -87,7 +88,8 @@ single-`-c`._
 | `core/secrets.py` | `gen_secret` (Django `SECRET_KEY` alphabet), `gen_token` (`token_urlsafe`), `gen_password`. Used by bootstrap. |
 | `core/secretbackend.py` | Per-`(app,env)` secret-backend strategy. `SecretBackend` base + `AnsibleVaultBackend` (historical split, byte-for-byte identical) and `HashiVaultBackend` (OpenBao KV-v2, **reference-only**: env blobs carry `{{ lookup('community.hashi_vault.hashi_vault', '<term>') }}` refs, no `vault.yml`, no generation, no writes). `setup_backend` (bootstrap) + `load_backend` (generate) from `manifest.secret_config_for`; `write_common_connection` merges `ansible_hashi_vault_*` into `common.yml`; `hashi_lookup_ref` builds refs. |
 | `core/tree.py` | Reads/writes committed config tree (path computation lives in `paths.py`; this is I/O only). Round-trip ruamel `YAML(typ="rt")` preserving comments + `!vault` scalars (`VaultString`). `read_hosts` parses INI inventory → ips (single source of truth); `read_inventory` returns `(alias,ip)` pairs; `find_host` matches `-H` against the **alias** only; `component_inventory` is worker→core-aware. `ensure_common`/`ensure_ssh_scaffold` seed committed `common.yml` + `ssh/` idempotently — never overwrite. |
-| `core/ui.py` | Rich console helpers: `info`/`warn`/`error`/`success` (warn/error → stderr). All user-facing output goes through here. `progress_reporter()` yields a thread-safe `_Reporter` (transient live spinner on TTY, plain lines off-TTY) — used by `restart`. `host_header(name, host)` — used by `ps`. |
+| `core/keypairs.py` | Pure-python Ed25519 keygen for `generate-keypairs` (no crypto dependency by design): RFC 8032 public-key derivation, keygen only — no signing/verification, no untrusted input. `generate_keypair() -> (private_b64url, public_b64url)`, raw 32-byte values as unpadded base64url (the upstream new-issuer.py / jwt_auth format; the private key IS the seed). Pinned to the RFC 8032 test vectors. |
+| `core/ui.py` | Rich console helpers: `info`/`warn`/`error`/`success` (warn/error → stderr). All user-facing output goes through here. `value(val)` prints a raw value copy-paste safe (no markup/highlight, `soft_wrap` — a Panel would hard-fold long keys). `progress_reporter()` yields a thread-safe `_Reporter` (transient live spinner on TTY, plain lines off-TTY) — used by `restart`. `host_header(name, host)` — used by `ps`. |
 | `core/upstream.py` | Best-effort "newer version available" check via `@app.callback()`. Highest semver git tag via anonymous `git ls-remote --tags` (3s timeout, cached 6h under `$XDG_CACHE_HOME/st-cli/upstream.json`, `get_latest_cached`); `is_behind(latest)` compares it against `__version__` (`True`/`False`/`None` when unparseable or unknown). If behind, **warns** to run `upgrade` — text branches on `owning_pipx()` (pipx-ownership probe: `pipx_metadata.json` in `sys.prefix`, then PATH lookup; shared with `cmd/upgrade.py`): pipx-owned → `st-cli upgrade`; not pipx-owned (container/pip installs) → `docker pull ghcr.io/suitenumerique/st-cli:latest` first. Never prompts/auto-runs/exits; any failure swallowed. Skipped for `upgrade`/help and when `ST_CLI_NO_UPSTREAM_CHECK` is set. |
 | `core/vault.py` | `ansible-vault` wrappers: `ensure_vault_password` (prompts + writes `.vault-pass` chmod 600 + loud "back this up + share with every operator" warning), `is_encrypted`, `encrypt_file`, `decrypt_to_dict`, `edit_file` (interactive `$EDITOR`, inherits terminal). |
 | `core/writer.py` | Pure writers for the committed tree, extracted from `cmd/bootstrap.py` (no prompting, no manifest mutation). `vars_header`, `apply_component_vars`, `write_vault`, `write_core`. Shared-rule helpers: `gen_value`, `rule_is_secret`, `rule_label`, `inject_consumer`. |
@@ -102,7 +104,9 @@ Bundled under `st_cli/core/resources/`, packaged automatically by hatchling
 ### App manifests — `resources/apps/{meet,drive,messages,keycloak,docs}.yml`
 
 Single source of truth for the app/component map (loaded by `appmeta.load_app()`):
-- `app`, `env_docs_url`
+- `app`, `env_docs_url`, `requirements[]` (app-tailored lines for the
+  pre-bootstrap "Requirements" box, rich markup allowed; mandatory — every
+  bundled app declares one, enforced by test_appmeta, no generic fallback)
 - `components[]`: `key`, `role` (FQCN), `user`, `app_name` (systemd unit +
   inventory group), `dir_var`, `enabled_var`, `deploy_order`, `is_core`, optional
   `is_worker`, `vars` (`{PLACEHOLDER}` templates), `env_render` (layer →
@@ -161,8 +165,9 @@ Test layout: one `test_<module>.py` per source module. Shared setup in
 and `tests/helpers.py` (config-tree seeders + `ScriptedQuestionary`). The lone
 network test (`test_syntax_check_after_galaxy_install`) is `@pytest.mark.network`,
 deselected via `addopts = "-m 'not network'"`. Deps: `typer`, `questionary`,
-`ruamel.yaml`, `jinja2`, `rich`; dev `pytest`, `pytest-mock`; build hatchling;
-Python ≥ 3.12.
+`ruamel.yaml`, `jinja2`, `rich`; dev `pytest`, `pytest-mock`, `cryptography`
+(test-only: the differential Ed25519 check in `test_keypairs.py` imports it
+hard — never a silent skip); build hatchling; Python ≥ 3.12.
 
 ### Developing against a local collection build
 

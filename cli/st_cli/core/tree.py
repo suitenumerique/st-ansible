@@ -162,11 +162,12 @@ def ensure_common(app: str, env: str) -> None:
     if p.exists():
         return
     p.parent.mkdir(parents=True, exist_ok=True)
+    var_app = app.replace("-", "_")  # ansible var names can't carry dashes
     text = (
         f"# st-cli app/env-wide vars for {app}/{env} — loaded before EVERY component's\n"
         "# vars.yml. Put values shared across all components here, e.g. "
-        f"st_{app}_uid /\n"
-        f"# st_{app}_gid / st_{app}_registries. Safe to edit by hand.\n"
+        f"st_{var_app}_uid /\n"
+        f"# st_{var_app}_gid / st_{var_app}_registries. Safe to edit by hand.\n"
         "---\n"
     )
     p.write_text(text, encoding="utf-8")

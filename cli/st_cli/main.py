@@ -7,6 +7,7 @@ import typer
 from .cmd import (
     bootstrap as bootstrap_mod,
     deploy as deploy_mod,
+    generate_keypairs as generate_keypairs_mod,
     remote,
     secrets as secrets_mod,
     upgrade as upgrade_mod,
@@ -115,6 +116,20 @@ def secrets(
 ):
     """Edit APP/ENV's ansible-vault secrets in $EDITOR (prompts for the component)."""
     _run(lambda: secrets_mod.edit_secrets(app_name, env, component))
+
+
+@app.command("generate-keypairs")
+def generate_keypairs(
+    app_name: str = typer.Argument(..., metavar="APP"),
+    env: str = typer.Argument(...),
+):
+    """Mint Ed25519 caller keypair(s) for APP/ENV (file-scanner JWT auth).
+
+    Asks an issuer name per keypair, then prints a wiring summary: the
+    iss:pubkey fragments for the scanner's JWT_ISSUER_KEYS and, for each caller,
+    the private key to hand over (shown once — st-cli stores no copy).
+    """
+    _run(lambda: generate_keypairs_mod.generate(app_name, env))
 
 
 @app.command()

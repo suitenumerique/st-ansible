@@ -45,20 +45,6 @@ __all__ = ["bootstrap"]
 
 _OIDC_PROVIDERS = ["keycloak", "proconnect-prod", "proconnect-integ", "custom"]
 
-# Requirements-checklist lines, keyed by the capability names apps declare in
-# their `requires` (apps/<app>.yml). Insertion order is the display order; the
-# VM line is unconditional and printed separately.
-_REQUIREMENT_LINES = {
-    "postgresql": "[bold]PostgreSQL[/bold] host and credentials",
-    "redis": "[bold]Redis[/bold] host and credentials",
-    "s3": "[bold]S3[/bold] endpoint, bucket and credentials",
-    "oidc": (
-        "[bold]Identity provider[/bold] URLs and credentials\n"
-        "    (For ProConnect Integration environment: create an app at "
-        "https://partenaires.proconnect.gouv.fr/)"
-    ),
-}
-
 # Apps that carry upstream DJANGO_EMAIL_* settings; messages is skipped (no such
 # settings upstream) so its questionnaire never prompts for SMTP config.
 _EMAIL_APPS = {"drive", "meet", "docs", "transfers"}
@@ -144,7 +130,8 @@ def _ask_transfers_scanner(
     """Optional file-scanner (antivirus) integration for transfers.
 
     When enabled, completed uploads are submitted to an external file-scanner
-    service (ClamAV REST) for an async virus scan; the verdict returns via a webhook
+    service (deployable with ``st-cli bootstrap file-scanner``, or any compatible
+    ClamAV REST endpoint) for an async virus scan; the verdict returns via a webhook
     and gates downloads. Declining leaves every key unset, so the app keeps its
     ``CLAMAV_SCAN_ENABLED=false`` default. The EdDSA signing key is a secret routed
     through the backend; the rest is plain config (numeric knobs keep upstream
@@ -157,7 +144,7 @@ def _ask_transfers_scanner(
     answers["CLAMAV_SCAN_ENABLED"] = "true"
     answers["CLAMAV_SERVICE_URL"] = _ask(
         "CLAMAV_SERVICE_URL (file-scanner REST base URL, no trailing slash)",
-        placeholder="http://clamav_rest:8090",
+        placeholder="http://10.0.0.20:50800",
     )
     # Public base URL of THIS backend as the scanner reaches it (webhook callback).
     answers["SCAN_WEBHOOK_BASE_URL"] = _ask(
@@ -428,6 +415,70 @@ def _ask_projects(meta, backend: SecretBackend) -> dict:
     scaling = _ask_projects_scaling(answers, backend, core_key)
     _ask_projects_storage(answers, backend, core_key, scaling=scaling)
     _ask_projects_email(answers, backend, core_key)
+    return answers
+
+
+def _ask_file_scanner(meta, backend: SecretBackend) -> dict:
+    """Collect the file-scanner core answers → the ``st_file_scanner_env`` blob.
+
+    file-scanner is not a Django app: a FastAPI API + dramatiq worker pair whose
+    compose stack bundles its own clamav daemon and Redis broker, so there is no
+    DOMAIN/DB/S3/OIDC questionnaire — callers (e.g. the transfers backend) reach
+    it at ``http://<host>:<st_file_scanner_port>``. Callers are trusted via their
+    *public* Ed25519 keys (``JWT_ISSUER_KEYS``, plain config); the secrets are
+    the webhook signing seed (generated — 32 random bytes base64url IS a valid
+    Ed25519 seed) and the optional ``/metrics`` bearer token (generated too, on
+    by default: the API port is published on the host, and the ``api_client``
+    metric label leaks caller identities to anyone who can scrape it).
+    """
+    core_key = meta.core().key
+    answers: dict = {}
+    answers["JWT_ISSUER_KEYS"] = _ask(
+        "JWT_ISSUER_KEYS (comma-separated iss:base64url-ed25519-pubkey pairs)",
+        placeholder="transferts:8sicDCDZLZY5SPNNjr4aBwwh0Dyrqr7Ca9neK_nA6Eg",
+    )
+    backend.env_secret(
+        answers,
+        "JWT_SIGNING_KEY",
+        component=core_key,
+        value=secrets.gen_token() if backend.prompts_values() else None,
+    )
+    answers["JWT_SIGNING_KID"] = _ask("JWT_SIGNING_KID (webhook key label)", "v1")
+    if _confirm(
+        "Protect /metrics with a bearer token (PROMETHEUS_API_KEY)?", default=True
+    ):
+        backend.env_secret(
+            answers,
+            "PROMETHEUS_API_KEY",
+            component=core_key,
+            value=secrets.gen_token() if backend.prompts_values() else None,
+        )
+    allowed = _ask(
+        "ALLOWED_URL_HOSTS (optional allowlist of scannable URL hosts, e.g. your "
+        "S3 host; blank = any host may be submitted)",
+        required=False,
+    )
+    # SSRF bypass: only needed when a scannable host resolves to a private IP
+    # (e.g. an S3 endpoint reached over an internal network) — the worker's
+    # SSRF guard would otherwise refuse to download from it. With an allowlist
+    # set, a yes/no reusing that same list beats re-typing it; without one,
+    # fall back to a free-text prompt (a bypass still needs explicit hostnames).
+    if allowed:
+        answers["ALLOWED_URL_HOSTS"] = allowed
+        if _confirm(
+            "Do these hosts resolve to private IPs from the scanner hosts "
+            "(e.g. an internal S3 endpoint)? Sets SSRF_ALLOWED_HOSTS to the same list.",
+            default=False,
+        ):
+            answers["SSRF_ALLOWED_HOSTS"] = allowed
+    else:
+        ssrf = _ask(
+            "SSRF_ALLOWED_HOSTS (optional: hosts allowed to resolve to private IPs, "
+            "e.g. an internal S3 endpoint)",
+            required=False,
+        )
+        if ssrf:
+            answers["SSRF_ALLOWED_HOSTS"] = ssrf
     return answers
 
 
@@ -1506,7 +1557,8 @@ def _print_summary(
     # narrow the listed units + the "Next" hint to that component.
     scoped = component is not None and component != core_key
     if not scoped:
-        ui.info(f"  domain: {answers.get('DOMAIN', '?')}")
+        if answers.get("DOMAIN"):  # file-scanner has no public domain — skip the line
+            ui.info(f"  domain: {answers['DOMAIN']}")
         if "OIDC_PROVIDER" in answers:  # keycloak (an IdP itself) has no OIDC provider
             ui.info(f"  OIDC provider: {answers['OIDC_PROVIDER']}")
     shown = [u for u in units if u.component == component] if scoped else units
@@ -1558,17 +1610,11 @@ def _print_bootstrap_intro(meta) -> None:
             f"  {meta.arch_docs_url}",
             title="Bootstrap",
         )
-    # Only list the infrastructure THIS app actually needs (apps/<app>.yml
-    # `requires`): telling a projects/keycloak operator to provision a Redis they
-    # never use is noise. An app declaring nothing falls back to the full list.
-    keys = meta.requires or list(_REQUIREMENT_LINES)
-    bullets = "\n".join(
-        f"  • {_REQUIREMENT_LINES[k]}" for k in keys if k in _REQUIREMENT_LINES
+    # App-tailored checklist from the manifest
+    body = "Make sure you've prepared:\n" + "\n".join(
+        f"  • {line}" for line in meta.requirements
     )
-    ui.note(
-        f"Make sure you've prepared:\n  • [bold]IP[/bold] or hostname of the VM(s)\n{bullets}",
-        title="Requirements",
-    )
+    ui.note(body, title="Requirements")
     _confirm_ready("Do you have all of the above ready to continue?")
 
 
@@ -1684,12 +1730,14 @@ def bootstrap(app: str, env: str, component: str | None = None) -> None:
                     f"workers (leave blank to run on the {core.key} hosts)",
                     allow_empty=True,
                 )
-            # keycloak and projects are not Django apps — each takes its own
-            # (raw-env) questionnaire instead of the shared Django core one.
+            # keycloak / projects / file-scanner are not Django apps — each takes
+            # its own (raw-env) questionnaire instead of the shared core one.
             if app == "keycloak":
                 answers = _ask_keycloak(meta, backend)
             elif app == "projects":
                 answers = _ask_projects(meta, backend)
+            elif app == "file-scanner":
+                answers = _ask_file_scanner(meta, backend)
             else:
                 answers = _ask_core(meta, backend)
             # a fresh run has no core hosts file on disk yet — stash the hosts

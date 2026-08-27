@@ -2,6 +2,13 @@
 app: transfers
 env_docs_url: "https://github.com/suitenumerique/transfers/tree/main/env.d"
 arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/07-transfers"
+requirements:
+  - "[bold]IP[/bold] or hostname of the VM(s)"
+  - "[bold]PostgreSQL[/bold] host and credentials"
+  - "[bold]Redis[/bold] host and credentials"
+  - "[bold]S3[/bold] endpoint, bucket and credentials"
+  - "[bold]Identity provider[/bold] URLs and credentials (ProConnect Integration: create an app at https://partenaires.proconnect.gouv.fr/)"
+  - "[bold]Optionally[/bold]: SMTP credentials, Drive base URL, file-scanner URL + caller keypair"
 components:
   - key: transfers
     role: suitenumerique.st.transfers
