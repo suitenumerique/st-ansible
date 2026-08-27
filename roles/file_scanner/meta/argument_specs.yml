@@ -68,6 +68,7 @@ argument_specs:
       st_file_scanner_env:
         type: "str"
         description: "Content of the default env_template, not used if st_file_scanner_env_template is defined."
+        default: ""
       st_file_scanner_cadvisor_enabled:
         type: "bool"
         description: "Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool."

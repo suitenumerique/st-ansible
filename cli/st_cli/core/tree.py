@@ -287,7 +287,12 @@ def read_inventory(
 
     ``alias`` is the inventory hostname an ansible pattern or ``-H/--host`` matches.
     ``ip`` is the ``ansible_host=<x>`` value, falling back to the alias.
+    ``group`` is normalised via :func:`group_name` (idempotent), so a caller
+    passing a raw dashed ``app_name`` still matches the written
+    ``[file_scanner]``-style section.
     """
+    if group is not None:
+        group = group_name(group)
     p = paths.hosts_path(app, env, component)
     if not p.exists():
         return []

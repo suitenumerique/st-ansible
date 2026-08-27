@@ -121,7 +121,7 @@ integration?"*; answering yes collects:
 | Variable | Meaning |
 |----------|---------|
 | `CLAMAV_SERVICE_URL` | Base URL of the file-scanner REST service, reachable from the backend **and** worker (e.g. `http://10.0.0.20:50800`) |
-| `SCAN_WEBHOOK_BASE_URL` | Public base URL of this backend as the scanner reaches it (webhook callback), e.g. `http://transfers-backend:8000` |
+| `SCAN_WEBHOOK_BASE_URL` | Base URL of this backend **as reachable from the scanner host** (webhook callback). The backend port is not published — use the public transfers URL (the frontend Caddy proxies `/api` to the backend), e.g. `https://transfers.example.org` |
 | `SCAN_JWT_PRIVATE_KEY` | EdDSA (Ed25519) private key minting request-bound scan JWTs — **secret** (routed through the vault). Mint the keypair with `st-cli generate-keypairs file-scanner <env>` (or the scanner's `deploy/scripts/new-issuer.py`) and register the public key on the scanner's `JWT_ISSUER_KEYS` |
 | `SCAN_JWT_ISSUER` / `SCAN_JWT_AUDIENCE` | JWT `iss` / `aud` claims (defaults `transferts` / `file-scanner`) |
 | `SCAN_JWT_TTL`, `SCAN_MAX_FILE_SIZE`, `SCAN_PRESIGNED_URL_EXPIRY`, `SCAN_PENDING_REAP_MINUTES` | Tuning knobs (upstream defaults pre-filled) |

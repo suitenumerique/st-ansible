@@ -1826,9 +1826,11 @@ def test_ask_core_transfers_overrides_settings_bucket_and_s3_origin(monkeypatch)
     `transferts.settings` (not `transfers.settings`); the S3 endpoint origin is
     mirrored into TRANSFERTS_FRONTEND_S3_ORIGIN (the frontend Caddy CSP needs it) and
     USE_X_FORWARDED_FOR is enabled (transfers sits behind the frontend proxy). The
-    optional DRIVE_BASE_URL is emitted only when answered, and the sender address is
-    exposed as DEFAULT_FROM_EMAIL. The frontend Caddy env points at the backend
-    service. Object storage uses the standard AWS_STORAGE_BUCKET_NAME (via base)."""
+    optional DRIVE_BASE_URL is emitted only when answered, and the sender address
+    stays the base DJANGO_EMAIL_FROM (the app maps DEFAULT_FROM_EMAIL onto it, so
+    the overlay emits no DEFAULT_FROM_EMAIL of its own). The frontend Caddy env
+    points at the backend service. Object storage uses the standard
+    AWS_STORAGE_BUCKET_NAME (via base)."""
     script_questionary(
         monkeypatch,
         [
@@ -1951,7 +1953,7 @@ def test_ask_core_transfers_file_scanner_enabled(monkeypatch):
             ("confirm", "Configure transactional email (SMTP) settings?", False),
             ("confirm", "file-scanner", True),
             ("text", "CLAMAV_SERVICE_URL", "http://clamav_rest:8090"),
-            ("text", "SCAN_WEBHOOK_BASE_URL", "http://transfers-backend:8000"),
+            ("text", "SCAN_WEBHOOK_BASE_URL", "https://transfers.example.org"),
             ("password", "SCAN_JWT_PRIVATE_KEY", "eddsa-private-key"),
             ("text", "SCAN_JWT_ISSUER", "transferts"),
             ("text", "SCAN_JWT_AUDIENCE", "file-scanner"),
@@ -1965,7 +1967,7 @@ def test_ask_core_transfers_file_scanner_enabled(monkeypatch):
     answers = bootstrap._ask_core(meta, AnsibleVaultBackend())
     assert answers["CLAMAV_SCAN_ENABLED"] == "true"
     assert answers["CLAMAV_SERVICE_URL"] == "http://clamav_rest:8090"
-    assert answers["SCAN_WEBHOOK_BASE_URL"] == "http://transfers-backend:8000"
+    assert answers["SCAN_WEBHOOK_BASE_URL"] == "https://transfers.example.org"
     # the EdDSA key is a secret → a vault ref, not the raw value
     assert answers["SCAN_JWT_PRIVATE_KEY"].startswith("{{ vault")
     assert "eddsa-private-key" not in answers["SCAN_JWT_PRIVATE_KEY"]
@@ -1975,7 +1977,7 @@ def test_ask_core_transfers_file_scanner_enabled(monkeypatch):
     ]
     assert "CLAMAV_SCAN_ENABLED=true" in body
     assert "CLAMAV_SERVICE_URL=http://clamav_rest:8090" in body
-    assert "SCAN_WEBHOOK_BASE_URL=http://transfers-backend:8000" in body
+    assert "SCAN_WEBHOOK_BASE_URL=https://transfers.example.org" in body
     assert "SCAN_JWT_ISSUER=transferts" in body
     assert "SCAN_JWT_AUDIENCE=file-scanner" in body
     assert "SCAN_JWT_TTL=300" in body
