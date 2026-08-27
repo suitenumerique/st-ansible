@@ -28,6 +28,8 @@ st_file_scanner_rollback_enabled: false
 st_file_scanner_compose_template: file_scanner/compose.yaml.j2
 # Local path to the custom template to use for file-scanner env file.
 st_file_scanner_env_template: file_scanner/env.j2
+# Content of the default env_template, not used if st_file_scanner_env_template is defined.
+st_file_scanner_env: ''
 # Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool.
 st_file_scanner_cadvisor_enabled: false
 # Image repository for the cadvisor container.

@@ -347,8 +347,13 @@ def read_inventory(
     ``meet1``) — the identifier an ansible pattern / ``--limit`` matches and what
     ``-H/--host`` accepts. ``ip`` is the ``ansible_host=<x>`` value (what ssh
     connects to), falling back to the alias when no ``ansible_host`` is set. Group
-    filtering + comment/header skipping mirror :func:`read_hosts`.
+    filtering + comment/header skipping mirror :func:`read_hosts`. ``group`` is
+    normalised via :func:`group_name` (idempotent on already-normalised names),
+    so a caller passing a raw dashed ``app_name`` still matches the written
+    ``[file_scanner]``-style section.
     """
+    if group is not None:
+        group = group_name(group)
     p = paths.hosts_path(app, env, component)
     if not p.exists():
         return []

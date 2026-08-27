@@ -146,10 +146,13 @@ def _ask_transfers_scanner(
         "CLAMAV_SERVICE_URL (file-scanner REST base URL, no trailing slash)",
         placeholder="http://10.0.0.20:50800",
     )
-    # Public base URL of THIS backend as the scanner reaches it (webhook callback).
+    # Base URL of THIS backend as the scanner reaches it (webhook callback).
+    # The backend port is not published on the host — the scanner reaches it
+    # through the public frontend Caddy, which proxies /api to the backend.
     answers["SCAN_WEBHOOK_BASE_URL"] = _ask(
-        "SCAN_WEBHOOK_BASE_URL (this backend, as seen by the scanner)",
-        placeholder="http://transfers-backend:8000",
+        "SCAN_WEBHOOK_BASE_URL (this backend, as reachable FROM the scanner "
+        "— usually the public transfers URL)",
+        placeholder="https://transfers.example.org",
     )
     # EdDSA (Ed25519) private key minting request-bound scan JWTs — a secret.
     value = _password("SCAN_JWT_PRIVATE_KEY") if backend.prompts_values() else None
