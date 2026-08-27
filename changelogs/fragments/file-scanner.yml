@@ -7,7 +7,9 @@ minor_changes:
   - st-cli - add ``file-scanner`` app support to bootstrap with its own non-Django
     questionnaire (caller public keys in ``JWT_ISSUER_KEYS``, generated Ed25519
     webhook signing seed and /metrics bearer token kept in the vault, optional
-    ``ALLOWED_URL_HOSTS`` allowlist). The pre-bootstrap Requirements box is now
+    ``ALLOWED_URL_HOSTS`` allowlist). Inventory group names are dash-normalised
+    (``[file_scanner]``, alias ``file_scanner1``) so ansible stops warning about
+    invalid group characters. The pre-bootstrap Requirements box is now
     app-tailored via a ``requirements`` list in each app manifest (file-scanner
     shows no PostgreSQL/Redis/S3/IdP lines, keycloak no Redis/S3/OIDC ones,
     messages adds OpenSearch and MX/SPF/DKIM DNS prep, meet the LiveKit/TURN

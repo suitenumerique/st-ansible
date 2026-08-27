@@ -90,9 +90,24 @@ def _host_vars_suffix(host_vars: Optional[dict]) -> str:
     return " " + " ".join(f"{k}={v}" for k, v in host_vars.items())
 
 
+def group_name(name: str) -> str:
+    """Ansible-safe inventory group for a component ``app_name``.
+
+    Ansible warns on ``-`` in group names ("Invalid characters were found in
+    group names"), so dashes become underscores: app_name ``file-scanner`` →
+    group ``[file_scanner]`` (and alias prefix ``file_scanner<n>``), while the
+    systemd unit / remote dir keep the dashed app_name. Applied at the two
+    chokepoints — :func:`_group_lines` (write) and :func:`effective_group`
+    (read/targeting) — so callers keep passing raw ``app_name``s.
+    """
+    return name.replace("-", "_")
+
+
 def _group_lines(group: str, hosts: list[str], suffix: str) -> list[str]:
     """INI lines for one ``[group]``: a header + a ``<group><n> ansible_host=<ip>``
-    alias per host, each carrying ``suffix``."""
+    alias per host, each carrying ``suffix``. ``group`` is normalised via
+    :func:`group_name`."""
+    group = group_name(group)
     lines = [f"[{group}]"]
     for i, ip in enumerate(hosts, start=1):
         lines.append(f"{group}{i} ansible_host={ip}{suffix}")
@@ -386,6 +401,8 @@ def effective_group(app: str, env: str, meta, comp) -> str:
     core regardless — only the targeted ``hosts:`` group changes.
     """
     files = meta.files_component(comp.key)
-    if comp.is_worker and read_hosts(app, env, files.key, group=comp.app_name):
-        return comp.app_name
-    return files.app_name
+    if comp.is_worker and read_hosts(
+        app, env, files.key, group=group_name(comp.app_name)
+    ):
+        return group_name(comp.app_name)
+    return group_name(files.app_name)

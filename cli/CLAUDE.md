@@ -108,7 +108,9 @@ Single source of truth for the app/component map (loaded by `appmeta.load_app()`
   pre-bootstrap "Requirements" box, rich markup allowed; mandatory — every
   bundled app declares one, enforced by test_appmeta, no generic fallback)
 - `components[]`: `key`, `role` (FQCN), `user`, `app_name` (systemd unit +
-  inventory group), `dir_var`, `enabled_var`, `deploy_order`, `is_core`, optional
+  inventory group — the group is dash-normalised via `tree.group_name`, e.g.
+  app_name `file-scanner` → `[file_scanner]`), `dir_var`, `enabled_var`,
+  `deploy_order`, `is_core`, optional
   `is_worker`, `vars` (`{PLACEHOLDER}` templates), `env_render` (layer →
   `{blob_var, templates[]}`).
 - `dependencies[]`: `of` (consumer), `on` (provider), `shared[]` rules
