@@ -36,6 +36,7 @@ You can find the documentation of the collection under the [docs/](docs/) direct
 - **[05-projects/](docs/05-projects/)** projects app
 - **[06-docs/](docs/06-docs/)** docs app, workers, yprovider
 - **[07-transfers/](docs/07-transfers/)** transfers app, workers
+- **[08-file-scanner/](docs/08-file-scanner/)** file-scanner antivirus service
 - **[monitoring.md](docs/monitoring.md)** cAdvisor + Grafana Alloy
 - **[backup.md](docs/backup.md)** Restic backup
 - **[troubleshooting.md](docs/troubleshooting.md)** common issues and debug commands
@@ -54,6 +55,7 @@ You can find the documentation of the collection under the [docs/](docs/) direct
 | docs | Docs application | [REFERENCE.md](roles/docs/REFERENCE.md) |
 | projects | Projects application | [REFERENCE.md](roles/projects/REFERENCE.md) |
 | transfers | Transfers application | [REFERENCE.md](roles/transfers/REFERENCE.md) |
+| file_scanner | file-scanner antivirus service | [REFERENCE.md](roles/file_scanner/REFERENCE.md) |
 | alloy | Grafana Alloy telemetry | [REFERENCE.md](roles/alloy/REFERENCE.md) |
 | restic | Restic backup | [REFERENCE.md](roles/restic/REFERENCE.md) |
 

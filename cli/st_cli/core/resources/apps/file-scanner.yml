@@ -1,0 +1,26 @@
+---
+app: file-scanner
+env_docs_url: "https://github.com/suitenumerique/file-scanner/blob/main/docs/deployment.md#configuration"
+arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/08-file-scanner"
+# file-scanner is fully self-contained (bundled clamav + redis; no PostgreSQL,
+# no S3, no IdP), so the generic requirements checklist would be misleading.
+requirements:
+  - "[bold]IP[/bold] or hostname of the VM(s)"
+  - "[bold]Ed25519 public key[/bold] of each calling app for JWT_ISSUER_KEYS (mint caller keypairs with `st-cli generate-keypairs file-scanner <env>`)"
+components:
+  - key: file-scanner
+    role: suitenumerique.st.file_scanner
+    user: file-scanner
+    app_name: file-scanner
+    dir_var: st_file_scanner_dir
+    enabled_var: st_file_scanner_enabled
+    deploy_order: 10
+    is_core: true
+    # One env blob shared by the API and the dramatiq worker (the compose stack
+    # also bundles a clamav daemon and a Redis broker — no external services).
+    env_render:
+      backend:
+        blob_var: st_file_scanner_env
+        templates:
+          - file-scanner.env.j2
+dependencies: []
