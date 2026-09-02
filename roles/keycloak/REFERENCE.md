@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.keycloak
-Version: 0.2.2
+Version: 0.3.0
 
 This role deploys a Keycloak instance for La Suite Territoriale applications on a rootless podman base on Debian systems.
 

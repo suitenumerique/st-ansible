@@ -2,27 +2,71 @@
 
 **Topics**
 
-- <a href="#v0-2-2">v0\.2\.2</a>
+- <a href="#v0-3-0">v0\.3\.0</a>
+    - <a href="#release-summary">Release Summary</a>
     - <a href="#minor-changes">Minor Changes</a>
     - <a href="#bugfixes">Bugfixes</a>
-- <a href="#v0-2-1">v0\.2\.1</a>
+    - <a href="#new-plugins">New Plugins</a>
+        - <a href="#callback">Callback</a>
+- <a href="#v0-2-2">v0\.2\.2</a>
     - <a href="#minor-changes-1">Minor Changes</a>
-- <a href="#v0-2-0">v0\.2\.0</a>
-    - <a href="#release-summary">Release Summary</a>
-    - <a href="#minor-changes-2">Minor Changes</a>
     - <a href="#bugfixes-1">Bugfixes</a>
-- <a href="#v0-1-1">v0\.1\.1</a>
+- <a href="#v0-2-1">v0\.2\.1</a>
+    - <a href="#minor-changes-2">Minor Changes</a>
+- <a href="#v0-2-0">v0\.2\.0</a>
+    - <a href="#release-summary-1">Release Summary</a>
     - <a href="#minor-changes-3">Minor Changes</a>
     - <a href="#bugfixes-2">Bugfixes</a>
-- <a href="#v0-1-0">v0\.1\.0</a>
-    - <a href="#release-summary-1">Release Summary</a>
-    - <a href="#major-changes">Major Changes</a>
+- <a href="#v0-1-1">v0\.1\.1</a>
     - <a href="#minor-changes-4">Minor Changes</a>
+    - <a href="#bugfixes-3">Bugfixes</a>
+- <a href="#v0-1-0">v0\.1\.0</a>
+    - <a href="#release-summary-2">Release Summary</a>
+    - <a href="#major-changes">Major Changes</a>
+    - <a href="#minor-changes-5">Minor Changes</a>
+
+<a id="v0-3-0"></a>
+## v0\.3\.0
+
+<a id="release-summary"></a>
+### Release Summary
+
+Adds two new applications\: Docs \(impress\, with workers and yprovider
+sub\-apps\) and Projects \(a Planka fork\)\, both deployable end to end with
+st\-cli\. The bootstrap \"Requirements\" checklist is now app\-aware\, and
+several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\.
+
+<a id="minor-changes"></a>
+### Minor Changes
+
+* 1. added docs app support to st\-cli
+* \(docs\) added the docs role\, deploying the Docs \(impress\) application as a caddy \+ frontend \+ backend core\, with workers and yprovider sub\-apps
+* \(projects\) new <code>projects</code> role and st\-cli support to deploy Projects \(<code>suitenumerique/projects</code>\, a Planka fork\) — a single Sails\.js container with external PostgreSQL\, OIDC\-enforced SSO \(Keycloak/ProConnect provider switch\) and optional S3\-backed uploads\; <code>st\-cli bootstrap projects \<env\></code> / <code>st\-cli deploy projects \<env\></code> behave like the other apps\.
+* \(st\-cli\) the bootstrap \"Requirements\" checklist is now app\-aware — each app declares the external infrastructure it needs via a <code>requires</code> manifest key — so <code>projects</code> and <code>keycloak</code> operators are no longer told to provision a Redis they never use\.
+* Update dependency molecule to v26\.8\.0
+* Update dependency suitenumerique/meet to v1\.27\.0
+* Update dependency suitenumerique/messages to v0\.9\.0
+* Update dependency typer to v0\.27\.1
+* Update docker\.io/livekit/egress Docker tag to v1\.14\.1
+* Update docker\.io/livekit/livekit\-server Docker tag to v1\.13\.5
+
+<a id="bugfixes"></a>
+### Bugfixes
+
+* \(st\-cli\) the <code>vars\.yml</code> header no longer claims secrets are stored in an encrypted <code>vault\.yml</code> when the hashi\_vault \(OpenBao\) backend is in use\, where no <code>vault\.yml</code> is written and secrets are referenced by lookup\.
+
+<a id="new-plugins"></a>
+### New Plugins
+
+<a id="callback"></a>
+#### Callback
+
+* suitenumerique\.st\.compact \- Compact one\-line\-per\-task output with a live pending line on a TTY\.
 
 <a id="v0-2-2"></a>
 ## v0\.2\.2
 
-<a id="minor-changes"></a>
+<a id="minor-changes-1"></a>
 ### Minor Changes
 
 * Update docker\.io/clamav/clamav Docker tag to v1\.5\.4
@@ -33,7 +77,7 @@
 * cli\: the behind\-upstream warning on other commands now branches on pipx — without pipx it names the exact <code>docker pull ghcr\.io/suitenumerique/st\-cli\:latest</code> command to run before <code>st\-cli upgrade</code>
 * plugins\: the compact callback now prints the <code>msg</code> of a <code>debug</code> task in a green box in place of the ok line and the JSON dump
 
-<a id="bugfixes"></a>
+<a id="bugfixes-1"></a>
 ### Bugfixes
 
 * cli\: only push latest on new tags to follow the st\-cli collection tags
@@ -42,7 +86,7 @@
 <a id="v0-2-1"></a>
 ## v0\.2\.1
 
-<a id="minor-changes-1"></a>
+<a id="minor-changes-2"></a>
 ### Minor Changes
 
 * callback\: added the suitenumerique\.st\.compact stdout callback\, one line per task and host\, a live progress line on a TTY\, diffs for changed tasks\, and full default\-style error output
@@ -52,13 +96,13 @@
 <a id="v0-2-0"></a>
 ## v0\.2\.0
 
-<a id="release-summary"></a>
+<a id="release-summary-1"></a>
 ### Release Summary
 
 Adds support for meet recordings\, fix openbao markers on st\-cli bootstrap
 and multiple versions upgrades\.
 
-<a id="minor-changes-2"></a>
+<a id="minor-changes-3"></a>
 ### Minor Changes
 
 * Update actions/checkout digest to 3d3c42e
@@ -71,7 +115,7 @@ and multiple versions upgrades\.
 * meet\: added custom logo handling
 * meet\: separated egress component and added recording feature to bootstrap
 
-<a id="bugfixes-1"></a>
+<a id="bugfixes-2"></a>
 ### Bugfixes
 
 * cli\: allow \@openbao markers on non\-secret fields
@@ -79,7 +123,7 @@ and multiple versions upgrades\.
 <a id="v0-1-1"></a>
 ## v0\.1\.1
 
-<a id="minor-changes-3"></a>
+<a id="minor-changes-4"></a>
 ### Minor Changes
 
 * Added Renovate configuration \(<code>renovate\.json5</code>\) and renovate Makefile target
@@ -92,7 +136,7 @@ and multiple versions upgrades\.
 * Update docker/setup\-buildx\-action action to v4
 * Update docker/setup\-qemu\-action action to v4
 
-<a id="bugfixes-2"></a>
+<a id="bugfixes-3"></a>
 ### Bugfixes
 
 * Fixed restic install task for upgrade workflow
@@ -100,7 +144,7 @@ and multiple versions upgrades\.
 <a id="v0-1-0"></a>
 ## v0\.1\.0
 
-<a id="release-summary-1"></a>
+<a id="release-summary-2"></a>
 ### Release Summary
 
 Added st\-cli to manage LST environments bootstraps and deployments\, refactored roles to make single\-host deployments easier\, started the CHANGELOG dance\.
@@ -111,7 +155,7 @@ Added st\-cli to manage LST environments bootstraps and deployments\, refactored
 * cli\: added st\-cli \#27
 * roles\: refactor every uid\, gid and ports to allow single\-host deployments \#26
 
-<a id="minor-changes-4"></a>
+<a id="minor-changes-5"></a>
 ### Minor Changes
 
 * changelog\: added antsibull\-changelog config\, Makefile targets and CI job \#13
