@@ -2,6 +2,7 @@
 app: drive
 env_docs_url: "https://github.com/suitenumerique/drive/blob/main/docs/env.md"
 arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/01-drive"
+requires: [postgresql, redis, s3, oidc]
 components:
   - key: drive
     role: suitenumerique.st.drive

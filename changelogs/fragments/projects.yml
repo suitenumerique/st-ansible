@@ -1,0 +1,5 @@
+minor_changes:
+  - (projects) new ``projects`` role and st-cli support to deploy Projects (``suitenumerique/projects``, a Planka fork) — a single Sails.js container with external PostgreSQL, OIDC-enforced SSO (Keycloak/ProConnect provider switch) and optional S3-backed uploads; ``st-cli bootstrap projects <env>`` / ``st-cli deploy projects <env>`` behave like the other apps.
+  - (st-cli) the bootstrap "Requirements" checklist is now app-aware — each app declares the external infrastructure it needs via a ``requires`` manifest key — so ``projects`` and ``keycloak`` operators are no longer told to provision a Redis they never use.
+bugfixes:
+  - (st-cli) the ``vars.yml`` header no longer claims secrets are stored in an encrypted ``vault.yml`` when the hashi_vault (OpenBao) backend is in use, where no ``vault.yml`` is written and secrets are referenced by lookup.
