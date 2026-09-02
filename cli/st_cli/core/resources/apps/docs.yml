@@ -2,6 +2,7 @@
 app: docs
 env_docs_url: "https://github.com/suitenumerique/docs/blob/main/documentation/env.md"
 arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/06-docs"
+requires: [postgresql, redis, s3, oidc]
 components:
   - key: docs
     role: suitenumerique.st.docs

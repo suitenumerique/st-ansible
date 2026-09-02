@@ -121,6 +121,19 @@ def _proconnect_endpoints(provider: str) -> dict[str, str]:
     }
 
 
+def oidc_issuer(provider: str, base_url: str | None, realm: str | None) -> str:
+    """Return the OIDC **issuer** URL (discovery base) for ``provider``.
+
+    Non-Django apps (e.g. projects) configure a single ``OIDC_ISSUER`` and let
+    their OIDC client discover the endpoints, rather than the explicit
+    ``OIDC_OP_*`` set the Django apps need. Delegates to :func:`oidc_endpoints`
+    so the ProConnect bases and the Keycloak realm derivation stay defined once.
+    Returns ``""`` when the provider needs a ``base_url``/``realm`` that wasn't
+    supplied.
+    """
+    return oidc_endpoints(provider, base_url, realm).get("OIDC_OP_URL", "")
+
+
 def oidc_endpoints(
     provider: str, base_url: str | None, realm: str | None
 ) -> dict[str, str]:

@@ -2,6 +2,7 @@
 app: meet
 env_docs_url: "https://github.com/suitenumerique/meet"
 arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/03-meet"
+requires: [postgresql, redis, s3, oidc]
 components:
   - key: meet
     role: suitenumerique.st.meet

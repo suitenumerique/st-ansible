@@ -1,0 +1,17 @@
+---
+{{ ansible_managed | comment }}
+
+name: projects
+services:
+  projects:
+    container_name: projects
+    image: "{{ st_projects_image }}:{{ st_projects_tag }}"
+    env_file: ./env
+    volumes:
+      - {{ st_projects_dir }}/user-avatars:/app/public/user-avatars
+      - {{ st_projects_dir }}/project-background-images:/app/public/project-background-images
+      - {{ st_projects_dir }}/attachments:/app/private/attachments
+    ports:
+      - "{{ st_projects_port }}:1337"
+    # The image ships its own HEALTHCHECK (node ./healthcheck.js → GET :1337);
+    # no need to redefine one here.

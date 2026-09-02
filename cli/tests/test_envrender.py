@@ -331,3 +331,26 @@ def test_render_docs_caddy_env_s3_and_yprovider_values():
     assert "CADDY_S3_HOST=minio.example.org:9000" in body
     assert "CADDY_S3_BUCKET=docs-media" in body
     assert "CADDY_YPROVIDER_ENDPOINTS=10.0.0.9:50601 10.0.0.10:50601" in body
+
+
+def test_oidc_issuer_per_provider():
+    """oidc_issuer returns the single discovery-base URL non-Django apps need,
+    derived from the same source as the Django OIDC_OP_* endpoints."""
+    assert (
+        envrender.oidc_issuer("keycloak", "https://idp.example.org/", "main")
+        == "https://idp.example.org/realms/main"
+    )
+    assert (
+        envrender.oidc_issuer("proconnect-prod", None, None)
+        == "https://auth.agentconnect.gouv.fr/api/v2"
+    )
+    assert (
+        envrender.oidc_issuer("proconnect-integ", None, None)
+        == "https://fca.integ01.dev-agentconnect.fr/api/v2"
+    )
+    assert (
+        envrender.oidc_issuer("custom", "https://idp.example.org/realms/x/", None)
+        == "https://idp.example.org/realms/x"
+    )
+    # keycloak without base_url/realm cannot be derived → empty, never a broken URL
+    assert envrender.oidc_issuer("keycloak", None, None) == ""

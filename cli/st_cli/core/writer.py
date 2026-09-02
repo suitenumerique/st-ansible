@@ -75,9 +75,24 @@ _REFERENCE_URL = (
 )
 
 
-def vars_header(app: str, meta, comp) -> str:
-    """A documentation comment for the top of a component's vars.yml."""
+def vars_header(app: str, meta, comp, backend: SecretBackend | None = None) -> str:
+    """A documentation comment for the top of a component's vars.yml.
+
+    The secrets line describes the backend actually in use: the hashi_vault
+    backend writes no ``vault.yml`` at all (secrets stay in OpenBao and the blob
+    carries lookup refs), so claiming otherwise would send the operator hunting
+    for a file that does not exist. ``backend=None`` keeps the ansible-vault
+    wording (the default backend).
+    """
     role = comp.role.split(".")[-1]
+    if backend is not None and backend.kind == "hashi_vault":
+        # literal (non-f) line so the Jinja braces survive verbatim:
+        secrets_line = (
+            " Secrets are referenced as {{ lookup('community.hashi_vault.hashi_vault',"
+            " ...) }} and stored in OpenBao (no vault.yml)."
+        )
+    else:
+        secrets_line = " Secrets are referenced as {{ vault_* }} and stored encrypted in vault.yml."
     lines = [
         f" st-cli config for {app}/{comp.key} — safe to edit by hand.",
         "",
@@ -85,8 +100,7 @@ def vars_header(app: str, meta, comp) -> str:
         f"   {_REFERENCE_URL.format(role=role)}",
         " App environment variables (the KEY=value lines inside the *_env blocks):",
         f"   {meta.env_docs_url}",
-        # literal (non-f) line so the Jinja braces survive verbatim:
-        " Secrets are referenced as {{ vault_* }} and stored encrypted in vault.yml.",
+        secrets_line,
     ]
     return "\n".join(lines)
 
@@ -195,7 +209,7 @@ def write_core(
             text
         )  # readable `|` block, with {{ vault_* }} refs
     expand_var_markers(data, backend)
-    data.yaml_set_start_comment(vars_header(app, meta, core))
+    data.yaml_set_start_comment(vars_header(app, meta, core, backend))
     tree.save_vars(app, env, core.key, data)
     write_vault(app, env, core.key, backend)
     groups = {core.app_name: core_hosts}
@@ -203,4 +217,10 @@ def write_core(
     if worker and worker.implemented:
         groups[worker.app_name] = worker_hosts
     tree.write_groups(app, env, core.key, groups)
-    ui.success(f"{core.key}: wrote vars.yml + vault.yml + hosts.")
+    # hashi_vault mode buffers no secrets and writes no vault.yml, so don't claim it.
+    files = (
+        "vars.yml + vault.yml + hosts"
+        if backend.component_secrets(core.key)
+        else "vars.yml + hosts"
+    )
+    ui.success(f"{core.key}: wrote {files}.")
