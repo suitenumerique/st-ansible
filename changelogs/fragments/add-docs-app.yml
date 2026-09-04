@@ -1,4 +1,0 @@
-minor_changes:
-  - (docs) added the docs role, deploying the Docs (impress) application as a caddy
-    + frontend + backend core, with workers and yprovider sub-apps
-  - (cli) added docs app support to st-cli

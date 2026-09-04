@@ -120,3 +120,54 @@ releases:
     - renovate-pr-64.yml
     - renovate-pr-66.yml
     release_date: '2026-08-10'
+  0.3.0:
+    changes:
+      bugfixes:
+      - (st-cli) the ``vars.yml`` header no longer claims secrets are stored in an
+        encrypted ``vault.yml`` when the hashi_vault (OpenBao) backend is in use,
+        where no ``vault.yml`` is written and secrets are referenced by lookup.
+      minor_changes:
+      - (cli) added docs app support to st-cli
+      - (docs) added the docs role, deploying the Docs (impress) application as a
+        caddy + frontend + backend core, with workers and yprovider sub-apps
+      - "(projects) new ``projects`` role and st-cli support to deploy Projects (``suitenumerique/projects``,
+        a Planka fork) \u2014 a single Sails.js container with external PostgreSQL,
+        OIDC-enforced SSO (Keycloak/ProConnect provider switch) and optional S3-backed
+        uploads; ``st-cli bootstrap projects <env>`` / ``st-cli deploy projects <env>``
+        behave like the other apps."
+      - "(st-cli) the bootstrap \"Requirements\" checklist is now app-aware \u2014
+        each app declares the external infrastructure it needs via a ``requires``
+        manifest key \u2014 so ``projects`` and ``keycloak`` operators are no longer
+        told to provision a Redis they never use."
+      - Update dependency molecule to v26.8.0
+      - Update dependency suitenumerique/meet to v1.27.0
+      - Update dependency suitenumerique/messages to v0.9.0
+      - Update dependency typer to v0.27.1
+      - Update docker.io/livekit/egress Docker tag to v1.14.1
+      - Update docker.io/livekit/livekit-server Docker tag to v1.13.5
+      release_summary: 'Adds two new applications: Docs (impress, with workers and
+        yprovider
+
+        sub-apps) and Projects (a Planka fork), both deployable end to end with
+
+        st-cli. The bootstrap "Requirements" checklist is now app-aware, and
+
+        several dependencies were bumped (meet 1.27.0, messages 0.9.0, LiveKit).
+
+        '
+    fragments:
+    - add-docs-app.yml
+    - bump-meet.yml
+    - fix-changelog-rst-markup.yml
+    - projects.yml
+    - release_summary.yml
+    - renovate-pr-52.yml
+    - renovate-pr-68.yml
+    - renovate-pr-72.yml
+    plugins:
+      callback:
+      - description: Compact one\-line\-per\-task output with a live pending line
+          on a TTY.
+        name: compact
+        namespace: null
+    release_date: '2026-09-03'

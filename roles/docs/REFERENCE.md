@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.docs
-Version: 0.2.0
+Version: 0.3.0
 
 This role deploys a Docs instance from La Suite Territoriale on a rootless podman base on Debian systems.
 
