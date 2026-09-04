@@ -15,7 +15,7 @@ st_meet_frontend_image: docker.io/lasuite/meet-frontend
 # Image repository for the meet backend.
 st_meet_backend_image: docker.io/lasuite/meet-backend
 # Tag of the meet docker image to deploy.
-st_meet_tag: v1.27.0
+st_meet_tag: v1.29.0
 # Local path to the custom template to use for meet env file.
 st_meet_backend_env_template: meet/backend_env.j2
 # Content of the default backend_env_template, not used if st_meet_backend_env_template is defined.
@@ -48,7 +48,7 @@ st_meet_livekit_image: docker.io/livekit/livekit-server
 # Image repository for the livekit valkey.
 st_meet_livekit_valkey_image: docker.io/valkey/valkey
 # Tag of the livekit docker image to deploy.
-st_meet_livekit_tag: v1.13.5
+st_meet_livekit_tag: v1.13.6
 # Tag of the livekit caddyl4 docker image to deploy.
 st_meet_livekit_caddyl4_tag: v2.11.3
 # Tag of the valkey docker image to deploy for livekit when using the full compose template.

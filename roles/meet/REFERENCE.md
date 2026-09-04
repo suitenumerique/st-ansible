@@ -30,7 +30,7 @@ Installs and configures the meet application from La Suite Territoriale on Debia
 | st_meet_port | The host published port for the meet frontend. | str | no | 50300 |
 | st_meet_frontend_image | Image repository for the meet frontend. | str | no | docker.io/lasuite/meet-frontend |
 | st_meet_backend_image | Image repository for the meet backend. | str | no | docker.io/lasuite/meet-backend |
-| st_meet_tag | Tag of the meet docker image to deploy. | str | no | v1.27.0 |
+| st_meet_tag | Tag of the meet docker image to deploy. | str | no | v1.29.0 |
 | st_meet_backend_env_template | Local path to the custom template to use for meet env file. | str | no | meet/backend_env.j2 |
 | st_meet_backend_env | Content of the default backend_env_template, not used if st_meet_backend_env_template is defined. | str | no |  |
 | st_meet_backend_run_migrations | Whether to run database migrations on meet backend startup. | bool | no | True |
@@ -46,7 +46,7 @@ Installs and configures the meet application from La Suite Territoriale on Debia
 | st_meet_livekit_caddyl4_image | Image repository for livekit caddyl4. | str | no | docker.io/livekit/caddyl4 |
 | st_meet_livekit_image | Image repository for the livekit server. | str | no | docker.io/livekit/livekit-server |
 | st_meet_livekit_valkey_image | Image repository for the livekit valkey. | str | no | docker.io/valkey/valkey |
-| st_meet_livekit_tag | Tag of the livekit docker image to deploy. | str | no | v1.13.5 |
+| st_meet_livekit_tag | Tag of the livekit docker image to deploy. | str | no | v1.13.6 |
 | st_meet_livekit_caddyl4_tag | Tag of the livekit caddyl4 docker image to deploy. | str | no | v2.11.3 |
 | st_meet_livekit_valkey_tag | Tag of the valkey docker image to deploy for livekit when using the full compose template. | str | no | 9.1.1 |
 | st_meet_livekit_valkey_enabled | Deploy a local valkey in the livekit compose (single-node co-located egress). Set false when using an external shared redis. | bool | no | True |
