@@ -171,3 +171,19 @@ releases:
         name: compact
         namespace: null
     release_date: '2026-09-03'
+  0.3.1:
+    changes:
+      minor_changes:
+      - Update dependency suitenumerique/docs to v5.5.0
+      - Update dependency suitenumerique/meet to v1.29.0
+      - Update dependency typer to v0.27.2
+      - Update docker.io/livekit/livekit-server Docker tag to v1.13.6
+      - Update docker/setup-buildx-action digest to 37fe631
+    fragments:
+    - document-release-procedure.yml
+    - renovate-pr-77.yml
+    - renovate-pr-78.yml
+    - renovate-pr-79.yml
+    - renovate-pr-80.yml
+    - renovate-pr-82.yml
+    release_date: '2026-09-05'

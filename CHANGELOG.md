@@ -2,28 +2,42 @@
 
 **Topics**
 
+- <a href="#v0-3-1">v0\.3\.1</a>
+    - <a href="#minor-changes">Minor Changes</a>
 - <a href="#v0-3-0">v0\.3\.0</a>
     - <a href="#release-summary">Release Summary</a>
-    - <a href="#minor-changes">Minor Changes</a>
+    - <a href="#minor-changes-1">Minor Changes</a>
     - <a href="#bugfixes">Bugfixes</a>
     - <a href="#new-plugins">New Plugins</a>
         - <a href="#callback">Callback</a>
 - <a href="#v0-2-2">v0\.2\.2</a>
-    - <a href="#minor-changes-1">Minor Changes</a>
+    - <a href="#minor-changes-2">Minor Changes</a>
     - <a href="#bugfixes-1">Bugfixes</a>
 - <a href="#v0-2-1">v0\.2\.1</a>
-    - <a href="#minor-changes-2">Minor Changes</a>
+    - <a href="#minor-changes-3">Minor Changes</a>
 - <a href="#v0-2-0">v0\.2\.0</a>
     - <a href="#release-summary-1">Release Summary</a>
-    - <a href="#minor-changes-3">Minor Changes</a>
+    - <a href="#minor-changes-4">Minor Changes</a>
     - <a href="#bugfixes-2">Bugfixes</a>
 - <a href="#v0-1-1">v0\.1\.1</a>
-    - <a href="#minor-changes-4">Minor Changes</a>
+    - <a href="#minor-changes-5">Minor Changes</a>
     - <a href="#bugfixes-3">Bugfixes</a>
 - <a href="#v0-1-0">v0\.1\.0</a>
     - <a href="#release-summary-2">Release Summary</a>
     - <a href="#major-changes">Major Changes</a>
-    - <a href="#minor-changes-5">Minor Changes</a>
+    - <a href="#minor-changes-6">Minor Changes</a>
+
+<a id="v0-3-1"></a>
+## v0\.3\.1
+
+<a id="minor-changes"></a>
+### Minor Changes
+
+* Update dependency suitenumerique/docs to v5\.5\.0
+* Update dependency suitenumerique/meet to v1\.29\.0
+* Update dependency typer to v0\.27\.2
+* Update docker\.io/livekit/livekit\-server Docker tag to v1\.13\.6
+* Update docker/setup\-buildx\-action digest to 37fe631
 
 <a id="v0-3-0"></a>
 ## v0\.3\.0
@@ -36,7 +50,7 @@ sub\-apps\) and Projects \(a Planka fork\)\, both deployable end to end with
 st\-cli\. The bootstrap \"Requirements\" checklist is now app\-aware\, and
 several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\.
 
-<a id="minor-changes"></a>
+<a id="minor-changes-1"></a>
 ### Minor Changes
 
 * 1. added docs app support to st\-cli
@@ -66,7 +80,7 @@ several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\
 <a id="v0-2-2"></a>
 ## v0\.2\.2
 
-<a id="minor-changes-1"></a>
+<a id="minor-changes-2"></a>
 ### Minor Changes
 
 * Update docker\.io/clamav/clamav Docker tag to v1\.5\.4
@@ -86,7 +100,7 @@ several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\
 <a id="v0-2-1"></a>
 ## v0\.2\.1
 
-<a id="minor-changes-2"></a>
+<a id="minor-changes-3"></a>
 ### Minor Changes
 
 * callback\: added the suitenumerique\.st\.compact stdout callback\, one line per task and host\, a live progress line on a TTY\, diffs for changed tasks\, and full default\-style error output
@@ -102,7 +116,7 @@ several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\
 Adds support for meet recordings\, fix openbao markers on st\-cli bootstrap
 and multiple versions upgrades\.
 
-<a id="minor-changes-3"></a>
+<a id="minor-changes-4"></a>
 ### Minor Changes
 
 * Update actions/checkout digest to 3d3c42e
@@ -123,7 +137,7 @@ and multiple versions upgrades\.
 <a id="v0-1-1"></a>
 ## v0\.1\.1
 
-<a id="minor-changes-4"></a>
+<a id="minor-changes-5"></a>
 ### Minor Changes
 
 * Added Renovate configuration \(<code>renovate\.json5</code>\) and renovate Makefile target
@@ -155,7 +169,7 @@ Added st\-cli to manage LST environments bootstraps and deployments\, refactored
 * cli\: added st\-cli \#27
 * roles\: refactor every uid\, gid and ports to allow single\-host deployments \#26
 
-<a id="minor-changes-5"></a>
+<a id="minor-changes-6"></a>
 ### Minor Changes
 
 * changelog\: added antsibull\-changelog config\, Makefile targets and CI job \#13
