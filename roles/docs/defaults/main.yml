@@ -17,7 +17,7 @@ st_docs_backend_image: docker.io/lasuite/impress-backend
 # Image repository for the docs y-provider collaboration server.
 st_docs_yprovider_image: docker.io/lasuite/impress-y-provider
 # Tag of the docs docker images to deploy.
-st_docs_tag: v5.4.1
+st_docs_tag: v5.5.0
 # Local path to the custom template to use for docs backend env file.
 st_docs_backend_env_template: docs/backend_env.j2
 # Content of the default backend_env_template, not used if st_docs_backend_env_template is defined.
