@@ -96,7 +96,43 @@ make changelog.lint
 
 A GitHub Actions "Changelog" workflow runs on every pull request: it lints the fragments and fails the PR if no fragment was added (a `trivial:` fragment counts).
 
-Maintainers roll the fragments into `CHANGELOG.md` at release time with `make changelog.release` (this consumes and deletes the fragments) — contributors do not run this.
+Maintainers roll the fragments into `CHANGELOG.md` at release time with `make changelog.release` (this consumes and deletes the fragments) — contributors do not run this. See [Releasing](#releasing-maintainers) below for the full procedure.
+
+## Releasing (maintainers)
+
+Cutting a release, from an up-to-date `main` with a **clean worktree** (the
+broad `git add .` below would sweep any unrelated local change into the release
+commit) :
+
+```bash
+make version version=X.Y.Z                        # bump galaxy.yml + cli/pyproject.toml
+                                                  # + cli/st_cli/__init__.py, and regenerate
+                                                  # roles defaults/REFERENCE (make docs)
+make changelog.fragment name=release_summary      # then write the summary shown at the
+                                                  # top of the changelog for this release
+make changelog.lint                               # validate all pending fragments
+make changelog.release                            # roll fragments into CHANGELOG.md
+                                                  # (consumes and deletes them)
+git add .                                         # picks up the regenerated defaults too
+git status                                        # review: only version bumps, CHANGELOG.md,
+                                                  # changelogs/changelog.yaml, consumed
+                                                  # fragments + regenerated docs
+git commit -m "(release) X.Y.Z"
+git push
+git tag X.Y.Z
+git push origin tag X.Y.Z
+```
+
+The collection and `st-cli` share one version — `make version` keeps the three
+version sources in sync (`st-cli version` warns when the installed CLI and the
+`.st-cli.yml` pin disagree), so never bump one without the others.
+
+The **tag is the actual release**: the git tag is what `st-cli`'s generated
+`galaxy-requirements.yml` pins the collection to, the "newer version available"
+check follows the highest semver tag on this repo, and pushing the tag triggers
+the "CLI - Docker" workflow, which builds and pushes
+`ghcr.io/suitenumerique/st-cli:<version>` (plus `:latest`). A pushed release
+commit without its tag is not installable.
 
 ## Dependency updates (Renovate)
 
