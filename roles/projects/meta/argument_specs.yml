@@ -35,7 +35,7 @@ argument_specs:
         type: "str"
         description: "Tag of the projects docker image to deploy."
         # renovate: datasource=docker depName=lasuite/projects versioning=semver
-        default: "1.27.10"
+        default: "1.27.11"
       st_projects_env_template:
         type: "str"
         description: "Local path to the custom template to use for projects env file."
