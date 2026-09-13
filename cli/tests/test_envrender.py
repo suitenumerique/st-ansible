@@ -239,7 +239,8 @@ def test_render_keycloak_env_keeps_vault_refs_and_omits_baked_keys():
     assert "KC_HOSTNAME=idp.example.org" in body
     assert "KC_DB_PASSWORD={{ vault_kc_db_password }}" in body
     assert "KC_BOOTSTRAP_ADMIN_PASSWORD={{ vault_kc_bootstrap_admin_password }}" in body
-    assert "KC_HTTP_ENABLED=true" in body
+    assert "KC_HTTP_ENABLED=" not in body  # the image sets the HTTP and proxy settings
+    assert "KC_PROXY_HEADERS=" not in body
     assert "KC_DB=" not in body  # KC_DB is baked into the image at build time
     assert "DJANGO_" not in body  # not a Django app
 

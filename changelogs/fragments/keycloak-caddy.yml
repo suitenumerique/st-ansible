@@ -1,0 +1,6 @@
+---
+breaking_changes:
+  - 'keycloak: the default compose template sets ``PORT`` instead of ``KC_HTTP_PORT``, because the ``messages-keycloak`` image now runs Caddy in front of Keycloak and Caddy owns the public port. The role requires image tag 0.11.0 or later (messages PR #793), and the default tag is now 0.11.0. A custom ``st_keycloak_compose_template`` must set ``PORT`` too.'
+minor_changes:
+  - 'keycloak: document the ``KEYCLOAK_ADMIN_IP_ALLOWLIST`` and ``KEYCLOAK_TRUSTED_PROXIES`` variables of the image, and the host ports the image binds with ``network_mode: host``.'
+  - 'cli: the keycloak env template no longer sets ``KC_HTTP_ENABLED`` and ``KC_PROXY_HEADERS``, because the image sets them. The rendered env requires image tag 0.11.0 or later.'

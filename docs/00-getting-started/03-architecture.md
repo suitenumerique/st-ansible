@@ -30,7 +30,7 @@ podman (base role)
 │   ├── workers (Celery workers)
 │   └── collabora (document editor)
 ├── keycloak
-│   └── keycloak (identity provider)
+│   └── keycloak (identity provider, host network)
 └── meet
     ├── meet (video conferencing app)
     └── livekit (LiveKit server, host network)

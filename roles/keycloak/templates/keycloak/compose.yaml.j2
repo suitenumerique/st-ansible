@@ -8,6 +8,6 @@ services:
     image: "{{ st_keycloak_image }}:{{ st_keycloak_tag }}"
     env_file: ./env
     environment:
-      - KC_HTTP_PORT={{ st_keycloak_port }}
+      - PORT={{ st_keycloak_port }}
     network_mode: host
     command: {{ st_keycloak_start_command }}

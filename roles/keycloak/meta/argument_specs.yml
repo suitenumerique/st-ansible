@@ -27,7 +27,7 @@ argument_specs:
         type: "str"
         description: "Tag of the keycloak docker image to deploy."
         # renovate: datasource=github-releases depName=suitenumerique/messages versioning=semver extractVersion=^v(?<version>.+)$
-        default: "0.9.0"
+        default: "0.11.0"
       st_keycloak_env_template:
         type: "str"
         description: "Local path to the custom template to use for keycloak env file."
@@ -41,7 +41,7 @@ argument_specs:
         default: keycloak/compose.yaml.j2
       st_keycloak_port:
         type: "str"
-        description: "Host port Keycloak listens on when running with network_mode: host."
+        description: "Host port Caddy listens on in front of Keycloak, when running with network_mode: host."
         default: "50200"
       st_keycloak_start_command:
         type: "str"
