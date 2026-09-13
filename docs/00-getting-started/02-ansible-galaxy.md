@@ -122,6 +122,10 @@ st_keycloak_port: 50200
 > It runs with `network_mode: host` and binds fixed ports (7880/7881/5349/3478 and UDP
 > 50000-60000) directly on the host, so it must run on a dedicated host with a dedicated
 > public IP. See [../03-meet/02-livekit.md](../03-meet/02-livekit.md).
+>
+> **Exception — Keycloak:** the `keycloak` role runs with `network_mode: host`. The image also
+> binds port `8081` (Keycloak, loopback only) and port `9000` (management, all interfaces) on the
+> host. See [../02-keycloak/01-keycloak.md](../02-keycloak/01-keycloak.md#network--ports).
 
 ## Customizing Deployments
 

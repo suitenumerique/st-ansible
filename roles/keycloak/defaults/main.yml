@@ -9,12 +9,12 @@ st_keycloak_enabled: false
 # Image repository for keycloak.
 st_keycloak_image: ghcr.io/suitenumerique/messages-keycloak
 # Tag of the keycloak docker image to deploy.
-st_keycloak_tag: 0.9.0
+st_keycloak_tag: 0.11.0
 # Local path to the custom template to use for keycloak env file.
 st_keycloak_env_template: keycloak/env.j2
 # Local path to the custom template to use for keycloak compose file.
 st_keycloak_compose_template: keycloak/compose.yaml.j2
-# Host port Keycloak listens on when running with network_mode: host.
+# Host port Caddy listens on in front of Keycloak, when running with network_mode: host.
 st_keycloak_port: '50200'
 # When using the default compose template, specify the `command` to use to start keycloak.
 st_keycloak_start_command: start --optimized

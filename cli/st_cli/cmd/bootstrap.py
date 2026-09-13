@@ -163,9 +163,10 @@ def _ask_keycloak(meta, backend: SecretBackend) -> dict:
 
     Keycloak is not a Django app: its role consumes a single free-form
     ``st_keycloak_env`` blob (no DOMAIN/Redis/S3/OIDC/email questionnaire). The
-    ``messages-keycloak`` image bakes in ``KC_DB=postgres`` + features/metrics/health
-    at build time, so we only prompt for what the operator must supply at runtime:
-    the DB connection, the public hostname, and the admin bootstrap credentials.
+    ``messages-keycloak`` image bakes in ``KC_DB=postgres``, features, metrics and
+    health at build time, and sets the HTTP and proxy settings as image defaults, so
+    we only prompt for what the operator must supply at runtime: the DB connection,
+    the public hostname, and the admin bootstrap credentials.
     Passwords route through the secret backend exactly like the Django apps'
     ``DB_PASSWORD`` (``{{ vault_* }}`` ref in the blob, real value in vault.yml).
     """
