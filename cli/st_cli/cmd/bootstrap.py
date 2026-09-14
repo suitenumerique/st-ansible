@@ -373,6 +373,23 @@ def _ask_projects(meta, backend: SecretBackend) -> dict:
     )
     backend.env_secret(answers, "DATABASE_URL", component=core_key, value=value)
 
+    # Optional read-only DB credentials for `st-cli db projects <env>` (operator
+    # psql access — projects ships no in-container CLI). Never used by the app;
+    # the role deploys it into the env file where the command picks it up.
+    if _confirm(
+        "Configure a read-only DATABASE_RO_URL (enables `st-cli db projects`)?",
+        default=False,
+    ):
+        value = (
+            _ask(
+                "DATABASE_RO_URL (a read-only role on the same database)",
+                placeholder="postgresql://projects_ro:password@db.example.org:5432/projects",
+            )
+            if backend.prompts_values()
+            else None
+        )
+        backend.env_secret(answers, "DATABASE_RO_URL", component=core_key, value=value)
+
     # OpenID Connect — required (login has no local fallback when OIDC_ENFORCED).
     _ask_projects_oidc(answers, backend, core_key)
     org_claim = _ask(

@@ -133,6 +133,49 @@ storage cannot work across instances.
 > This collection does not provision Redis: provide it externally, like
 > PostgreSQL.
 
+## Read-only database access (`st-cli db`)
+
+Projects ships no in-container CLI (no Django `manage.py`), so st-cli provides
+direct read-only SQL access instead:
+
+```bash
+st-cli db projects <env>                       # interactive psql (read-only)
+st-cli db projects <env> --sql "select count(*) from project"
+st-cli db projects <env> -H projects2          # pick a host by inventory alias
+```
+
+The command sshs to a host of the unit and, as the `projects` user, reads
+`DATABASE_RO_URL` from the deployed env file (`{{ st_projects_dir }}/env`) and
+runs `psql` against it in a throwaway `postgres` client container on the host
+network — the database only needs to be reachable **from the VM**, never from
+your workstation, and the credentials never leave the host unresolved.
+
+**Setup.** First create a read-only role on the PostgreSQL server (this
+collection does not manage the external database):
+
+```sql
+CREATE ROLE projects_ro LOGIN PASSWORD '...';
+GRANT CONNECT ON DATABASE projects TO projects_ro;
+GRANT USAGE ON SCHEMA public TO projects_ro;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO projects_ro;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO projects_ro;
+```
+
+Then answer **yes** to the bootstrap prompt *"Configure a read-only
+DATABASE_RO_URL?"* and provide `postgresql://projects_ro:...@db:5432/projects`.
+The URL routes through the secret backend like every other secret — a
+`{{ vault_database_ro_url }}` ref in `vars.yml` with the value encrypted in
+`vault.yml` (ansible-vault), or an OpenBao lookup ref (hashi_vault) — and lands
+resolved in the host env file at deploy. The app itself never reads the key.
+
+**Existing deployment** (no re-bootstrap needed): add the line to
+`st_projects_env` in `projects/<env>/projects/vars.yml` —
+`DATABASE_RO_URL={{ vault_database_ro_url }}` with the value added via
+`st-cli secrets projects <env>`, or for hashi_vault the full lookup ref
+`DATABASE_RO_URL={{ lookup('community.hashi_vault.hashi_vault', '<term>') }}`
+(the `@openbao()` shorthand is only expanded by bootstrap, not on hand-edited
+files) — then redeploy.
+
 ## Upgrades & rollback
 
 Projects runs its database migrations **on every container start**

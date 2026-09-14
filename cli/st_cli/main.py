@@ -219,6 +219,24 @@ def oneoff(
 
 
 @app.command()
+def db(
+    app_name: str = typer.Argument(..., metavar="APP"),
+    env: str = typer.Argument(...),
+    host: str = typer.Option(
+        None,
+        "--host",
+        "-H",
+        help="Target a specific host (default: prompt if several).",
+    ),
+    sql: str = typer.Option(
+        None, "--sql", help="Run one SQL command and exit (default: interactive psql)."
+    ),
+):
+    """Open a read-only psql shell against the app's database (projects only)."""
+    _run(lambda: remote.db(app_name, env, host=host, sql=sql))
+
+
+@app.command()
 def reset(
     app_name: str = typer.Argument(..., metavar="APP"),
     env: str = typer.Argument(...),

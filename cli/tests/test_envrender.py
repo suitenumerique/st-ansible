@@ -354,3 +354,14 @@ def test_oidc_issuer_per_provider():
     )
     # keycloak without base_url/realm cannot be derived → empty, never a broken URL
     assert envrender.oidc_issuer("keycloak", None, None) == ""
+
+
+def test_render_projects_database_ro_url_guarded():
+    """DATABASE_RO_URL (read-only operator access for `st-cli db projects`) is
+    emitted only when configured — absent by default."""
+    body = envrender.render_env(
+        "projects", "projects", {"DATABASE_RO_URL": "postgresql://ro:pw@db/projects"}
+    )["st_projects_env"]
+    assert "DATABASE_RO_URL=postgresql://ro:pw@db/projects" in body
+    absent = envrender.render_env("projects", "projects", {})["st_projects_env"]
+    assert "DATABASE_RO_URL" not in absent

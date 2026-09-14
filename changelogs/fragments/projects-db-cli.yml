@@ -1,0 +1,2 @@
+minor_changes:
+  - "cli: new ``st-cli db projects <env>`` command — a read-only psql shell (or one-shot ``--sql``) against the projects database. Projects ships no in-container CLI, so the command sshs to a unit host and runs psql in a throwaway postgres client container against the new optional ``DATABASE_RO_URL`` env key, which routes through the secret backend (ansible-vault or OpenBao) like every other secret and is resolved into the host env file at deploy."

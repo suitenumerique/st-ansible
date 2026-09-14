@@ -403,6 +403,53 @@ def oneoff(
     return _ssh(t.host, _as_user(t.user, inner))
 
 
+# psql client only — the server version doesn't matter (newer clients talk to
+# older servers). Not renovate-tracked: bump by hand when postgres majors move.
+_DB_CLIENT_IMAGE = "docker.io/library/postgres:17-alpine"
+
+
+def db(app: str, env: str, host: str | None = None, sql: str | None = None) -> int:
+    """Open a read-only psql shell on a projects host (or run one SQL via ``sql``).
+
+    projects (a Sails app) ships no in-container CLI that can reach its
+    database, so this reads the deploy-time ``DATABASE_RO_URL`` from the unit's
+    rendered env file on the host (where the secret backend's ref — vault.yml or
+    OpenBao lookup — has already been resolved by ansible) and runs psql against
+    it in a throwaway postgres client container. projects-only: the Django apps
+    already have ``st-cli oneoff APP ENV -- python manage.py dbshell``.
+    """
+    if app != "projects":
+        raise StCliError(
+            "st-cli db supports only 'projects' — Django apps have a DB shell "
+            "via `st-cli oneoff APP ENV -- python manage.py dbshell`."
+        )
+    t = resolve_target(app, env, "projects", host=host, pick=True)
+    env_file = f"{t.remote_dir}/env"
+    psql = 'psql "$url"'
+    if sql:
+        psql += f" -c {shlex.quote(sql)}"
+    inner = (
+        # The env file is dotenv, not shell (values are unquoted and may contain
+        # spaces) — grep the one key out instead of ever sourcing the file.
+        f"url=$(grep -m1 '^DATABASE_RO_URL=' {shlex.quote(env_file)} | cut -d= -f2-); "
+        f'if [ -z "$url" ]; then '
+        f'echo "DATABASE_RO_URL is not set in {env_file} — configure it in '
+        f'bootstrap (or add it to st_projects_env + the vault) and redeploy." >&2; '
+        f"exit 1; fi; "
+        # --network=host: the client container gets exactly the VM's connectivity
+        # (the DB is reachable from the host, maybe only on a private network).
+        f"exec podman run --rm -it --network=host {_DB_CLIENT_IMAGE} {psql}"
+    )
+    ui.info(f"Read-only psql on {t.host} ({env_file})")
+    # Not _as_user: `sudo -i` re-parses the command and destroys `$(...)`.
+    # `sudo -H` + `bash -l` gives the same login env with a direct exec;
+    # `cd /` because the app user may not read the caller's cwd.
+    wrapped = (
+        f"sudo -Hu {shlex.quote(t.user)} bash -lc {shlex.quote('cd / && ' + inner)}"
+    )
+    return _ssh(t.host, wrapped)
+
+
 def reset(
     app: str,
     env: str,

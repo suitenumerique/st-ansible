@@ -612,3 +612,69 @@ def test_ps_header_is_compact(repo, monkeypatch, capfd):
     assert "drive on 10.0.0.1" in out  # compact, host = ansible_host ip
     assert "podman ps -a for" not in out  # the old verbose header is gone
     assert "(user drive)" not in out
+
+
+# --------------------------------------------------------------------------- db (read-only psql)
+
+
+def _projects_core(repo, hosts=("10.0.0.7",)):
+    seed_creds(repo)
+    tree.write_hosts("projects", "prod", "projects", "projects", list(hosts))
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.19", "0.0.19", [UnitState("projects", "prod", "projects", "managed")]
+        )
+    )
+
+
+def test_db_opens_ro_psql_from_host_env_file(repo, monkeypatch):
+    """`st-cli db projects` sshs to the unit host as the app user, greps
+    DATABASE_RO_URL out of the deployed env file (never sources it — dotenv
+    values are unquoted) and execs psql in a throwaway postgres client container
+    on the host network."""
+    _projects_core(repo)
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        remote,
+        "_ssh",
+        lambda host, remote_cmd, **kw: captured.update(host=host, cmd=remote_cmd) or 0,
+    )
+
+    assert remote.db("projects", "prod") == 0
+    assert captured["host"] == "10.0.0.7"
+    cmd = captured["cmd"]
+    # sudo WITHOUT -i: -i re-escapes through the login shell and destroys the
+    # $(...) substitution; -H + bash -l gives the login env with a direct exec.
+    assert "sudo -Hu projects bash -lc" in cmd
+    assert "sudo -iu" not in cmd
+    # NB: cmd is the outer ssh command — shlex.quote mangles the inner single
+    # quotes, so assert on quote-free fragments.
+    assert "grep -m1" in cmd and "^DATABASE_RO_URL=" in cmd
+    assert "/opt/projects/projects/env" in cmd  # dir_var fallback path
+    assert remote._DB_CLIENT_IMAGE in cmd
+    assert "--network=host" in cmd
+    assert 'psql "$url"' in cmd
+    assert "source" not in cmd and "set -a" not in cmd  # never sources the dotenv
+
+
+def test_db_sql_option_appends_psql_command(repo, monkeypatch):
+    _projects_core(repo)
+    captured: dict = {}
+    monkeypatch.setattr(
+        remote,
+        "_ssh",
+        lambda host, remote_cmd, **kw: captured.update(cmd=remote_cmd) or 0,
+    )
+
+    remote.db("projects", "prod", sql="select count(*) from project")
+    cmd = captured["cmd"]  # outer ssh command: shlex-mangled quotes, content intact
+    assert "-c" in cmd and "select count(*) from project" in cmd
+
+
+def test_db_rejects_non_projects_apps(repo):
+    """db is projects-only: Django apps already reach their DB via oneoff +
+    manage.py dbshell, so anything else raises with that pointer."""
+    _drive_core(repo)
+    with pytest.raises(StCliError, match="only 'projects'"):
+        remote.db("drive", "prod")

@@ -801,6 +801,7 @@ def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
             ("text", "projects host(s)", "10.0.0.7"),
             ("text", "Public domain for projects", "projects.example.org"),
             ("text", "DATABASE_URL", "postgresql://u:p@db.example.org:5432/projects"),
+            ("confirm", "DATABASE_RO_URL", False),
             ("select", "Identity provider:", "keycloak"),
             ("text", "Keycloak base URL", "https://idp.example.org"),
             ("text", "Keycloak realm", "st"),
@@ -844,6 +845,7 @@ def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
     assert "S3_SECRET_ACCESS_KEY={{ vault_s3_secret_access_key }}" in body
     assert "SMTP_HOST" not in body  # SMTP declined
     assert "REDIS_URL" not in body  # scaling declined → single-instance default
+    assert "DATABASE_RO_URL" not in body  # read-only access declined
     assert "st_projects_enabled" not in body  # enabled flag lives on the deploy task
 
     assert vault.is_encrypted(paths.vault_path("projects", "prod", "projects"))
@@ -859,6 +861,42 @@ def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
     m = manifest.load_manifest()
     assert [u.component for u in m.units] == ["projects"]
     assert m.units[0].mode == "managed"
+
+
+def test_bootstrap_projects_database_ro_url_routes_through_vault(repo, monkeypatch):
+    """Accepting the read-only DB prompt routes DATABASE_RO_URL through the
+    secret backend like every other secret: the env blob carries the
+    ``{{ vault_database_ro_url }}`` ref (resolved by ansible into the host env
+    file, where ``st-cli db projects`` reads it) and the real URL lands
+    encrypted in vault.yml."""
+    seed_creds(repo)
+    sq = script_questionary(
+        monkeypatch,
+        [
+            ("select", "Secret backend:", "ansible-vault"),
+            ("text", "projects host(s)", "10.0.0.7"),
+            ("text", "Public domain for projects", "projects.example.org"),
+            ("text", "DATABASE_URL", "postgresql://u:p@db/projects"),
+            ("confirm", "DATABASE_RO_URL", True),
+            ("text", "DATABASE_RO_URL", "postgresql://ro:ropw@db/projects"),
+            ("select", "Identity provider:", "proconnect-integ"),
+            ("text", "OIDC_CLIENT_ID", "projects"),
+            ("password", "OIDC_CLIENT_SECRET", "oidcsecret"),
+            ("text", "ORGANIZATION_ID_CLAIM", ""),
+            ("confirm", "horizontal scaling", False),
+            ("confirm", "Configure S3 object storage", False),
+            ("confirm", "Configure transactional email", False),
+            ("confirm", "cadvisor", False),
+        ],
+    )
+
+    bootstrap.bootstrap("projects", "prod")
+
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+    body = (repo / "projects/prod/projects/vars.yml").read_text()
+    assert "DATABASE_RO_URL={{ vault_database_ro_url }}" in body
+    pvault = vault.decrypt_to_dict(paths.vault_path("projects", "prod", "projects"))
+    assert pvault["vault_database_ro_url"] == "postgresql://ro:ropw@db/projects"
 
 
 def test_bootstrap_component_invalid_raises(repo, monkeypatch):
@@ -2143,6 +2181,7 @@ def test_bootstrap_projects_oidc_provider_switch_proconnect(repo, monkeypatch):
             ("text", "projects host(s)", "10.0.0.7"),
             ("text", "Public domain for projects", "projects.example.org"),
             ("text", "DATABASE_URL", "postgresql://u:p@db/projects"),
+            ("confirm", "DATABASE_RO_URL", False),
             ("select", "Identity provider:", "proconnect-integ"),
             ("text", "OIDC_CLIENT_ID", "projects"),
             ("password", "OIDC_CLIENT_SECRET", "oidcsecret"),
@@ -2189,6 +2228,7 @@ def test_bootstrap_projects_custom_oidc_org_mode_and_smtp(repo, monkeypatch):
             ("text", "projects host(s)", "10.0.0.8"),
             ("text", "Public domain for projects", "projects.example.org"),
             ("text", "DATABASE_URL", "postgresql://u:p@db/projects"),
+            ("confirm", "DATABASE_RO_URL", False),
             ("select", "Identity provider:", "custom"),
             # trailing slash exercises the issuer rstrip normalisation
             ("text", "OIDC issuer URL", "https://sso.example.org/realms/lst/"),
@@ -2245,6 +2285,7 @@ def test_bootstrap_projects_scaling_redis_enforces_s3(repo, monkeypatch):
             ("text", "projects host(s)", "10.0.0.7, 10.0.0.8"),
             ("text", "Public domain for projects", "projects.example.org"),
             ("text", "DATABASE_URL", "postgresql://u:p@db/projects"),
+            ("confirm", "DATABASE_RO_URL", False),
             ("select", "Identity provider:", "keycloak"),
             ("text", "Keycloak base URL", "https://idp.example.org"),
             ("text", "Keycloak realm", "st"),
