@@ -143,6 +143,31 @@ On its first start the clamav container downloads the full signature database
 minutes before the stack settles. The signatures persist in the `clamav_data` volume,
 so restarts and redeploys are fast.
 
+## clamd size limits
+
+clamd enforces its own size caps, independent of the scanner's `MAX_URL_SIZE`
+(2 GiB by default), and its stock defaults are far below it (`StreamMaxLength`
+100M, `MaxFileSize` 100M, `MaxScanSize` 400M). Left alone, a file above
+`StreamMaxLength` dies mid-INSTREAM on every retry, and a file above
+`MaxFileSize`/`MaxScanSize` is **skipped and reported clean without being
+scanned**. The role therefore ships `st_file_scanner_clamav_env` with all three
+raised to `2200M` (matching upstream's compose); the clamav image applies each
+`CLAMD_CONF_<Option>=<value>` line to `clamd.conf` at startup (same for
+`FRESHCLAM_CONF_<Option>`), so any clamd/freshclam option can be tuned through
+this blob in `vars.yml`:
+
+```yaml
+st_file_scanner_clamav_env: |
+  CLAMD_CONF_StreamMaxLength=2200M
+  CLAMD_CONF_MaxFileSize=2200M
+  CLAMD_CONF_MaxScanSize=2200M
+  FRESHCLAM_CONF_Checks=24
+```
+
+Note: clamd spools each INSTREAM to its temporary directory before scanning, so
+the clamav container needs free disk to match the limit. If you lower the
+scanner's `MAX_URL_SIZE`, the clamd caps only need to clear that value.
+
 ## Upgrades & rollback
 
 There is no database and no migration step: upgrading is bumping
