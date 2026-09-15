@@ -45,23 +45,9 @@ __all__ = ["bootstrap"]
 
 _OIDC_PROVIDERS = ["keycloak", "proconnect-prod", "proconnect-integ", "custom"]
 
-# Requirements-checklist lines, keyed by the capability names apps declare in
-# their `requires` (apps/<app>.yml). Insertion order is the display order; the
-# VM line is unconditional and printed separately.
-_REQUIREMENT_LINES = {
-    "postgresql": "[bold]PostgreSQL[/bold] host and credentials",
-    "redis": "[bold]Redis[/bold] host and credentials",
-    "s3": "[bold]S3[/bold] endpoint, bucket and credentials",
-    "oidc": (
-        "[bold]Identity provider[/bold] URLs and credentials\n"
-        "    (For ProConnect Integration environment: create an app at "
-        "https://partenaires.proconnect.gouv.fr/)"
-    ),
-}
-
 # Apps that carry upstream DJANGO_EMAIL_* settings; messages is skipped (no such
 # settings upstream) so its questionnaire never prompts for SMTP config.
-_EMAIL_APPS = {"drive", "meet", "docs"}
+_EMAIL_APPS = {"drive", "meet", "docs", "transfers"}
 
 
 # --------------------------------------------------------------------------- #
@@ -136,6 +122,51 @@ def _ask_email(answers: dict, backend: SecretBackend, component: str, app: str) 
     brand_name = _ask("DJANGO_EMAIL_BRAND_NAME (optional)", required=False)
     if brand_name:
         answers["DJANGO_EMAIL_BRAND_NAME"] = brand_name
+
+
+def _ask_transfers_scanner(
+    answers: dict, backend: SecretBackend, component: str
+) -> None:
+    """Optional file-scanner (antivirus) integration for transfers.
+
+    When enabled, completed uploads are submitted to an external file-scanner
+    service (deployable with ``st-cli bootstrap file-scanner``, or any compatible
+    ClamAV REST endpoint) for an async virus scan; the verdict returns via a webhook
+    and gates downloads. Declining leaves every key unset, so the app keeps its
+    ``CLAMAV_SCAN_ENABLED=false`` default. The EdDSA signing key is a secret routed
+    through the backend; the rest is plain config (numeric knobs keep upstream
+    defaults, editable at the prompt).
+    """
+    if not _confirm(
+        "Configure the file-scanner (antivirus) integration?", default=False
+    ):
+        return
+    answers["CLAMAV_SCAN_ENABLED"] = "true"
+    answers["CLAMAV_SERVICE_URL"] = _ask(
+        "CLAMAV_SERVICE_URL (file-scanner REST base URL, no trailing slash)",
+        placeholder="http://10.0.0.20:50800",
+    )
+    # Base URL of THIS backend as the scanner reaches it (webhook callback).
+    # The backend port is not published on the host — the scanner reaches it
+    # through the public frontend Caddy, which proxies /api to the backend.
+    answers["SCAN_WEBHOOK_BASE_URL"] = _ask(
+        "SCAN_WEBHOOK_BASE_URL (this backend, as reachable FROM the scanner "
+        "— usually the public transfers URL)",
+        placeholder="https://transfers.example.org",
+    )
+    # EdDSA (Ed25519) private key minting request-bound scan JWTs — a secret.
+    value = _password("SCAN_JWT_PRIVATE_KEY") if backend.prompts_values() else None
+    backend.env_secret(
+        answers, "SCAN_JWT_PRIVATE_KEY", component=component, value=value
+    )
+    answers["SCAN_JWT_ISSUER"] = _ask("SCAN_JWT_ISSUER", "transferts")
+    answers["SCAN_JWT_AUDIENCE"] = _ask("SCAN_JWT_AUDIENCE", "file-scanner")
+    answers["SCAN_JWT_TTL"] = _ask("SCAN_JWT_TTL (seconds)", "300")
+    answers["SCAN_MAX_FILE_SIZE"] = _ask("SCAN_MAX_FILE_SIZE (bytes)", "2147483648")
+    answers["SCAN_PRESIGNED_URL_EXPIRY"] = _ask(
+        "SCAN_PRESIGNED_URL_EXPIRY (seconds)", "3600"
+    )
+    answers["SCAN_PENDING_REAP_MINUTES"] = _ask("SCAN_PENDING_REAP_MINUTES", "15")
 
 
 def _ask_cadvisor(label: str) -> bool:
@@ -390,6 +421,70 @@ def _ask_projects(meta, backend: SecretBackend) -> dict:
     return answers
 
 
+def _ask_file_scanner(meta, backend: SecretBackend) -> dict:
+    """Collect the file-scanner core answers → the ``st_file_scanner_env`` blob.
+
+    file-scanner is not a Django app: a FastAPI API + dramatiq worker pair whose
+    compose stack bundles its own clamav daemon and Redis broker, so there is no
+    DOMAIN/DB/S3/OIDC questionnaire — callers (e.g. the transfers backend) reach
+    it at ``http://<host>:<st_file_scanner_port>``. Callers are trusted via their
+    *public* Ed25519 keys (``JWT_ISSUER_KEYS``, plain config); the secrets are
+    the webhook signing seed (generated — 32 random bytes base64url IS a valid
+    Ed25519 seed) and the optional ``/metrics`` bearer token (generated too, on
+    by default: the API port is published on the host, and the ``api_client``
+    metric label leaks caller identities to anyone who can scrape it).
+    """
+    core_key = meta.core().key
+    answers: dict = {}
+    answers["JWT_ISSUER_KEYS"] = _ask(
+        "JWT_ISSUER_KEYS (comma-separated iss:base64url-ed25519-pubkey pairs)",
+        placeholder="transferts:8sicDCDZLZY5SPNNjr4aBwwh0Dyrqr7Ca9neK_nA6Eg",
+    )
+    backend.env_secret(
+        answers,
+        "JWT_SIGNING_KEY",
+        component=core_key,
+        value=secrets.gen_token() if backend.prompts_values() else None,
+    )
+    answers["JWT_SIGNING_KID"] = _ask("JWT_SIGNING_KID (webhook key label)", "v1")
+    if _confirm(
+        "Protect /metrics with a bearer token (PROMETHEUS_API_KEY)?", default=True
+    ):
+        backend.env_secret(
+            answers,
+            "PROMETHEUS_API_KEY",
+            component=core_key,
+            value=secrets.gen_token() if backend.prompts_values() else None,
+        )
+    allowed = _ask(
+        "ALLOWED_URL_HOSTS (optional allowlist of scannable URL hosts, e.g. your "
+        "S3 host; blank = any host may be submitted)",
+        required=False,
+    )
+    # SSRF bypass: only needed when a scannable host resolves to a private IP
+    # (e.g. an S3 endpoint reached over an internal network) — the worker's
+    # SSRF guard would otherwise refuse to download from it. With an allowlist
+    # set, a yes/no reusing that same list beats re-typing it; without one,
+    # fall back to a free-text prompt (a bypass still needs explicit hostnames).
+    if allowed:
+        answers["ALLOWED_URL_HOSTS"] = allowed
+        if _confirm(
+            "Do these hosts resolve to private IPs from the scanner hosts "
+            "(e.g. an internal S3 endpoint)? Sets SSRF_ALLOWED_HOSTS to the same list.",
+            default=False,
+        ):
+            answers["SSRF_ALLOWED_HOSTS"] = allowed
+    else:
+        ssrf = _ask(
+            "SSRF_ALLOWED_HOSTS (optional: hosts allowed to resolve to private IPs, "
+            "e.g. an internal S3 endpoint)",
+            required=False,
+        )
+        if ssrf:
+            answers["SSRF_ALLOWED_HOSTS"] = ssrf
+    return answers
+
+
 def _ask_core(meta, backend: SecretBackend) -> dict:
     """Collect the core component answers (domain, db, redis, s3, secrets, OIDC)."""
     app = meta.app
@@ -435,6 +530,10 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
         answers["LOGIN_REDIRECT_URL"] = f"https://{host}/"
         answers["LOGIN_REDIRECT_URL_FAILURE"] = f"https://{host}/"
         answers["LOGOUT_REDIRECT_URL"] = f"https://{host}/"
+    elif app == "transfers":
+        # The app's Python package is `transferts` (French spelling), so the
+        # Django settings module differs from the st-cli app name `transfers`.
+        answers["DJANGO_SETTINGS_MODULE"] = "transferts.settings"
     backend.env_secret(
         answers,
         "DJANGO_SECRET_KEY",
@@ -529,6 +628,21 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
             answers["AWS_S3_ENDPOINT_URL"] = endpoint
             answers["AWS_STORAGE_BUCKET_NAME"] = bucket
             answers["MEDIA_BASE_URL"] = "https://{{ st_docs_public_host }}"
+        elif app == "transfers":
+            # transfers uses the django-lasuite default AWS_STORAGE_BUCKET_NAME (via
+            # base), plus a few extras: uploads/downloads use presigned URLs straight
+            # to S3, so the frontend Caddy CSP must allow the S3 origin; derive it from
+            # the endpoint (single source of truth).
+            parts = urlsplit(endpoint if "://" in endpoint else f"https://{endpoint}")
+            answers["AWS_S3_ENDPOINT_URL"] = endpoint
+            answers["AWS_STORAGE_BUCKET_NAME"] = bucket
+            answers["AWS_S3_SIGNATURE_VERSION"] = "s3v4"
+            answers["TRANSFERTS_FRONTEND_S3_ORIGIN"] = (
+                f"{parts.scheme or 'https'}://{parts.netloc}"
+            )
+            # transfers sits behind the frontend Caddy, which sets X-Forwarded-For;
+            # enable request-IP logging from that proxy header.
+            answers["USE_X_FORWARDED_FOR"] = "true"
         else:
             answers["AWS_S3_ENDPOINT_URL"] = endpoint
             answers["AWS_STORAGE_BUCKET_NAME"] = bucket
@@ -596,6 +710,15 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
             "MESSAGES_TECHNICAL_DOMAIN", placeholder="mail.example.org"
         )
 
+    if app == "transfers":
+        # Optional Drive integration (file picker). Left unset → integration off.
+        drive_url = _ask(
+            "DRIVE_BASE_URL — enable the Drive file picker (optional)",
+            required=False,
+        )
+        if drive_url:
+            answers["DRIVE_BASE_URL"] = drive_url
+
     _ask_oidc(answers, backend, core_key)
     _ask_email(answers, backend, core_key, app)
     if app == "docs" and answers.get("DJANGO_EMAIL_HOST"):
@@ -603,6 +726,8 @@ def _ask_core(meta, backend: SecretBackend) -> dict:
             "https://{{ st_docs_public_host }}/assets/logo-suite-numerique.png"
         )
         answers["DJANGO_EMAIL_URL_APP"] = "https://{{ st_docs_public_host }}"
+    if app == "transfers":
+        _ask_transfers_scanner(answers, backend, core_key)
     if app == "messages":
         _ask_messages_outbound(answers, backend, core_key)
     if app == "meet":
@@ -1435,7 +1560,8 @@ def _print_summary(
     # narrow the listed units + the "Next" hint to that component.
     scoped = component is not None and component != core_key
     if not scoped:
-        ui.info(f"  domain: {answers.get('DOMAIN', '?')}")
+        if answers.get("DOMAIN"):  # file-scanner has no public domain — skip the line
+            ui.info(f"  domain: {answers['DOMAIN']}")
         if "OIDC_PROVIDER" in answers:  # keycloak (an IdP itself) has no OIDC provider
             ui.info(f"  OIDC provider: {answers['OIDC_PROVIDER']}")
     shown = [u for u in units if u.component == component] if scoped else units
@@ -1487,17 +1613,11 @@ def _print_bootstrap_intro(meta) -> None:
             f"  {meta.arch_docs_url}",
             title="Bootstrap",
         )
-    # Only list the infrastructure THIS app actually needs (apps/<app>.yml
-    # `requires`): telling a projects/keycloak operator to provision a Redis they
-    # never use is noise. An app declaring nothing falls back to the full list.
-    keys = meta.requires or list(_REQUIREMENT_LINES)
-    bullets = "\n".join(
-        f"  • {_REQUIREMENT_LINES[k]}" for k in keys if k in _REQUIREMENT_LINES
+    # App-tailored checklist from the manifest
+    body = "Make sure you've prepared:\n" + "\n".join(
+        f"  • {line}" for line in meta.requirements
     )
-    ui.note(
-        f"Make sure you've prepared:\n  • [bold]IP[/bold] or hostname of the VM(s)\n{bullets}",
-        title="Requirements",
-    )
+    ui.note(body, title="Requirements")
     _confirm_ready("Do you have all of the above ready to continue?")
 
 
@@ -1613,12 +1733,14 @@ def bootstrap(app: str, env: str, component: str | None = None) -> None:
                     f"workers (leave blank to run on the {core.key} hosts)",
                     allow_empty=True,
                 )
-            # keycloak and projects are not Django apps — each takes its own
-            # (raw-env) questionnaire instead of the shared Django core one.
+            # keycloak / projects / file-scanner are not Django apps — each takes
+            # its own (raw-env) questionnaire instead of the shared core one.
             if app == "keycloak":
                 answers = _ask_keycloak(meta, backend)
             elif app == "projects":
                 answers = _ask_projects(meta, backend)
+            elif app == "file-scanner":
+                answers = _ask_file_scanner(meta, backend)
             else:
                 answers = _ask_core(meta, backend)
             # a fresh run has no core hosts file on disk yet — stash the hosts

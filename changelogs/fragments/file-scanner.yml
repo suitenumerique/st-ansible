@@ -1,0 +1,23 @@
+minor_changes:
+  - file_scanner role - add a ``file_scanner`` role deploying the file-scanner
+    antivirus service (suitenumerique/file-scanner) - a FastAPI REST API and a
+    dramatiq worker with a bundled ClamAV daemon and Redis broker, all in one
+    compose unit on the rootless podman base. Fully self-contained (no external
+    PostgreSQL/Redis/S3); used by Transfers to scan completed uploads.
+  - st-cli - add ``file-scanner`` app support to bootstrap with its own non-Django
+    questionnaire (caller public keys in ``JWT_ISSUER_KEYS``, generated Ed25519
+    webhook signing seed and /metrics bearer token kept in the vault, optional
+    ``ALLOWED_URL_HOSTS`` allowlist). Inventory group names are dash-normalised
+    (``[file_scanner]``, alias ``file_scanner1``) so ansible stops warning about
+    invalid group characters. The pre-bootstrap Requirements box is now
+    app-tailored via a ``requirements`` list in each app manifest (file-scanner
+    shows no PostgreSQL/Redis/S3/IdP lines, keycloak no Redis/S3/OIDC ones,
+    messages adds OpenSearch and MX/SPF/DKIM DNS prep, meet the LiveKit/TURN
+    domains); the list is mandatory per app manifest, replacing the old generic
+    one.
+  - st-cli - new ``generate-keypairs APP ENV`` command minting Ed25519 caller
+    keypairs for the file-scanner JWT auth (pure-python RFC 8032 derivation, no
+    crypto dependency) - asks an issuer name per keypair and prints a wiring
+    summary with the ``JWT_ISSUER_KEYS`` value (merged with the bootstrapped
+    unit's existing keys) and each caller's private key, shown once and never
+    stored.

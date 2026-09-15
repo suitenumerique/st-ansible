@@ -1,0 +1,16 @@
+---
+- name: "Create file-scanner application."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "file-scanner"
+    st_podman_application_name: "file-scanner"
+    st_podman_application_dir: "{{ st_file_scanner_dir }}"
+    st_podman_application_rollback_enabled: "{{ st_file_scanner_rollback_enabled }}"
+    st_podman_application_compose_template: "{{ st_file_scanner_compose_template }}"
+    st_podman_application_files:
+      - src: "{{ st_file_scanner_env_template }}"
+        dest: "env"
+      - src: "{{ st_file_scanner_clamav_env_template }}"
+        dest: "clamav_env"

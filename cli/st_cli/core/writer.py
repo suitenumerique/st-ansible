@@ -174,9 +174,10 @@ def cadvisor_var(app: str) -> str:
 
     Every component of an app runs the same role, so the var name is uniform
     across the core and every provider unit — only the vars.yml it lands in
-    (and the hosts it deploys to) differs per component.
+    (and the hosts it deploys to) differs per component. Dashes in the app name
+    (``file-scanner``) are normalised: ansible var names can't carry them.
     """
-    return f"st_{app}_cadvisor_enabled"
+    return f"st_{app.replace('-', '_')}_cadvisor_enabled"
 
 
 def write_core(
