@@ -1,0 +1,2 @@
+minor_changes:
+  - "file_scanner: the clamav container is now configurable through a new ``st_file_scanner_clamav_env`` blob (the image maps ``CLAMD_CONF_<Option>``/``FRESHCLAM_CONF_<Option>`` lines onto clamd.conf/freshclam.conf). The default raises clamd's size caps (``StreamMaxLength``/``MaxFileSize``/``MaxScanSize`` to 2200M) above the scanner's 2 GiB ``MAX_URL_SIZE`` — with clamd's stock limits a big file either failed mid-INSTREAM on every retry or, above MaxFileSize/MaxScanSize, was skipped and reported clean without being scanned."

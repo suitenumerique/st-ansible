@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.file_scanner
-Version: 0.2.2
+Version: 0.3.0
 
 This role deploys the file-scanner antivirus service for La Suite Territoriale applications on a rootless podman base on Debian systems.
 
@@ -37,6 +37,10 @@ Installs and configures the file-scanner service from La Suite Territoriale on D
 | st_file_scanner_compose_template | Local path to the custom template to use for file-scanner compose file. | str | no | file_scanner/compose.yaml.j2 |
 | st_file_scanner_env_template | Local path to the custom template to use for file-scanner env file. | str | no | file_scanner/env.j2 |
 | st_file_scanner_env | Content of the default env_template, not used if st_file_scanner_env_template is defined. | str | no |  |
+| st_file_scanner_clamav_env_template | Local path to the custom template to use for the clamav env file. | str | no | file_scanner/clamav_env.j2 |
+| st_file_scanner_clamav_env | Content of the default clamav_env_template, not used if st_file_scanner_clamav_env_template is defined. The clamav image applies `CLAMD_CONF_<Option>=<value>` and `FRESHCLAM_CONF_<Option>=<value>` lines to clamd.conf / freshclam.conf at startup. The default raises clamd's size caps above the scanner's 2 GiB MAX_URL_SIZE: below StreamMaxLength a too-big file dies mid-INSTREAM, and below MaxFileSize/MaxScanSize it is skipped and reported CLEAN unscanned. clamd spools each INSTREAM to its temporary directory, so the clamav container needs that much free disk. | str | no | CLAMD_CONF_StreamMaxLength=2200M
+CLAMD_CONF_MaxFileSize=2200M
+CLAMD_CONF_MaxScanSize=2200M |
 | st_file_scanner_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
 | st_file_scanner_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
 | st_file_scanner_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.3 |
