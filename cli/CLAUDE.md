@@ -1,252 +1,249 @@
 # CLAUDE.md — st-cli
 
-## 1. Overview
+## 1. What it is
 
-`st-cli` is a Typer-based Python CLI (package `st-cli`, version `0.0.20`) that
-bootstraps and operates `suitenumerique.st` Ansible deployments. It lives under
-`cli/` inside the larger collection repo. It does **not** run Ansible in-process:
-it shells out to `ansible-playbook`, `ansible-galaxy`, and `ansible-vault`,
-resolving each binary **next to its own interpreter first** (co-installed
-ansible-core is authoritative, pip or pipx, under the same Python that has `hvac`),
-falling back to `PATH`. ansible-core and hvac are opt-in extras (`[ansible]`,
-`[hashivault]`, `[full]`). Its job: scaffold a versionable config tree (with
-`ansible-vault`-encrypted secrets), generate throwaway Ansible scaffolding, and
-drive deploy (ansible) plus restart / ps / oneoff / reset / logs (ssh) and doctor.
+`st-cli` (package `st-cli`, version `0.3.1`) bootstraps and operates
+`suitenumerique.st` Ansible deployments. It runs **from a deployment repo**
+(its CWD), never from this collection repo. It writes a committed config tree,
+generates throwaway Ansible scaffolding, and shells out to `ansible-playbook`,
+`ansible-galaxy`, `ansible-vault` and `ssh`. It never runs Ansible in-process.
+
+Version source: `st_cli/__init__.py` `__version__`. `pyproject.toml` must match.
 
 ## 2. Architecture
 
-Layering is strict and one-directional:
-
 ```text
-st_cli/main.py         Typer app, subcommand registration, error→exit(1) wrapper
-        ↓
-st_cli/cmd/*.py        One module per subcommand; calls into core/
-        ↓
-st_cli/core/*.py       Business logic: generation, rendering, running ansible,
-                       vault/secrets, manifests, app metadata, paths, tree I/O
-        ↓
-st_cli/core/resources/ Bundled Jinja2 templates + app manifests (read-only)
+st_cli/main.py          Typer app. Global callback = version warnings. _run() maps StCliError -> exit 1.
+st_cli/cmd/*.py         One module per subcommand. Calls core/ only.
+st_cli/core/*.py        Logic: recover, render, write, manifest, upgrades, pin, runner, vault.
+st_cli/core/resources/  Read-only: apps/<app>.yml manifests, templates/, upgrades.yml.
 ```
 
-`main.py` registers 10 subcommands. A global `@app.callback()` runs a best-effort
-upstream-version check before every subcommand (`core/upstream.py`); warn-only,
-swallows every exception. Each command body is wrapped by `_run(fn)`, which
-catches `StCliError` → clean `typer.Exit(1)` (no traceback).
+Subcommands: `bootstrap`, `deploy`, `secrets`, `restart`, `ps`, `oneoff`,
+`reset`, `logs`, `doctor`, `upgrade`, `version`.
 
-### Main workflows (data flow)
+Committed by the operator, per `(app, env, component)`:
+`<app>/<env>/<component>/{vars.yml,vault.yml,hosts}`, `<app>/<env>/common.yml`,
+`ssh/`, and `.st-cli.yml` (version pin, secret backend, unit list with
+`bootstrapped_with` stamps). Hosts live only in the INI `hosts` file.
+`.st-cli/` is regenerated scaffolding and is gitignored.
 
-**bootstrap** (`cmd/bootstrap.py`): interactive `questionary` questionnaire →
-answers (domain, DB, OIDC, S3, per-dependency 3-state deploy/reuse/external) →
-writes committed config tree (`<app>/<env>/<component>/{vars.yml,vault.yml,hosts}`)
-→ records units in `.st-cli.yml`. Secrets route to `vault.yml` (encrypted); env
-blobs hold `{{ vault_* }}` refs. `-c/--component` narrows to one component (a
-provider can be bootstrapped+deployed before the core; `-c <core>` wires deps
-wire-only, REUSE/EXTERNAL, no "deploy it now").
+### Workflows
 
-**generate** (`core/generate.py`): reads `.st-cli.yml` + `apps/*.yml` → renders
-`.st-cli/{ansible.cfg,galaxy-requirements.yml,playbooks/*.yml}` from
-`templates/scaffold/*.j2`. One two-phase playbook per unit. Idempotent, fully
-regeneratable — `.st-cli/` is gitignored.
+- **bootstrap** (`cmd/bootstrap.py`): questionnaire → `answers` → env blobs
+  rendered from `templates/env/*.j2` → `writer.write_core` / `write_vault` →
+  `manifest.upsert_unit`. Secrets go to `vault.yml` as `{{ vault_* }}` refs, or
+  to OpenBao lookup refs with the hashi_vault backend. Dependencies (for example
+  meet → livekit) get their own select: deploy now, skip, external, or reuse /
+  modify when a provider unit exists.
+- **rebootstrap** (same command over an existing unit): a 3-way select
+  `ReplayAction.MODIFY` (default) / `REUSE` / `OVERRIDE`. Modify recovers the
+  answers from the committed tree (`core/recover.py`), pre-fills every prompt,
+  and merges the result back (`core/envblob.merge`). Reuse writes nothing.
+  Override rebuilds from scratch and regenerates the core's own secrets.
+- **upgrade** (`cmd/upgrade.py`): refuses when behind upstream or when the
+  installed CLI is older than the pin (exit 1). Then realigns the pin, replays
+  every unit that `core/upgrades.needed` flags (`ReplayAction.SILENT`, or
+  `MODIFY` when a flag is full_replay), prints the manual steps, and cleans
+  `.st-cli/`. A crashed run resumes on a plain re-run.
+- **deploy** (`cmd/deploy.py`): pin and flag gate → `sshuser.ensure_ssh_user`
+  → `drift.preflight` (generate + galaxy install) → `runner.play` per unit,
+  `serial: 1`, two phases (`base` as root, `deploy` as the app user).
+- **doctor** (`core/drift.py`): offline and warn-only. Lists pending flags and
+  an env-key diff between a fresh render and the committed blob.
+- **restart / ps / logs / oneoff / reset** (`cmd/remote.py`): direct `ssh`.
+  `-H/--host` is the inventory alias. They never block on versions. `reset`
+  also redeploys the unit through `runner.play` after the teardown.
 
-**deploy** (`cmd/deploy.py`): `manifest.managed_units` (sorted by `deploy_order`)
-→ `drift.preflight` (warn-only: generate → galaxy_install → drift check, AFTER the
-pinned collection is installed) → `runner.play` per unit (base + deploy, or
-deploy-only with `-d`).
+## 3. What you must maintain
 
-## 3. Key modules
+Two artefacts carry the upgrade contract. Every change to an app, a template,
+or a questionnaire must keep both correct.
 
-### `st_cli/cmd/` — subcommands
+### 3.1 The bootstrap questionnaire (`cmd/bootstrap.py`)
 
-| Module | Command | Responsibility |
-|--------|---------|----------------|
-| `cmd/bootstrap.py` | `bootstrap APP ENV` | Interactive questionnaire; writes versioned config tree + `.st-cli.yml`. Host validation, OIDC provider choice, dependency 3-state prompt. `-c/--component` scaffolds a single component (provider standalone, core with wire-only deps, or a worker). No flag = full behaviour. A full/core/workers run prints an architecture-docs pointer + a "Requirements" checklist gated behind a yes/no readiness confirmation (declining aborts via `StCliError`); each secret-backend choice carries an inline description. |
-| `cmd/deploy.py` | `deploy APP ENV` | Preflight + run playbooks. Flags: `-c/--component` (**repeatable**; empty = all, sorted by `deploy_order`; unknown raises naming it), `-n/--dry-run` (`--check --diff`), `-d/--deploy-only` (app-user phase only), `-H/--host` (single host by inventory **alias**, resolved via `tree.component_inventory`/`find_host` → ansible `--limit`). Every play is `serial: 1`. |
-| `cmd/remote.py` | `restart`/`ps`/`oneoff`/`reset`/`logs` | Direct `ssh` (no Ansible). Hosts come from the component's `hosts` file; `-H/--host` is the inventory **alias** (validated via `tree.find_host`), ssh connects to its `ansible_host` ip. `restart`/`ps` loop ssh over each host; their `-c` is **repeatable**, `oneoff`/`logs`/`reset` keep single-`-c`. `restart` bare restarts ALL components and **warns + confirms** (`-y/--yes` skips, non-TTY raises); `restart -p/--parallel` restarts components concurrently (each still rolls hosts one at a time), ignores `deploy_order`, aggregates failures. `restart` drives `ui.progress_reporter` (per-component spinner on TTY, plain lines off-TTY); `_ssh(quiet=True)` discards ssh stdout+stderr so chatter can't garble the spinner — failed host surfaces via aggregated error (`unit@alias (rc=…)`, `st-cli logs` hint). `ps` runs `podman ps -a` per host, **skips `is_worker`**, prints `ui.host_header`. `logs`/`oneoff`/`reset` hit exactly one host (`resolve_target` + `_select_host` prompt; no-TTY + no `-H` raises); run the app-user command via `_as_user` (`sudo -iu <user> …` login shell). `reset` is destructive (stop + `down -v` + `rm -rf` + redeploy). `logs`: `journalctl --user -u` (15 min default, `--since`, live `-f`). **ssh noise suppression**: non-interactive commands use `_ssh(capture_stderr=True)` (stdout live, stderr replayed via `ui.warn` on failure); every `_ssh` passes `-o LogLevel=ERROR`. `_ssh` modes: `quiet` (discard both, restart), `capture_stderr` (mutually exclusive, quiet wins), default (inherit both, interactive). |
-| `cmd/upgrade.py` | `upgrade` | Only upgrade path. Checks upstream first (`upstream.get_latest_cached` + `upstream.is_behind`, skipped when `ST_CLI_NO_UPSTREAM_CHECK` set): behind + pipx-owned (`upstream.owning_pipx`) → `pipx upgrade st-cli`; behind + not pipx-owned (container/pip installs) → warns `docker pull ghcr.io/suitenumerique/st-cli:latest` then `st-cli upgrade`, no pipx call; upstream unknown + pipx-owned → best-effort `pipx upgrade st-cli` (old behavior); up-to-date → skips pipx. Then realigns `.st-cli.yml` pin from freshly-installed `importlib.metadata` version → cleans trashable scaffolding. Realign + clean ONLY on real version change; no-op leaves `.st-cli/` intact + informs (pip-upgrade hint only when upstream is unknown AND pipx absent; the docker-pull warn above covers the behind-and-no-pipx case, so no redundant "nothing to do" line there). Does NOT generate/install/doctor. |
-| `cmd/version.py` | `version` | Print installed CLI version + `.st-cli.yml` pin; warn on mismatch. |
-| `cmd/secrets.py` | `secrets APP ENV` | Edit an (app,env)'s ansible-vault secrets in `$EDITOR` via `ansible-vault edit`; prompts for component when several have `vault.yml`; ansible-vault backend only (hashi_vault refuses, points to OpenBao). `-c/--component` narrows to one. |
+The invariant, pinned by `tests/test_rebootstrap_flow.py`: **an Enter-through
+rebootstrap of a committed unit leaves its tree byte-identical, and never
+rotates a secret.** `st-cli upgrade` relies on it. Rules for every prompt:
 
-_`main.py` also defines `restart`/`ps`/`oneoff`/`reset`/`logs` (→ `cmd/remote.py`)
-and `doctor [APP] [ENV]` (→ `core/drift.py`). `deploy`/`restart`/`ps`/`doctor`
-take a **repeatable** `-c`; `oneoff`/`logs`/`reset`/`bootstrap`/`secrets` stay
-single-`-c`._
+- **Pre-fill from recovery.** Read a text default with `_recall(answers, KEY,
+  fallback)`. It returns `prompts.Recovered(...)`. On a required prompt the
+  silent replay auto-accepts only a `Recovered` default. A plain fallback
+  string still prompts. A default you build by hand from recovered data (a
+  parsed URL part, a reconstructed endpoint) must be wrapped in
+  `Recovered(...)` too, or every silent upgrade stops on that prompt.
+- **Secrets go through `_ask_secret(answers, backend, KEY, component,
+  gen=...)`.** It is a no-op when `KEY` is already in `answers`. Never prompt or
+  regenerate a secret another way.
+- **A gate derives its default from recovered state.** Every `_confirm` or
+  `_ask_select` that opens a block (SMTP, S3, blobs offload, DB mode, outbound
+  mode, dependency mode) must default to the current committed choice. A wrong
+  default silently drops the block on an Enter-through run.
+- **A new decision must be visible.** A genuinely new boolean or select passes
+  `auto=False`, or the release flag sets `full_replay: true`. Otherwise the
+  silent replay answers it without the operator. An optional
+  (`required=False`) prompt auto-accepts any default, so a new optional value
+  that needs review also needs `full_replay: true`.
+- **An optional text prompt uses `_ask_optional`.** A blank answer pops the key
+  and warns the operator to delete the committed line by hand, because
+  `envblob.merge` never deletes a line.
+- **A mode switch never deletes.** Switching `DATABASE_URL` ↔ `DB_*` or relay ↔
+  direct keeps the old lines and warns which ones to remove.
+- **Domain-derived keys** (`_ask_core`, the `derived` dict) are recomputed
+  only when the domain changed; otherwise `setdefault` keeps hand edits.
+- **A flagged dependency provider gets no reuse select.** `_handle_dependency`
+  replays it directly, because Reuse would move the stamp without a replay
+  and clear the flag silently.
 
-### `st_cli/core/` — business logic
+When you add or change a prompt:
 
-| Module | Responsibility |
-|--------|----------------|
-| `core/appmeta.py` | Loads bundled `resources/apps/<app>.yml` manifests. `AppMeta` + `Dependency` dataclasses (lazy fallback `Component` if `models.py` absent). Accessors: `core()`, `worker()`, `component(key)`, `files_component(key)` (workers → core), `env_render_spec()`, `component_vars()`. |
-| `core/drift.py` | Materialize the pinned collection + warn-only drift check. `preflight` (single pair, `deploy`) and `preflight_all` (sweep, `doctor` command) render scaffolding (`generate.generate_all`) + install pinned collection (`runner.galaxy_install`), then check committed `st_*` vars against role `meta/argument_specs.yml` (`check_app`/`check_unit`, difflib hints). Never touches committed tree. |
-| `core/envrender.py` | Renders per-component env blobs from `templates/env/*.j2` + bootstrap answers. `render_env(app, component, answers) -> {blob_var: text}`. `oidc_endpoints(provider, base_url, realm)` derives OIDC OP URLs. Tolerant `_EmptyUndefined` → missing keys render as `""`. |
-| `core/generate.py` | Renders trashable `.st-cli/` scaffolding: `ansible.cfg`, `galaxy-requirements.yml`, one `playbooks/<app>-<env>-<component>.yml` per unit. Appends `.st-cli/`, `.vault-pass` to `.gitignore`. `ST_CLI_COLLECTION_SOURCE` → installs local tarball/dir instead of the pinned git tag. |
-| `core/manifest.py` | Reads/writes `.st-cli.yml` (committed: version pins + units). `upsert_unit` replaces by `(app,env,component)`. `managed_units` returns non-external units sorted by `deploy_order`. `ssh_user()`: `ST_CLI_SSH_USER` env (if set) else `None` (defers to ssh config chain). No `root` default; old `ansible_user`/`ST_CLI_ANSIBLE_USER` no longer read. |
-| `core/models.py` | Pure dataclasses, no I/O: `Component` (frozen), `UnitState`, `StCliManifest`. |
-| `core/paths.py` | Filesystem helpers anchored at `Path.cwd()` (deployment repo root, **not** this collection repo). Owns **all** path computation: `.st-cli/` scaffolding paths + committed config-tree paths + `ssh/` paths. No path building elsewhere. |
-| `core/prompts.py` | Shared questionary input primitives (`_ask`, `_text_question`, `_password`, `_confirm`, `_ask_select`, `_ask_hosts`, `_is_valid_host`). In `core` so `secretbackend.py` can prompt without importing up into `cmd`. `cmd/bootstrap.py` re-exports these. Input counterpart to `core/ui.py`. |
-| `core/runner.py` | Subprocess wrappers: `galaxy_install(version)`, `play(app,env,component,check,tags,limit)`, `syntax_check`. Sets `ANSIBLE_CONFIG`. Workers reuse the core unit's inventory via `appmeta.files_component`. `play`'s `limit` = ansible `--limit`, fed by `deploy -H`. |
-| `core/secrets.py` | `gen_secret` (Django `SECRET_KEY` alphabet), `gen_token` (`token_urlsafe`), `gen_password`. Used by bootstrap. |
-| `core/secretbackend.py` | Per-`(app,env)` secret-backend strategy. `SecretBackend` base + `AnsibleVaultBackend` (historical split, byte-for-byte identical) and `HashiVaultBackend` (OpenBao KV-v2, **reference-only**: env blobs carry `{{ lookup('community.hashi_vault.hashi_vault', '<term>') }}` refs, no `vault.yml`, no generation, no writes). `setup_backend` (bootstrap) + `load_backend` (generate) from `manifest.secret_config_for`; `write_common_connection` merges `ansible_hashi_vault_*` into `common.yml`; `hashi_lookup_ref` builds refs. |
-| `core/tree.py` | Reads/writes committed config tree (path computation lives in `paths.py`; this is I/O only). Round-trip ruamel `YAML(typ="rt")` preserving comments + `!vault` scalars (`VaultString`). `read_hosts` parses INI inventory → ips (single source of truth); `read_inventory` returns `(alias,ip)` pairs; `find_host` matches `-H` against the **alias** only; `component_inventory` is worker→core-aware. `ensure_common`/`ensure_ssh_scaffold` seed committed `common.yml` + `ssh/` idempotently — never overwrite. |
-| `core/ui.py` | Rich console helpers: `info`/`warn`/`error`/`success` (warn/error → stderr). All user-facing output goes through here. `progress_reporter()` yields a thread-safe `_Reporter` (transient live spinner on TTY, plain lines off-TTY) — used by `restart`. `host_header(name, host)` — used by `ps`. |
-| `core/upstream.py` | Best-effort "newer version available" check via `@app.callback()`. Highest semver git tag via anonymous `git ls-remote --tags` (3s timeout, cached 6h under `$XDG_CACHE_HOME/st-cli/upstream.json`, `get_latest_cached`); `is_behind(latest)` compares it against `__version__` (`True`/`False`/`None` when unparseable or unknown). If behind, **warns** to run `upgrade` — text branches on `owning_pipx()` (pipx-ownership probe: `pipx_metadata.json` in `sys.prefix`, then PATH lookup; shared with `cmd/upgrade.py`): pipx-owned → `st-cli upgrade`; not pipx-owned (container/pip installs) → `docker pull ghcr.io/suitenumerique/st-cli:latest` first. Never prompts/auto-runs/exits; any failure swallowed. Skipped for `upgrade`/help and when `ST_CLI_NO_UPSTREAM_CHECK` is set. |
-| `core/vault.py` | `ansible-vault` wrappers: `ensure_vault_password` (prompts + writes `.vault-pass` chmod 600 + loud "back this up + share with every operator" warning), `is_encrypted`, `encrypt_file`, `decrypt_to_dict`, `edit_file` (interactive `$EDITOR`, inherits terminal). |
-| `core/writer.py` | Pure writers for the committed tree, extracted from `cmd/bootstrap.py` (no prompting, no manifest mutation). `vars_header`, `apply_component_vars`, `write_vault`, `write_core`. Shared-rule helpers: `gen_value`, `rule_is_secret`, `rule_label`, `inject_consumer`. |
-| `core/errors.py` | `StCliError` — base for all expected failures. `main._run` catches → `ui.error` + `exit(1)`. `runner.RunnerError` subclasses it. |
-| `core/sshuser.py` | `ensure_ssh_user` — once-per-process ssh-user guard (module `_checked` flag), called by `deploy` + direct-ssh ops before connecting. No-op when `ST_CLI_SSH_USER` set or ssh config resolves non-local `User` (offline `ssh -G`); else on TTY prompts once, persists `User <x>` to `ssh/config.local`, applies via `ST_CLI_SSH_USER`; off-TTY warns + proceeds. |
+1. Add it with `_recall` / `_ask_secret` / `_ask_optional` as above.
+2. Add the key to `core/recover.py` only when recovery cannot read it from the
+   blob or the `{PLACEHOLDER}` component vars.
+3. Extend the app's first-run script in `tests/helpers.py`
+   (`<app>_first_run_script`) and the round-trip test in
+   `tests/test_rebootstrap_flow.py` for that app. The replay leg uses
+   `accept_defaults`, which presses Enter on every prompt. Add
+   `assert not sq.asked(...)` when the test must prove a prompt did not fire.
+4. Decide whether the release needs an entry in `upgrades.yml` (next section).
 
-## 4. Resources & templating
+Per-app entry points: `_ask_core` (Django apps: meet, drive, messages, docs),
+`_ask_keycloak`, `_ask_projects`. `_handle_dependency` runs the provider
+questionnaires. Keycloak is not a Django app. Messages uses
+`STORAGE_MESSAGE_*`, never `AWS_S3_*`.
 
-Bundled under `st_cli/core/resources/`, packaged automatically by hatchling
-(`packages = ["st_cli"]`).
+### 3.2 Release flags (`resources/upgrades.yml`)
 
-### App manifests — `resources/apps/{meet,drive,messages,keycloak,docs}.yml`
+```yaml
+baseline: "0.0.0"          # stamps below this get one full replay
+flags:
+  - version: "next"        # "X.Y.Z", or "next" on a branch (make version resolves it)
+    apps: [drive]          # list of app names, or the string "all"
+    components: [drive]    # optional: component keys of apps; not with "all"
+    reason: "drive 3.0 needs the new S3 vars"
+    link: "https://.../CHANGELOG.md#v0-4-0"  # optional: overrides the derived CHANGELOG anchor
+    full_replay: true      # optional: full pre-filled replay, not a silent one
+    new_components: [foo]  # optional: dependency keys to offer once; not with "all"
+    warnings: ["..."]      # optional: manual steps the replay cannot do; a list
+```
 
-Single source of truth for the app/component map (loaded by `appmeta.load_app()`):
-- `app`, `env_docs_url`
-- `components[]`: `key`, `role` (FQCN), `user`, `app_name` (systemd unit +
-  inventory group), `dir_var`, `enabled_var`, `deploy_order`, `is_core`, optional
-  `is_worker`, `vars` (`{PLACEHOLDER}` templates), `env_render` (layer →
-  `{blob_var, templates[]}`).
-- `dependencies[]`: `of` (consumer), `on` (provider), `shared[]` rules
-  (`consumer_env_key`, `var`, either `generate` (`token`/`secret`) or `prompt`,
-  plus optional `answer_key`, `consumer_format`, `label`).
+- A flag applies to every managed unit of `apps` whose stamp is below
+  `version`. `components` narrows it to the listed units, so a change to
+  the core does not force a provider replay. One replay clears every flag
+  of a unit. One item is one need, not
+  one version: write one item per app when reason, link, or components differ.
+- **Add an entry only when operators must act.** A new env key or a new
+  manifest var needs no entry: a replay picks it up. Add an entry, with
+  `full_replay: true`, when a new required answer has no default or a new
+  decision must be reviewed. Add `new_components` when an app gains a
+  dependency. Add `warnings` for what a replay cannot do: a removal, a rename, a
+  value change, a secret rotation, a data migration, or a secret to create in
+  OpenBao.
+- **Write `version: "next"` for an unreleased change.** A `next` flag applies
+  to every unit, for every stamp. `st-cli upgrade` replays it on every run.
+  `deploy` never blocks on it. Its `new_components` are offered on every run.
+  `make version` turns `next` into the release version.
+- **Prune only by raising `baseline`.** Never delete an entry above it.
+- `st-cli upgrade` prints the warnings of every flag between the stamp and the
+  newest one, in a final "Manual steps" block, one line per app/env. `doctor`
+  and `deploy` print only the version and the reason. Write a warning as one
+  short instruction: the line is the action list of the operator.
+- CI lints the file (`tests/test_upgrades.py::TestUpgradeFlagFileLint`):
+  versions are `X.Y.Z` or `next`; `apps` names real apps, `components` names
+  real components of every listed app, `reason` is present, `link` is
+  optional, `new_components` names real `dependencies[].on` targets,
+  `warnings` is a list of strings. The "not above the shipped CLI" and
+  "outranks the baseline" checks apply to `X.Y.Z` entries only.
 
-### Scaffold templates — `resources/templates/scaffold/*.j2`
+### 3.3 Change checklist
 
-- `ansible.cfg.j2` — `collections_path`, `vault_password_file`, `remote_user`
-  (only when `ssh_user` set, else defers to ssh config chain).
-- `galaxy-requirements.yml.j2` — pins collection git repo + version; when
-  `ST_CLI_COLLECTION_SOURCE` set emits a local install entry (tarball: `name`
-  only; dir: `name` + `type: dir`).
-- `playbook.yml.j2` — two-phase playbook (always `serial: 1`): `base` task
-  (`become_user: root`, `tags: ['base']`) + `deploy` task (`become_user: <user>`,
-  `tags: ['deploy']`, sets `<enabled_var>: true`). `vars_files`: `vars.yml` + (if
-  present) `vault.yml`.
+| You change | Also do |
+|---|---|
+| A template key or a manifest var | Nothing else. Verify the round-trip test still passes. |
+| A prompt, a gate, or a secret | Rules of 3.1, first-run script, round-trip test. |
+| A new required answer without a default | Flag with `full_replay: true`. |
+| A new dependency component | Manifest `dependencies[]`, `_handle_dependency`, flag with `new_components`. |
+| A removed or renamed key, a changed format | Flag with `warnings`. The replay cannot do it. |
+| A new app | Manifest in `resources/apps/`, `_ask_<app>` or `_ask_core` branch, templates, first-run script, round-trip test. |
+| The version | `make version version=X.Y.Z` at the repo root: bumps `__init__.py`, `pyproject.toml` and `galaxy.yml`; also resolves `next` flags in `upgrades.yml`. |
 
-### Env templates — `resources/templates/env/*.j2`
+## 4. Versions, pin and gates
 
-Dotenv-style bodies rendered into `st_<app>_*_env` literal-block vars.
-`base.django.env.j2` is the shared base; per-app backend overlays
-`{% include "base.django.env.j2" %}` then add app-specific keys (frontend overlays
-don't include the base). `_EmptyUndefined` makes missing keys render as `""`.
+Three versions exist: the installed CLI (`st_cli.__version__`), the pin
+(`.st-cli.yml` `versions.cli`), and upstream (latest git tag, cached 6h).
+`core/pin.py` compares the first two: `ALIGNED`, `CLI_OLDER`, `CLI_NEWER`,
+`UNKNOWN`. The global callback (`core/upstream.maybe_warn_upgrade`) warns on
+every subcommand and never blocks:
 
-## 5. Dev workflow
+| State | Warning |
+|---|---|
+| installed == pin, upstream newer | pull the image (or `pipx upgrade st-cli`) |
+| installed < pin | pull the image |
+| installed > pin, not behind upstream | run `st-cli upgrade` |
 
-Install (editable, from `cli/`):
+The pull makes the installed CLI newer than the pin. The `st-cli upgrade`
+hint then appears on the next command.
+
+`deploy` blocks in two cases only, before any ssh or network side effect:
+installed < pin, or a pending flag whose version is at or below the pin (the
+replay is missing or crashed; the fix is `st-cli upgrade`). Every other pending
+flag is a warning. `upgrade` moves the pin. `docker pull` moves the installed
+CLI. Nothing else writes the pin. `ST_CLI_NO_UPSTREAM_CHECK` disables the
+callback only.
+
+## 5. Module map
+
+| Module | Role |
+|---|---|
+| `core/appmeta.py` | Loads `resources/apps/<app>.yml`: components, vars, `env_render`, `dependencies[]` with `shared[]` rules. |
+| `core/recover.py` | Inverse of render: rebuilds `answers` from a committed unit. Best-effort, app-agnostic, values verbatim. |
+| `core/envblob.py` | Text merge of dotenv blobs. Keeps existing lines in place, appends new keys, never deletes. `merge(x, x) == x`. |
+| `core/envrender.py` | Renders env blobs from `templates/env/*.j2`. Missing keys render as `""`. `oidc_endpoints`. |
+| `core/writer.py` | Writes `vars.yml` / `vault.yml` / hosts. Merges on rebootstrap, skips an unchanged vault write. |
+| `core/prompts.py` | questionary primitives, `Recovered`, `silent_replay()`, `suspend_silent()`. `_password` never auto-accepts. |
+| `core/secretbackend.py` | `AnsibleVaultBackend` (values in `vault.yml`) and `HashiVaultBackend` (reference-only lookup refs, mints nothing). |
+| `core/upgrades.py` | `needed`, `newest_per_unit`, `pending_warnings`, `new_component_offers`, `parse_version`. |
+| `core/drift.py` | `pending_needs`, `check_app`, `format_need`, env-key diff, `preflight`. |
+| `core/pin.py` | `PinState`, `compare(m)`. |
+| `core/upstream.py` | Upstream tag lookup, `is_behind`, `install_hint`, `maybe_warn_upgrade`. |
+| `core/manifest.py` | `.st-cli.yml` I/O: pins, units, secret backend, `ssh_user`. |
+| `core/tree.py` | Committed tree I/O with ruamel round-trip, `!vault` scalars, INI hosts, `find_host`. |
+| `core/generate.py` | Renders `.st-cli/` scaffolding. `ST_CLI_COLLECTION_SOURCE` overrides the collection pin. |
+| `core/runner.py` | `galaxy_install`, `play`, `syntax_check` subprocess wrappers. |
+| `core/vault.py` | `ansible-vault` wrappers and `.vault-pass` handling. |
+| `core/secrets.py` | `gen_secret`, `gen_token`, `gen_password` for `_ask_secret(gen=...)`. |
+| `core/paths.py` | All path computation, anchored at `Path.cwd()`. |
+| `core/ui.py` | All console output. `warn`/`error` go to stderr. No bare `print`. |
+| `core/sshuser.py` | Once-per-process ssh user guard. `ST_CLI_SSH_USER` overrides. |
+| `core/models.py`, `core/errors.py` | Dataclasses; `StCliError`. |
+
+## 6. Conventions
+
+- Raise `StCliError` for an expected failure. Never `sys.exit` in a command.
+- Workers own no files: a `workers` component reuses the core unit's files and
+  only flips `st_<app>_workers_enabled`.
+- `vars.yml` is never encrypted and never carries the enabled flag.
+- The secret backend is chosen per `(app, env)` and recorded in `.st-cli.yml`.
+  With hashi_vault the operator pre-creates every secret in OpenBao; the
+  prompt asks for the lookup term, pre-filled with `@openbao(kv/data/<app>:<KEY>)`.
+- Each app role ships distinct uid/gid and host ports so co-located stacks do
+  not collide.
+- `ssh/config` and `ssh/known_hosts` are committed; `ssh/config.local` is
+  per-operator and gitignored.
+
+## 7. Dev workflow
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e '.[dev]'          # st-cli + pytest, pytest-mock
-pip install ansible-core         # ansible-playbook/galaxy/vault on PATH
+pip install -e '.[dev]' pytest-xdist 'ruff==0.15.*'   # ruff pinned like CI
+ruff check --fix . && ruff format . && pytest -q -n 6
 ```
 
-Run: `st-cli --help` (entry point `st-cli = "st_cli.main:app"`). Tests (pytest,
-`testpaths = ["tests"]`, offline & hermetic by default): `pytest -q` (the `network`
-marker is deselected), `pytest -m network` opts into a real ansible-galaxy install.
-
-**Every change MUST leave the code ruff-clean** — CI
-(`.github/workflows/cli-tests.yml`, scoped to `cli/**`) runs `ruff check`,
-`ruff format --check`, `pytest` on Python 3.13 (no committed ruff config, defaults
-apply). Before finishing any `cli/` change, run all three from `cli/` (pin `ruff`
-to `0.15.*` to match CI):
-
-```bash
-ruff check --fix .
-ruff format .
-pytest -q
-```
-
-Test layout: one `test_<module>.py` per source module. Shared setup in
-`tests/conftest.py` (the `repo` tmp-cwd fixture + autouse upstream-check disabler)
-and `tests/helpers.py` (config-tree seeders + `ScriptedQuestionary`). The lone
-network test (`test_syntax_check_after_galaxy_install`) is `@pytest.mark.network`,
-deselected via `addopts = "-m 'not network'"`. Deps: `typer`, `questionary`,
-`ruamel.yaml`, `jinja2`, `rich`; dev `pytest`, `pytest-mock`; build hatchling;
-Python ≥ 3.12.
-
-### Developing against a local collection build
-
-Run `ansible-galaxy collection build` in the collection root, then
-`export ST_CLI_COLLECTION_SOURCE=/abs/path/to.tar.gz` (or a source dir): generate
-overrides the git pin, `st-cli deploy` installs it (`galaxy_install` passes
-`--force`). Unset to restore the pin. `st-cli` runs **from a deployment repo** (its
-CWD), not this collection repo — `paths.py` anchors at `Path.cwd()`.
-
-## 6. Conventions & gotchas
-
-- **Error handling**: raise `StCliError` (or `RunnerError`) for expected failures.
-  `main._run` → `ui.error` + `exit(1)`, no traceback. Never `sys.exit` from a command.
-- **All output via `core/ui.py`**: `info`/`success` → stdout, `warn`/`error` →
-  stderr. Avoid bare `print` (leaks secrets).
-- **Secrets split** (two backends, chosen per `(app,env)` at bootstrap, recorded
-  in `.st-cli.yml` `secrets:`):
-  - **ansible-vault** (default): `vars.yml` plaintext/diffable with `{{ vault_<key> }}`
-    refs; `vault.yml` a whole-file encrypted mapping of real values. Playbook loads
-    both via `vars_files`. Routing in `AnsibleVaultBackend.env_secret` (buffered →
-    `component_secrets` → `_write_vault`). Byte-for-byte identical to pre-0.0.20.
-  - **hashi_vault** (OpenBao KV-v2, opt-in, **reference-only**): no `vault.yml`; env
-    blob carries `{{ lookup('community.hashi_vault.hashi_vault', '<term>') }}` refs,
-    real values in OpenBao. st-cli never generates/writes secrets — pre-create every
-    secret yourself; one agnostic lookup-term prompt per secret (verbatim into the
-    blob). Connection (`ansible_hashi_vault_url`, `_validate_certs`, `_auth_method`)
-    in `common.yml`; token via `VAULT_TOKEN`/`ANSIBLE_HASHI_VAULT_TOKEN`. Generate
-    installs `community.hashi_vault`, omits `vault_password_file` (needs `hvac`).
-    Inline `@openbao(<path>)` / `@vault(<path>)` markers wrap only the marked segment
-    in a lookup (rest stays literal); a value with no marker is kept literal (plain
-    text) — only `@openbao(<path>)`/`@vault(<path>)` markers are wrapped in a lookup.
-  - Only the backend *choice* lives in `.st-cli.yml`. No `secrets:` block ⇒ ansible-vault.
-- **`vars.yml` is never encrypted** and **never carries the enabled flag** —
-  `<enabled_var>: true` is injected inline on the `deploy` task so `base` stays base-only.
-- **Workers own no files**: a `workers` component (`is_worker: true`) reuses the
-  core unit's `vars.yml`/`vault.yml`/`hosts` verbatim — only flips
-  `st_<app>_workers_enabled`. `appmeta.files_component("workers")` → the core (also
-  followed by `generate`, `runner._playbook_cmd`, `remote.resolve_target`). No
-  `<app>/<env>/workers/` dir is written.
-- **`!vault` tagged scalars**: `tree.VaultString` (str subclass) + ruamel
-  constructor/representer round-trip `!vault` literals untouched.
-- **Hosts live only in the INI `hosts` file**, never in `.st-cli.yml`
-  (`tree.read_hosts` parses `ansible_host=` per line). Each app role ships a distinct
-  default uid/gid + host-port block (drive 1101/50100, keycloak 1102/50200, meet
-  1103/50300, messages 1104/50400, docs 1106/50600) so co-located stacks don't
-  collide.
-- **Two-phase deploy**: `base` task (root: podman + user install, idempotent) +
-  `deploy` task (app-user: render config + start systemd unit); `-d`/`--deploy-only`
-  runs only `--tags deploy` (no root, for routine updates).
-- **OIDC providers**: `keycloak` (derive `/realms/<realm>/protocol/openid-connect/...`),
-  `proconnect-prod`/`proconnect-integ` (bundled DINUM endpoints), `custom`
-  (pass-through). `keycloak` is both an OIDC provider choice **and** a deployable app.
-- **keycloak is not a Django app**: no core questionnaire — `bootstrap` dispatches to
-  `_ask_keycloak` (DB + hostname + admin creds), renders one `st_keycloak_env` blob
-  from `keycloak.env.j2` (no base include, no deps/workers/frontend).
-- **messages uses `STORAGE_MESSAGE_*`, not `AWS_S3_*`**: `_ask_core` skips the
-  `AWS_S3_*` questionnaire for `messages` (runs `_ask_messages_storage`), and
-  `base.django.env.j2` only emits `AWS_S3_*` when `answers.AWS_S3_ENDPOINT_URL` is
-  set. Don't re-add `AWS_S3_*` to the messages flow.
-- **`doctor` is warn-only and best-effort**: materializes the pinned collection
-  (generate + galaxy install) then checks `argument_specs.yml` drift (known
-  incomplete — catches renames/typos, no guarantee). Never touches committed tree.
-  `paths.py` anchors at `Path.cwd()`; `doctor` has a dev fallback
-  (`repo_root().parent / "roles"`) when the collection isn't installed.
-- **`upgrade` is the only upgrade path**: CLI + collection are one versioned unit.
-  `pipx upgrade st-cli` → realign pin from `importlib.metadata` (not frozen
-  `__version__`, lags one run) → clean scaffolding (`.st-cli/` only; repo-root
-  `.vault-pass` preserved). Only on real version change; does NOT generate/install/
-  doctor. **Version source**: `st_cli/__init__.py` `__version__`; `pyproject.toml`
-  `version = "0.0.20"` must match.
-- **`ST_CLI_SSH_USER` overrides the ssh user** for the `deploy` path (`ansible.cfg`
-  `remote_user`) and direct-ssh ops (`remote._ssh_user`); when unset both defer to the
-  ssh config chain — no `root` default. **Migration**: old `ST_CLI_ANSIBLE_USER` env +
-  `.st-cli.local.yml` `ansible_user` key no longer read.
-- **Host targeting is unified on `-H/--host` = inventory *alias*** (e.g. `meet1`),
-  never a raw ip — validated against *this* app/env/component's `hosts`
-  (`tree.find_host`). ssh ops map alias → `ansible_host` ip; `deploy` passes `--limit`.
-- **Committed `ssh/` scaffold** (host-key + bastion config, not secret; anchored at
-  `repo_root() / "ssh"`). `tree.ensure_ssh_scaffold` seeds `config` + `config.local`
-  + `known_hosts` **idempotently** (never overwrites), from `bootstrap` and
-  `generate`. `config` + `known_hosts` are **COMMITTED** (no active `Host *` seeded);
-  `config.local` is **GITIGNORED**, per-operator, Included first, seeded fully
-  commented (`Host *`: `User`/`IdentityFile`/`ProxyJump`). The container `Dockerfile`
-  appends `Include …/config.local` + `Include …/config` + `UserKnownHostsFile
-  …/known_hosts` + `StrictHostKeyChecking accept-new` to `/etc/ssh/ssh_config`
-  (config.local first) so st-cli's ssh and ansible verify host keys + resolve
-  bastions with no `~/.ssh` mount.
+CI (`.github/workflows/cli-tests.yml`) runs `ruff check`, `ruff format
+--check` and `pytest` on Python 3.13. Every change must leave the tree
+ruff-clean. Tests are offline. Each bootstrap test spawns `ansible-vault`, so
+the full suite takes minutes without `-n`. One `test_<module>.py` per module.
+`tests/conftest.py` provides the `repo` tmp-cwd fixture and disables the
+upstream check. `tests/helpers.py` provides the seeders, the first-run script
+builders, `script_questionary` (strict: an unscripted prompt fails) and
+`accept_defaults` (Enter-through: use `sq.asked` to prove a prompt did not fire).

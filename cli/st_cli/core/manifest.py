@@ -29,6 +29,7 @@ def load_manifest() -> StCliManifest:
                 env=u["env"],
                 component=u["component"],
                 mode=u.get("mode", "managed"),
+                bootstrapped_with=u.get("bootstrapped_with", ""),
             )
             for u in (raw.get("units", []) or [])
         ]
@@ -63,6 +64,11 @@ def save_manifest(m: StCliManifest) -> None:
         cm["env"] = u.env
         cm["component"] = u.component
         cm["mode"] = u.mode
+        # Omit when empty (clean diff), same convention as the secrets: block
+        # below: a unit with no key predates rebootstrap tracking and loads
+        # back as "" via .get(..., "").
+        if u.bootstrapped_with:
+            cm["bootstrapped_with"] = u.bootstrapped_with
         units.append(cm)
     doc["units"] = units
     # Omit the secrets block entirely when empty (clean diff): a manifest with no

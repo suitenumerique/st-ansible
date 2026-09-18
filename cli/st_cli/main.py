@@ -6,10 +6,20 @@ import typer
 
 from .cmd import (
     bootstrap as bootstrap_mod,
+)
+from .cmd import (
     deploy as deploy_mod,
+)
+from .cmd import (
     remote,
+)
+from .cmd import (
     secrets as secrets_mod,
+)
+from .cmd import (
     upgrade as upgrade_mod,
+)
+from .cmd import (
     version as version_mod,
 )
 from .core import appmeta, drift, ui, upstream
@@ -283,18 +293,19 @@ def doctor(
         None, "--component", "-c", help="(repeatable)."
     ),
 ):
-    """Check committed vars against the collection's argument_specs (warn-only).
+    """Report units with an outstanding rebootstrap requirement (warn-only).
 
     With no args, sweep every managed (app, env) pair in .st-cli.yml (external
     units are skipped). With APP only, check all envs of that app. With both
     APP and ENV, check that single unit (optionally narrowed by --component,
-    which is repeatable).
+    which is repeatable). Fully offline: does not touch the collection or the
+    network.
     """
 
     def _do():
         warnings = drift.preflight_all(app_name, env, component)
         if not warnings:
-            ui.success("No variable drift detected.")
+            ui.success("No rebootstrap needed.")
         for w in warnings:
             ui.warn(w)
 

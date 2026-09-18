@@ -8,19 +8,22 @@ before the core. No flag = the full interactive questionnaire.
 from __future__ import annotations
 
 import pytest
+from helpers import (
+    docs_first_run_script,
+    meet_first_run_script,
+    messages_first_run_script,
+    projects_first_run_script,
+    script_questionary,
+    seed_creds,
+    seed_docs_yprovider_unit,
+    seed_livekit_provider,
+    with_answers,
+)
 
 from st_cli.cmd import bootstrap
 from st_cli.core import appmeta, envrender, manifest, paths, prompts, tree, vault
 from st_cli.core.errors import StCliError
 from st_cli.core.secretbackend import AnsibleVaultBackend
-
-from helpers import (
-    seed_creds,
-    seed_docs_yprovider_unit,
-    seed_livekit_provider,
-    script_questionary,
-)
-
 
 # --------------------------------------------------------------------------- host validation
 
@@ -213,28 +216,8 @@ def test_bootstrap_livekit_external_redis(repo, monkeypatch):
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
-        [
-            ("select", "Secret backend:", "ansible-vault"),
-            ("text", "meet host(s)", "10.0.0.5"),
-            # _ask_core for meet
-            ("text", "Public domain for meet", "meet.example.org"),
-            ("select", "Database configuration:", "DATABASE_URL"),
-            ("text", "DATABASE_URL", "postgres://meet"),
-            ("text", "REDIS_URL", "redis://redis:6379/0"),
-            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
-            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
-            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
-            ("text", "AWS_STORAGE_BUCKET_NAME", "meet-media"),
-            ("text", "AWS_S3_REGION_NAME (optional)", ""),
-            ("select", "Identity provider:", "keycloak"),
-            ("text", "Keycloak base URL", "https://idp.example.org"),
-            ("text", "Keycloak realm", "master"),
-            ("text", "OIDC_RP_CLIENT_ID", "meet-client-id"),
-            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
-            ("confirm", "Configure transactional email (SMTP) settings?", False),
-            ("confirm", "cadvisor", True),  # meet core cadvisor
-            # deps loop — livekit: deploy
-            ("select", "Bootstrap livekit now?", "Yes — bootstrap now"),
+        meet_first_run_script(smtp=False, db_mode="url", livekit="Yes — bootstrap now")
+        + [
             ("text", "livekit host(s)", "10.0.0.1"),
             # egress hosts asked right after livekit hosts, BEFORE LiveKit
             # domain/TURN; on a DIFFERENT host → co-location does not fire
@@ -307,13 +290,11 @@ def test_bootstrap_component_livekit_external_redis_blank_auth(repo, monkeypatch
     external redis (``_ask``/``_password`` are called with ``required=False`` for
     both). A blank username is dropped entirely: ``if username:`` in
     ``_bundle_egress`` is a truthiness check, so ``""`` never lands in either the
-    livekit or the egress vars.yml. A blank password is a different story: it is
-    ALWAYS stored via ``backend.var_secret(...)`` (unconditional, no truthiness
-    guard) and then mirrored into egress's own vault by
-    ``_mirror_livekit_creds_to_egress``, whose guard is ``val is None`` — NOT
-    falsiness — precisely so an intentionally-blank password survives the mirror
-    instead of being (mis)treated as "missing". This pins that an empty string is
-    carried through both vaults verbatim rather than silently dropped."""
+    livekit or the egress vars.yml. A blank password is dropped the same way: it
+    is stored only when it is truthy, so an empty string is never written to
+    ``backend.var_secret`` and never mirrored into egress's vault — an
+    unauthenticated external redis carries no password key in either vault, only
+    the mirrored api key/secret."""
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
@@ -363,16 +344,14 @@ def test_bootstrap_component_livekit_external_redis_blank_auth(repo, monkeypatch
     ev = tree.load_vars("meet", "prod", "egress")
     assert "st_meet_livekit_redis_username" not in ev
 
-    # the blank password IS stored (unconditional backend.var_secret call) in
-    # livekit's own vault, and mirrored — still empty, not dropped — into
-    # egress's own vault (the mirror guard is `is None`, not truthiness).
+    # the blank password is dropped entirely: no password key in either vault,
+    # only the mirrored api key/secret (both vaults still exist).
     lvault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "livekit"))
-    assert lvault["st_meet_livekit_redis_password"] == ""
+    assert "st_meet_livekit_redis_password" not in lvault
     evault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "egress"))
-    assert (
-        evault["st_meet_livekit_redis_password"]
-        == lvault["st_meet_livekit_redis_password"]
-    )
+    assert "st_meet_livekit_redis_password" not in evault
+    assert evault["st_meet_livekit_api_key"] == lvault["st_meet_livekit_api_key"]
+    assert evault["st_meet_livekit_api_secret"] == lvault["st_meet_livekit_api_secret"]
 
     # every scripted answer was consumed — including both blank prompts.
     assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
@@ -450,33 +429,15 @@ def test_bootstrap_component_core_wires_deps_only(repo, monkeypatch):
     livekit_vars_before = (repo / "meet/prod/livekit/vars.yml").read_text()
     livekit_vault_before = (repo / "meet/prod/livekit/vault.yml").read_bytes()
 
+    # no "Secret backend:" select — a livekit unit was seeded by
+    # seed_livekit_provider, so setup_backend reuses the persisted
+    # ansible-vault choice silently (no prompt). "meet" wire-only reuses the
+    # existing livekit dep automatically, so no trailing dep select either.
     sq = script_questionary(
         monkeypatch,
-        [
-            # core hosts (asked before _ask_core), then the core questionnaire.
-            # NB: no "Secret backend:" select here — a livekit unit was seeded by
-            # seed_livekit_provider, so setup_backend reuses the persisted
-            # ansible-vault choice silently (no prompt).
-            ("text", "meet host(s)", "10.0.0.5"),
-            ("text", "Public domain for meet", "meet.example.org"),
-            ("select", "Database configuration:", "DATABASE_URL"),
-            ("text", "DATABASE_URL", "postgres://meet"),
-            ("text", "REDIS_URL", "redis://redis:6379/0"),
-            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
-            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
-            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
-            ("text", "AWS_STORAGE_BUCKET_NAME", "meet-media"),
-            ("text", "AWS_S3_REGION_NAME (optional)", ""),
-            ("select", "Identity provider:", "keycloak"),
-            ("text", "Keycloak base URL", "https://idp.example.org"),
-            ("text", "Keycloak realm", "master"),
-            ("text", "OIDC_RP_CLIENT_ID", "meet-client-id"),
-            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
-            ("confirm", "Configure transactional email (SMTP) settings?", False),
-            ("confirm", "cadvisor", True),
-            # dep: wire-only reuse (no "Yes — bootstrap now" option offered)
-            ("select", "Bootstrap livekit now?", "Reuse existing in the repo"),
-        ],
+        meet_first_run_script(
+            smtp=False, db_mode="url", secret_backend=False, livekit=None
+        ),
     )
     bootstrap.bootstrap("meet", "prod", component="meet")
 
@@ -504,10 +465,9 @@ def test_bootstrap_component_core_wires_deps_only(repo, monkeypatch):
     assert (repo / "meet/prod/livekit/vars.yml").read_text() == livekit_vars_before
     assert (repo / "meet/prod/livekit/vault.yml").read_bytes() == livekit_vault_before
 
-    # no "Yes — bootstrap now" option was offered for the livekit dep (wire-only)
+    # wire-only + existing livekit: reused automatically, no dep select at all
     dep_offers = [c for msg, c in sq.select_calls if "Bootstrap livekit now?" in msg]
-    assert dep_offers, "expected a livekit deploy/reuse select"
-    assert not any("Yes — bootstrap now" in opt for opt in dep_offers[0])
+    assert not dep_offers, "wire-only must reuse an existing provider without a select"
 
     # both units registered; livekit mode unchanged (managed)
     m = manifest.load_manifest()
@@ -525,26 +485,13 @@ def test_bootstrap_meet_full_reuse_livekit_bundles_egress(repo, monkeypatch):
     seed_livekit_provider(repo)
     sq = script_questionary(
         monkeypatch,
-        [
-            ("text", "meet host(s)", "10.0.0.5"),
-            ("text", "Public domain for meet", "meet.example.org"),
-            ("select", "Database configuration:", "DATABASE_URL"),
-            ("text", "DATABASE_URL", "postgres://meet"),
-            ("text", "REDIS_URL", "redis://redis:6379/0"),
-            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
-            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
-            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
-            ("text", "AWS_STORAGE_BUCKET_NAME", "meet-media"),
-            ("text", "AWS_S3_REGION_NAME (optional)", ""),
-            ("select", "Identity provider:", "keycloak"),
-            ("text", "Keycloak base URL", "https://idp.example.org"),
-            ("text", "Keycloak realm", "master"),
-            ("text", "OIDC_RP_CLIENT_ID", "meet-client-id"),
-            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
-            ("confirm", "Configure transactional email (SMTP) settings?", False),
-            ("confirm", "cadvisor", True),  # meet core cadvisor
-            # deps loop — livekit exists: reuse it (still deployed)
-            ("select", "Bootstrap livekit now?", "Reuse existing in the repo"),
+        meet_first_run_script(
+            smtp=False,
+            db_mode="url",
+            secret_backend=False,
+            livekit="Reuse existing in the repo",
+        )
+        + [
             ("confirm", "egress", True),  # egress cadvisor (created on reuse)
         ],
     )
@@ -594,28 +541,8 @@ def test_bootstrap_meet_full_deploys_livekit_with_public_host(repo, monkeypatch)
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
-        [
-            ("select", "Secret backend:", "ansible-vault"),
-            ("text", "meet host(s)", "10.0.0.5"),
-            # _ask_core for meet
-            ("text", "Public domain for meet", "meet.example.org"),
-            ("select", "Database configuration:", "DATABASE_URL"),
-            ("text", "DATABASE_URL", "postgres://meet"),
-            ("text", "REDIS_URL", "redis://redis:6379/0"),
-            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
-            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
-            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
-            ("text", "AWS_STORAGE_BUCKET_NAME", "meet-media"),
-            ("text", "AWS_S3_REGION_NAME (optional)", ""),
-            ("select", "Identity provider:", "keycloak"),
-            ("text", "Keycloak base URL", "https://idp.example.org"),
-            ("text", "Keycloak realm", "master"),
-            ("text", "OIDC_RP_CLIENT_ID", "meet-client-id"),
-            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
-            ("confirm", "Configure transactional email (SMTP) settings?", False),
-            ("confirm", "cadvisor", True),  # meet core cadvisor
-            # deps loop — livekit (no existing tree): take the deploy path
-            ("select", "Bootstrap livekit now?", "Yes — bootstrap now"),
+        meet_first_run_script(smtp=False, db_mode="url", livekit="Yes — bootstrap now")
+        + [
             ("text", "livekit host(s)", "10.0.0.1"),
             # egress hosts (bundled into the livekit step) asked right after the
             # livekit hosts, BEFORE LiveKit domain/TURN: blank → co-locate
@@ -794,31 +721,7 @@ def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
     OIDC client secret, the S3 secret key), encrypts them into vault.yml, writes
     the hosts, and registers the projects unit."""
     seed_creds(repo)
-    sq = script_questionary(
-        monkeypatch,
-        [
-            ("select", "Secret backend:", "ansible-vault"),
-            ("text", "projects host(s)", "10.0.0.7"),
-            ("text", "Public domain for projects", "projects.example.org"),
-            ("text", "DATABASE_URL", "postgresql://u:p@db.example.org:5432/projects"),
-            ("select", "Identity provider:", "keycloak"),
-            ("text", "Keycloak base URL", "https://idp.example.org"),
-            ("text", "Keycloak realm", "st"),
-            ("text", "OIDC_CLIENT_ID", "projects"),
-            ("password", "OIDC_CLIENT_SECRET", "oidcsecret"),
-            ("text", "ORGANIZATION_ID_CLAIM", ""),
-            ("confirm", "horizontal scaling", False),
-            ("confirm", "Configure S3 object storage", True),
-            ("text", "S3_ENDPOINT", "https://s3.fr-par.scw.cloud"),
-            ("text", "S3_REGION", "fr-par"),
-            ("text", "S3_ACCESS_KEY_ID", "AKID"),
-            ("password", "S3_SECRET_ACCESS_KEY", "s3secret"),
-            ("text", "S3_BUCKET", "projects"),
-            ("confirm", "S3_FORCE_PATH_STYLE", True),
-            ("confirm", "Configure transactional email", False),
-            ("confirm", "cadvisor", True),
-        ],
-    )
+    sq = script_questionary(monkeypatch, projects_first_run_script())
 
     bootstrap.bootstrap("projects", "prod")
 
@@ -985,35 +888,8 @@ def test_bootstrap_messages_optional_deps_skippable(repo, monkeypatch):
     seed_creds(repo)
     script_questionary(
         monkeypatch,
-        [
-            ("select", "Secret backend:", "ansible-vault"),
-            # core hosts, then the optional worker-hosts prompt (messages has workers)
-            ("text", "messages host(s)", "10.0.0.4"),
-            ("text", "workers (leave blank", ""),  # co-locate workers on the core hosts
-            # core questionnaire (_ask_core)
-            ("text", "Public domain for messages", "messages.example.org"),
-            ("select", "Database configuration:", "DATABASE_URL"),
-            ("text", "DATABASE_URL", "postgres://messages"),
-            ("text", "REDIS_URL", "redis://redis:6379/0"),
-            # messages does NOT use the generic AWS_S3_* storage — no S3 prompts here.
-            # messages-only S3: imports bucket (always prompted) + blobs offload (declined)
-            ("text", "STORAGE_MESSAGE_IMPORTS_ENDPOINT_URL", "https://s3.example.org"),
-            ("text", "STORAGE_MESSAGE_IMPORTS_BUCKET_NAME", "msg-imports"),
-            ("text", "STORAGE_MESSAGE_IMPORTS_ACCESS_KEY", "impkey"),
-            ("password", "STORAGE_MESSAGE_IMPORTS_SECRET_KEY", "impsecret"),
-            ("text", "STORAGE_MESSAGE_IMPORTS_REGION_NAME", ""),
-            ("text", "STORAGE_MESSAGE_IMPORTS_EXPIRE_POLICY", "3600"),
-            ("confirm", "Enable blobs offloading", False),
-            ("text", "OPENSEARCH_URL", "http://opensearch:9200"),
-            ("text", "MESSAGES_TECHNICAL_DOMAIN", "mail.example.org"),
-            ("select", "Identity provider:", "keycloak"),
-            ("text", "Keycloak base URL", "https://idp.example.org"),
-            ("text", "Keycloak realm", "master"),
-            ("text", "OIDC_RP_CLIENT_ID", "messages-client-id"),
-            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
-            # no SMTP confirm — messages is NOT in _EMAIL_APPS
-            ("select", "Outbound mail mode", "direct"),
-            ("confirm", "cadvisor", True),  # core cadvisor (last core question)
+        messages_first_run_script()
+        + [
             # deps loop — mta-in (required): take the deploy path
             ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
             ("text", "mta-in host(s)", "10.0.0.7"),
@@ -1057,35 +933,8 @@ def test_bootstrap_messages_provider_vars_deploy(repo, monkeypatch):
     seed_creds(repo)
     script_questionary(
         monkeypatch,
-        [
-            ("select", "Secret backend:", "ansible-vault"),
-            # core hosts, then optional worker-hosts prompt (messages has workers)
-            ("text", "messages host(s)", "10.0.0.4"),
-            ("text", "workers (leave blank", ""),  # co-locate workers on the core hosts
-            # core questionnaire (_ask_core)
-            ("text", "Public domain for messages", "messages.example.org"),
-            ("select", "Database configuration:", "DATABASE_URL"),
-            ("text", "DATABASE_URL", "postgres://messages"),
-            ("text", "REDIS_URL", "redis://redis:6379/0"),
-            # messages does NOT use the generic AWS_S3_* storage — no S3 prompts here.
-            # messages-only S3: imports bucket (always prompted) + blobs offload (declined)
-            ("text", "STORAGE_MESSAGE_IMPORTS_ENDPOINT_URL", "https://s3.example.org"),
-            ("text", "STORAGE_MESSAGE_IMPORTS_BUCKET_NAME", "msg-imports"),
-            ("text", "STORAGE_MESSAGE_IMPORTS_ACCESS_KEY", "impkey"),
-            ("password", "STORAGE_MESSAGE_IMPORTS_SECRET_KEY", "impsecret"),
-            ("text", "STORAGE_MESSAGE_IMPORTS_REGION_NAME", ""),
-            ("text", "STORAGE_MESSAGE_IMPORTS_EXPIRE_POLICY", "3600"),
-            ("confirm", "Enable blobs offloading", False),
-            ("text", "OPENSEARCH_URL", "http://opensearch:9200"),
-            ("text", "MESSAGES_TECHNICAL_DOMAIN", "mail.example.org"),
-            ("select", "Identity provider:", "keycloak"),
-            ("text", "Keycloak base URL", "https://idp.example.org"),
-            ("text", "Keycloak realm", "master"),
-            ("text", "OIDC_RP_CLIENT_ID", "messages-client-id"),
-            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
-            # no SMTP confirm — messages is NOT in _EMAIL_APPS
-            ("select", "Outbound mail mode", "direct"),
-            ("confirm", "cadvisor", True),  # core cadvisor (last core question)
+        messages_first_run_script()
+        + [
             # deps loop — mta-in (required): deploy
             ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
             ("text", "mta-in host(s)", "10.0.0.7"),
@@ -1368,42 +1217,8 @@ def test_bootstrap_messages_storage_blobs_offload(repo, monkeypatch):
     seed_creds(repo)
     script_questionary(
         monkeypatch,
-        [
-            ("select", "Secret backend:", "ansible-vault"),
-            # core hosts, then the optional worker-hosts prompt (messages has workers)
-            ("text", "messages host(s)", "10.0.0.4"),
-            ("text", "workers (leave blank", ""),  # co-locate workers on the core hosts
-            # core questionnaire (_ask_core)
-            ("text", "Public domain for messages", "messages.example.org"),
-            ("select", "Database configuration:", "DATABASE_URL"),
-            ("text", "DATABASE_URL", "postgres://messages"),
-            ("text", "REDIS_URL", "redis://redis:6379/0"),
-            # messages does NOT use the generic AWS_S3_* storage — no S3 prompts here.
-            # messages-only S3: imports bucket (always) + blobs offload (enabled)
-            ("text", "STORAGE_MESSAGE_IMPORTS_ENDPOINT_URL", "https://s3.example.org"),
-            ("text", "STORAGE_MESSAGE_IMPORTS_BUCKET_NAME", "msg-imports"),
-            ("text", "STORAGE_MESSAGE_IMPORTS_ACCESS_KEY", "impkey"),
-            ("password", "STORAGE_MESSAGE_IMPORTS_SECRET_KEY", "impsecret"),
-            ("text", "STORAGE_MESSAGE_IMPORTS_REGION_NAME", ""),
-            ("text", "STORAGE_MESSAGE_IMPORTS_EXPIRE_POLICY", "3600"),
-            ("confirm", "Enable blobs offloading", True),
-            ("text", "OPENSEARCH_URL", "http://opensearch:9200"),
-            ("text", "MESSAGES_TECHNICAL_DOMAIN", "mail.example.org"),
-            # blobs offload bucket
-            ("text", "STORAGE_MESSAGE_BLOBS_ENDPOINT_URL", "https://s3.example.org"),
-            ("text", "STORAGE_MESSAGE_BLOBS_BUCKET_NAME", "msg-blobs"),
-            ("text", "STORAGE_MESSAGE_BLOBS_ACCESS_KEY", "blobkey"),
-            ("password", "STORAGE_MESSAGE_BLOBS_SECRET_KEY", "blobsecret"),
-            ("text", "STORAGE_MESSAGE_BLOBS_REGION_NAME", ""),
-            # MESSAGES_BLOBS_ENCRYPT_KEY is generated (ansible-vault) — no prompt
-            ("select", "Identity provider:", "keycloak"),
-            ("text", "Keycloak base URL", "https://idp.example.org"),
-            ("text", "Keycloak realm", "master"),
-            ("text", "OIDC_RP_CLIENT_ID", "messages-client-id"),
-            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
-            # no SMTP confirm — messages is NOT in _EMAIL_APPS
-            ("select", "Outbound mail mode", "direct"),
-            ("confirm", "cadvisor", True),  # core cadvisor (last core question)
+        messages_first_run_script(blobs_offload=True)
+        + [
             # deps loop — mta-in (required): take the deploy path
             ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
             ("text", "mta-in host(s)", "10.0.0.7"),
@@ -1465,38 +1280,8 @@ def test_bootstrap_messages_relay_outbound_mode(repo, monkeypatch):
     seed_creds(repo)
     script_questionary(
         monkeypatch,
-        [
-            ("select", "Secret backend:", "ansible-vault"),
-            # core hosts, then the optional worker-hosts prompt (messages has workers)
-            ("text", "messages host(s)", "10.0.0.4"),
-            ("text", "workers (leave blank", ""),  # co-locate workers on the core hosts
-            # core questionnaire (_ask_core)
-            ("text", "Public domain for messages", "messages.example.org"),
-            ("select", "Database configuration:", "DATABASE_URL"),
-            ("text", "DATABASE_URL", "postgres://messages"),
-            ("text", "REDIS_URL", "redis://redis:6379/0"),
-            # messages-only S3: imports bucket (always) + blobs offload (declined)
-            ("text", "STORAGE_MESSAGE_IMPORTS_ENDPOINT_URL", "https://s3.example.org"),
-            ("text", "STORAGE_MESSAGE_IMPORTS_BUCKET_NAME", "msg-imports"),
-            ("text", "STORAGE_MESSAGE_IMPORTS_ACCESS_KEY", "impkey"),
-            ("password", "STORAGE_MESSAGE_IMPORTS_SECRET_KEY", "impsecret"),
-            ("text", "STORAGE_MESSAGE_IMPORTS_REGION_NAME", ""),
-            ("text", "STORAGE_MESSAGE_IMPORTS_EXPIRE_POLICY", "3600"),
-            ("confirm", "Enable blobs offloading", False),
-            ("text", "OPENSEARCH_URL", "http://opensearch:9200"),
-            ("text", "MESSAGES_TECHNICAL_DOMAIN", "mail.example.org"),
-            ("select", "Identity provider:", "keycloak"),
-            ("text", "Keycloak base URL", "https://idp.example.org"),
-            ("text", "Keycloak realm", "master"),
-            ("text", "OIDC_RP_CLIENT_ID", "messages-client-id"),
-            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
-            # no SMTP confirm — messages is NOT in _EMAIL_APPS
-            # outbound mail mode (asked at the end of _ask_core, before cadvisor)
-            ("select", "Outbound mail mode", "relay"),
-            ("text", "MTA_OUT_RELAY_HOST", "smtp.example.org:587"),
-            ("text", "MTA_OUT_RELAY_USERNAME", "relayuser"),
-            ("password", "MTA_OUT_RELAY_PASSWORD", "relaypass"),
-            ("confirm", "cadvisor", True),  # core cadvisor (last core question)
+        messages_first_run_script(outbound="relay")
+        + [
             # deps loop — mta-in (required): deploy
             ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
             ("text", "mta-in host(s)", "10.0.0.7"),
@@ -1704,37 +1489,8 @@ def test_bootstrap_docs_full_deploys_yprovider(repo, monkeypatch):
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
-        [
-            ("select", "Secret backend:", "ansible-vault"),
-            ("text", "docs host(s)", "10.0.0.5"),
-            ("text", "workers (leave blank", ""),  # co-locate workers on core hosts
-            # core questionnaire (_ask_core)
-            ("text", "Public domain for docs", "docs.example.org"),
-            ("select", "Database configuration:", "DATABASE_URL"),
-            ("text", "DATABASE_URL", "postgres://docs"),
-            ("text", "REDIS_URL", "redis://redis:6379/0"),
-            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
-            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
-            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
-            ("text", "AWS_STORAGE_BUCKET_NAME", "docs-media"),
-            ("text", "AWS_S3_REGION_NAME (optional)", ""),
-            ("select", "Identity provider:", "keycloak"),
-            ("text", "Keycloak base URL", "https://idp.example.org"),
-            ("text", "Keycloak realm", "master"),
-            ("text", "OIDC_RP_CLIENT_ID", "docs-client-id"),
-            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
-            ("confirm", "Configure transactional email (SMTP) settings?", True),
-            ("text", "DJANGO_EMAIL_HOST", "smtp.example.org"),
-            ("text", "DJANGO_EMAIL_PORT", "587"),
-            ("text", "DJANGO_EMAIL_HOST_USER (optional)", ""),
-            ("password", "DJANGO_EMAIL_HOST_PASSWORD", "smtp-pass"),
-            ("confirm", "DJANGO_EMAIL_USE_TLS?", True),
-            ("confirm", "DJANGO_EMAIL_USE_SSL?", False),
-            ("text", "DJANGO_EMAIL_FROM", "noreply@docs.example.org"),
-            ("text", "DJANGO_EMAIL_BRAND_NAME (optional)", ""),
-            ("confirm", "cadvisor", True),  # docs core cadvisor
-            # deps loop — yprovider (required): deploy on a single host
-            ("select", "Bootstrap yprovider now?", "Yes — bootstrap now"),
+        docs_first_run_script(smtp=True, yprovider="Yes — bootstrap now")
+        + [
             ("text", "yprovider host(s)", "10.0.0.9"),
             # NO "Public domain for docs" — _ensure_docs_domain sees DOMAIN set
             # NO secret prompts — mirrored straight from the core's buffer
@@ -1880,27 +1636,9 @@ def test_bootstrap_docs_reuse_yprovider_adopts_kept_secrets(repo, monkeypatch):
     yp_vault_before = (repo / "docs/prod/yprovider/vault.yml").read_bytes()
     sq = script_questionary(
         monkeypatch,
-        [
-            ("text", "docs host(s)", "10.0.0.5"),
-            ("text", "workers (leave blank", ""),
-            ("text", "Public domain for docs", "docs.example.org"),
-            ("select", "Database configuration:", "DATABASE_URL"),
-            ("text", "DATABASE_URL", "postgres://docs"),
-            ("text", "REDIS_URL", "redis://redis:6379/0"),
-            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
-            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
-            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
-            ("text", "AWS_STORAGE_BUCKET_NAME", "docs-media"),
-            ("text", "AWS_S3_REGION_NAME (optional)", ""),
-            ("select", "Identity provider:", "keycloak"),
-            ("text", "Keycloak base URL", "https://idp.example.org"),
-            ("text", "Keycloak realm", "master"),
-            ("text", "OIDC_RP_CLIENT_ID", "docs-client-id"),
-            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
-            ("confirm", "Configure transactional email (SMTP) settings?", False),
-            ("confirm", "cadvisor", True),  # docs core cadvisor
-            ("select", "Bootstrap yprovider now?", "Reuse existing in the repo"),
-        ],
+        docs_first_run_script(
+            secret_backend=False, yprovider="Reuse existing in the repo"
+        ),
     )
 
     bootstrap.bootstrap("docs", "prod")
@@ -1940,31 +1678,8 @@ def test_bootstrap_docs_yprovider_external_prompts_endpoints(repo, monkeypatch):
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
-        [
-            ("select", "Secret backend:", "ansible-vault"),
-            ("text", "docs host(s)", "10.0.0.5"),
-            ("text", "workers (leave blank", ""),
-            ("text", "Public domain for docs", "docs.example.org"),
-            ("select", "Database configuration:", "DATABASE_URL"),
-            ("text", "DATABASE_URL", "postgres://docs"),
-            ("text", "REDIS_URL", "redis://redis:6379/0"),
-            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
-            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
-            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
-            ("text", "AWS_STORAGE_BUCKET_NAME", "docs-media"),
-            ("text", "AWS_S3_REGION_NAME (optional)", ""),
-            ("select", "Identity provider:", "keycloak"),
-            ("text", "Keycloak base URL", "https://idp.example.org"),
-            ("text", "Keycloak realm", "master"),
-            ("text", "OIDC_RP_CLIENT_ID", "docs-client-id"),
-            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
-            ("confirm", "Configure transactional email (SMTP) settings?", False),
-            ("confirm", "cadvisor", True),  # docs core cadvisor
-            (
-                "select",
-                "Bootstrap yprovider now?",
-                "Already deployed (enter URL + keys)",
-            ),
+        docs_first_run_script(yprovider="Already deployed (enter URL + keys)")
+        + [
             (
                 "text",
                 "yprovider endpoints (host:port, comma-separated)",
@@ -2012,31 +1727,7 @@ def test_bootstrap_docs_yprovider_skip_leaves_endpoints_empty(repo, monkeypatch)
     in the core caddy env. No yprovider unit is written, and the manifest
     records no yprovider unit at all (unlike "external")."""
     seed_creds(repo)
-    sq = script_questionary(
-        monkeypatch,
-        [
-            ("select", "Secret backend:", "ansible-vault"),
-            ("text", "docs host(s)", "10.0.0.5"),
-            ("text", "workers (leave blank", ""),
-            ("text", "Public domain for docs", "docs.example.org"),
-            ("select", "Database configuration:", "DATABASE_URL"),
-            ("text", "DATABASE_URL", "postgres://docs"),
-            ("text", "REDIS_URL", "redis://redis:6379/0"),
-            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
-            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
-            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
-            ("text", "AWS_STORAGE_BUCKET_NAME", "docs-media"),
-            ("text", "AWS_S3_REGION_NAME (optional)", ""),
-            ("select", "Identity provider:", "keycloak"),
-            ("text", "Keycloak base URL", "https://idp.example.org"),
-            ("text", "Keycloak realm", "master"),
-            ("text", "OIDC_RP_CLIENT_ID", "docs-client-id"),
-            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
-            ("confirm", "Configure transactional email (SMTP) settings?", False),
-            ("confirm", "cadvisor", True),  # docs core cadvisor
-            ("select", "Bootstrap yprovider now?", "No — bootstrap later"),
-        ],
-    )
+    sq = script_questionary(monkeypatch, docs_first_run_script())
 
     bootstrap.bootstrap("docs", "prod")
 
@@ -2138,20 +1829,12 @@ def test_bootstrap_projects_oidc_provider_switch_proconnect(repo, monkeypatch):
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
-        [
-            ("select", "Secret backend:", "ansible-vault"),
-            ("text", "projects host(s)", "10.0.0.7"),
-            ("text", "Public domain for projects", "projects.example.org"),
-            ("text", "DATABASE_URL", "postgresql://u:p@db/projects"),
-            ("select", "Identity provider:", "proconnect-integ"),
-            ("text", "OIDC_CLIENT_ID", "projects"),
-            ("password", "OIDC_CLIENT_SECRET", "oidcsecret"),
-            ("text", "ORGANIZATION_ID_CLAIM", ""),
-            ("confirm", "horizontal scaling", False),
-            ("confirm", "Configure S3 object storage", False),
-            ("confirm", "Configure transactional email", False),
-            ("confirm", "cadvisor", False),
-        ],
+        projects_first_run_script(
+            database_url="postgresql://u:p@db/projects",
+            oidc_provider="proconnect-integ",
+            s3=False,
+            cadvisor=False,
+        ),
     )
 
     bootstrap.bootstrap("projects", "prod")
@@ -2184,28 +1867,17 @@ def test_bootstrap_projects_custom_oidc_org_mode_and_smtp(repo, monkeypatch):
     monkeypatch.setattr(bootstrap.ui, "warn", warns.append)
     sq = script_questionary(
         monkeypatch,
-        [
-            ("select", "Secret backend:", "ansible-vault"),
-            ("text", "projects host(s)", "10.0.0.8"),
-            ("text", "Public domain for projects", "projects.example.org"),
-            ("text", "DATABASE_URL", "postgresql://u:p@db/projects"),
-            ("select", "Identity provider:", "custom"),
-            # trailing slash exercises the issuer rstrip normalisation
-            ("text", "OIDC issuer URL", "https://sso.example.org/realms/lst/"),
-            ("text", "OIDC_CLIENT_ID", "projects"),
-            ("password", "OIDC_CLIENT_SECRET", "oidcsecret"),
-            ("text", "ORGANIZATION_ID_CLAIM", "organization_id"),
-            ("confirm", "horizontal scaling", False),
-            ("confirm", "Configure S3 object storage", False),
-            ("confirm", "Configure transactional email", True),
-            ("text", "SMTP_HOST", "smtp.example.org"),
-            ("text", "SMTP_PORT", "587"),
-            ("confirm", "SMTP_SECURE", True),
-            ("text", "SMTP_USER", "mailer@example.org"),
-            ("password", "SMTP_PASSWORD", "smtppass"),
-            ("text", "SMTP_FROM", '"Projects" <noreply@example.org>'),
-            ("confirm", "cadvisor", False),
-        ],
+        # trailing slash on the custom issuer exercises the rstrip normalisation
+        projects_first_run_script(
+            host="10.0.0.8",
+            database_url="postgresql://u:p@db/projects",
+            oidc_provider="custom",
+            custom_issuer="https://sso.example.org/realms/lst/",
+            org_claim="organization_id",
+            s3=False,
+            smtp=True,
+            cadvisor=False,
+        ),
     )
 
     bootstrap.bootstrap("projects", "prod")
@@ -2240,29 +1912,17 @@ def test_bootstrap_projects_scaling_redis_enforces_s3(repo, monkeypatch):
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
-        [
-            ("select", "Secret backend:", "ansible-vault"),
-            ("text", "projects host(s)", "10.0.0.7, 10.0.0.8"),
-            ("text", "Public domain for projects", "projects.example.org"),
-            ("text", "DATABASE_URL", "postgresql://u:p@db/projects"),
-            ("select", "Identity provider:", "keycloak"),
-            ("text", "Keycloak base URL", "https://idp.example.org"),
-            ("text", "Keycloak realm", "st"),
-            ("text", "OIDC_CLIENT_ID", "projects"),
-            ("password", "OIDC_CLIENT_SECRET", "oidcsecret"),
-            ("text", "ORGANIZATION_ID_CLAIM", ""),
-            ("confirm", "horizontal scaling", True),
-            ("text", "REDIS_URL", "redis://:pw@redis.example.org:6379/0"),
-            # no ("confirm", "Configure S3 object storage") — skipped when scaling
-            ("text", "S3_ENDPOINT", "https://s3.fr-par.scw.cloud"),
-            ("text", "S3_REGION", ""),
-            ("text", "S3_ACCESS_KEY_ID", "AKID"),
-            ("password", "S3_SECRET_ACCESS_KEY", "s3secret"),
-            ("text", "S3_BUCKET", "projects"),
-            ("confirm", "S3_FORCE_PATH_STYLE", True),
-            ("confirm", "Configure transactional email", False),
-            ("confirm", "cadvisor", False),
-        ],
+        # no ("confirm", "Configure S3 object storage") — skipped when scaling;
+        # S3_REGION is blank here, unlike the builder's "fr-par" default.
+        with_answers(
+            projects_first_run_script(
+                host="10.0.0.7, 10.0.0.8",
+                database_url="postgresql://u:p@db/projects",
+                scaling=True,
+                cadvisor=False,
+            ),
+            {"S3_REGION": ""},
+        ),
     )
 
     bootstrap.bootstrap("projects", "prod")
@@ -2274,3 +1934,59 @@ def test_bootstrap_projects_scaling_redis_enforces_s3(repo, monkeypatch):
     pvault = vault.decrypt_to_dict(paths.vault_path("projects", "prod", "projects"))
     assert pvault["vault_redis_url"] == "redis://:pw@redis.example.org:6379/0"
     assert pvault["vault_s3_secret_access_key"] == "s3secret"
+
+
+def _render_caddy_parts(protocol: str, host: str, **names) -> tuple[str, str]:
+    """Evaluate the two expressions like Ansible does, with its urlsplit filter."""
+    from urllib.parse import urlsplit as _urlsplit
+
+    import jinja2
+
+    env = jinja2.Environment()
+    env.filters["urlsplit"] = lambda url, part: getattr(_urlsplit(url), part)
+    return (
+        env.from_string(protocol).render(**names),
+        env.from_string(host).render(**names),
+    )
+
+
+def test_caddy_s3_parts_plain_endpoint():
+    assert bootstrap.caddy_s3_parts("https://s3.example.org:9000") == (
+        "https",
+        "s3.example.org:9000",
+    )
+    assert bootstrap.caddy_s3_parts("http://minio.local") == ("http", "minio.local")
+
+
+def test_valid_s3_endpoint_requires_a_scheme_on_a_literal():
+    assert bootstrap.valid_s3_endpoint("https://s3.example.org") is True
+    assert bootstrap.valid_s3_endpoint("http://minio.local:9000") is True
+    assert bootstrap.valid_s3_endpoint("{{ lookup('x', 'y') }}") is True
+    assert "http://" in bootstrap.valid_s3_endpoint("s3.example.org")
+    assert "http://" in bootstrap.valid_s3_endpoint("")
+
+
+def test_caddy_s3_parts_lookup_endpoint_defers_the_split_to_ansible():
+    endpoint = "https://{{ lookup('community.hashi_vault.hashi_vault', 'kv/data/drive:s3_host') }}"
+    protocol, host = bootstrap.caddy_s3_parts(endpoint)
+    assert "urlsplit('scheme')" in protocol
+    assert "urlsplit('netloc')" in host
+    assert "{{" not in host[2:]  # one expression, no nested braces
+
+    rendered = _render_caddy_parts(
+        protocol, host, lookup=lambda _plugin, _term: "minio.example.org:9000/"
+    )
+    assert rendered == ("https", "minio.example.org:9000")
+
+
+def test_caddy_s3_parts_lookup_endpoint_with_scheme_in_the_secret():
+    """The vault value feeds AWS_S3_ENDPOINT_URL, so it carries the scheme."""
+    protocol, host = bootstrap.caddy_s3_parts("{{ s3_endpoint }}")
+    assert (protocol, host) == (
+        "{{ (s3_endpoint) | urlsplit('scheme') }}",
+        "{{ (s3_endpoint) | urlsplit('netloc') }}",
+    )
+    rendered = _render_caddy_parts(
+        protocol, host, s3_endpoint="http://minio.example.org:9000"
+    )
+    assert rendered == ("http", "minio.example.org:9000")

@@ -1,4 +1,4 @@
-"""`st-cli version` — print versions and warn on manifest/installed mismatch."""
+"""`st-cli version` — print the installed and pinned versions."""
 
 from __future__ import annotations
 
@@ -8,7 +8,11 @@ from .. import __version__ as CLI_VERSION
 
 
 def show_version() -> None:
-    """Print installed cli/collection versions; warn if .st-cli.yml disagrees."""
+    """Print the installed cli version and the .st-cli.yml pins.
+
+    The pin and upstream warnings come from the global callback
+    (``core.upstream.maybe_warn_upgrade``), like for every other subcommand.
+    """
     ui.info(f"st-cli (installed): {CLI_VERSION}")
     try:
         m = manifest.load_manifest()
@@ -18,8 +22,3 @@ def show_version() -> None:
     ui.info(
         f".st-cli.yml pins  : collection={m.collection_version} cli={m.cli_version}"
     )
-    if m.cli_version and m.cli_version != CLI_VERSION:
-        ui.warn(
-            f"Pinned cli {m.cli_version} != installed {CLI_VERSION}. "
-            "Run `st-cli upgrade` (or align versions) before deploying."
-        )

@@ -15,10 +15,6 @@ components:
     # component-level ansible vars derived from questionnaire answers ({DOMAIN} etc.)
     vars:
       st_drive_public_host: "{DOMAIN}"   # required by the drive role (healthcheck Host header)
-      # nginx S3 media proxy (derived from the S3 answers in bootstrap._ask_core)
-      st_drive_s3_protocol: "{S3_PROTOCOL}"
-      st_drive_s3_host: "{S3_HOST}"
-      st_drive_s3_bucket: "{S3_BUCKET}"
       # Run DB migrations only once across a multi-host deploy. Plays are serial:1,
       # so the role's run_once migrations task fires on every host — gate it to the
       # first play host. Braces are quadrupled so str.format emits literal {{ }}.
@@ -28,6 +24,10 @@ components:
         blob_var: st_drive_backend_env
         templates:
           - drive.backend.env.j2
+      caddy:
+        blob_var: st_drive_caddy_env
+        templates:
+          - drive.caddy.env.j2
   - key: collabora
     role: suitenumerique.st.drive
     user: drive

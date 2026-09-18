@@ -108,6 +108,7 @@ commit) :
 make version version=X.Y.Z                        # bump galaxy.yml + cli/pyproject.toml
                                                   # + cli/st_cli/__init__.py, and regenerate
                                                   # roles defaults/REFERENCE (make docs)
+                                                  # + resolve "next" flags in upgrades.yml
 make changelog.fragment name=release_summary      # then write the summary shown at the
                                                   # top of the changelog for this release
 make changelog.lint                               # validate all pending fragments
@@ -122,6 +123,10 @@ git push
 git tag X.Y.Z
 git push origin tag X.Y.Z
 ```
+
+A feature branch that adds a rebootstrap flag writes `version: "next"` in
+`cli/st_cli/core/resources/upgrades.yml`. `make version` replaces every
+`next` with the release version, and fails when one remains.
 
 The collection and `st-cli` share one version — `make version` keeps the three
 version sources in sync (`st-cli version` warns when the installed CLI and the

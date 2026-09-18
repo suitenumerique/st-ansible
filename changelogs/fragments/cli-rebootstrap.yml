@@ -1,0 +1,6 @@
+minor_changes:
+  - "cli: ``st-cli bootstrap`` on an existing unit replays the questionnaire pre-filled from the committed tree and merges the result. Secrets are never rotated."
+  - "cli: ``upgrades.yml`` declares per-release rebootstrap flags (``apps``, ``components``, ``full_replay``, ``warnings``) and a ``baseline`` stamp. ``doctor`` reports them, ``deploy`` refuses to run until they are cleared, ``st-cli upgrade`` replays the flagged units and prints the manual steps."
+  - "cli: ``st-cli upgrade`` no longer runs ``pipx upgrade`` itself. It prints the install command and stops."
+  - "cli: ``doctor`` diffs the committed env blobs against the current templates and no longer reports ``st_*`` vars absent from the role spec."
+  - "cli: ``@openbao()`` markers typed into a provider prompt are expanded. ``st-cli version`` prints the pin warning once."

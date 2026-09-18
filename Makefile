@@ -51,6 +51,7 @@ build: clean
 	ansible-galaxy collection build --output-path build --force
 
 # Bump the collection + CLI version everywhere: make version version=0.0.23
+# `make version` also resolves every "next" flag in upgrades.yml to this version.
 .PHONY: version
 version:
 ifndef version
@@ -60,6 +61,8 @@ endif
 	sed -i -E 's/^version: .*/version: $(version)/' galaxy.yml
 	sed -i -E 's/^version = ".*"/version = "$(version)"/' cli/pyproject.toml
 	sed -i -E 's/^__version__ = ".*"/__version__ = "$(version)"/' cli/st_cli/__init__.py
+	sed -i -E 's/^(\s*(-\s+)?version:\s*)["'"'"']?next["'"'"']?(\s*(#.*)?)$$/\1"$(version)"\3/' cli/st_cli/core/resources/upgrades.yml
+	@! grep -Eq '^\s*(-\s+)?version:\s*["'"'"']?next\b' cli/st_cli/core/resources/upgrades.yml || { echo "ERROR: an upgrades.yml flag still has version next"; exit 1; }
 	$(MAKE) docs
 
 # Scaffold a changelog fragment: make changelog.fragment name=fix-rspamd-port

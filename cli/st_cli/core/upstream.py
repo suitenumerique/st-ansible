@@ -1,12 +1,14 @@
-"""Best-effort upstream-version check.
+"""Best-effort upstream-version check, plus the `.st-cli.yml` pin check.
 
-Before any subcommand, ask the collection repo (via anonymous
-``git ls-remote --tags``) for the highest semver tag and, if the running CLI is
-behind, **warn** the user to run ``upgrade``. The check is **best-effort
-and non-fatal**: any failure (offline, git missing, timeout, parse error) is
-swallowed silently and the original command proceeds untouched. The check
-never prompts, never auto-runs ``upgrade``, and never raises out of the
-callback — it only emits a ``ui.warn``.
+Before any subcommand, ``maybe_warn_upgrade`` first compares the installed
+CLI against the `.st-cli.yml` pin (``core/pin.py``), then asks the collection
+repo (via anonymous ``git ls-remote --tags``) for the highest semver tag and,
+if the running CLI is behind, **warns** the user to pull a newer build. Both
+checks are **best-effort and non-fatal**: any failure (offline, git missing,
+timeout, parse error, no manifest) is swallowed silently and the original
+command proceeds untouched. Neither check ever prompts, never auto-runs
+``upgrade``, and never raises out of the callback — each only emits a
+``ui.warn``.
 
 A small JSON cache under ``$XDG_CACHE_HOME/st-cli/upstream.json`` (default
 ``~/.cache/st-cli/upstream.json``) avoids hitting the repo on every invocation
@@ -23,8 +25,9 @@ import sys
 import time
 from pathlib import Path
 
-from .. import __version__
-from . import ui
+import st_cli
+
+from . import manifest, pin, ui
 
 _REPO = "https://github.com/suitenumerique/st-ansible.git"
 _TTL = 6 * 3600  # seconds
@@ -130,7 +133,7 @@ def is_behind(latest: str | None) -> bool | None:
     """
     if latest is None:
         return None
-    cur = _parse_version(__version__)
+    cur = _parse_version(st_cli.__version__)
     up = _parse_version(latest)
     if cur is None or up is None:
         return None
@@ -149,15 +152,38 @@ def owning_pipx() -> str | None:
     return shutil.which("pipx")
 
 
+def install_hint() -> str:
+    """Return the command that installs a newer st-cli build, no backticks.
+
+    Returns ``pipx upgrade st-cli`` when pipx owns this install
+    (``owning_pipx``), else the container-image pull command.
+    """
+    if owning_pipx():
+        return "pipx upgrade st-cli"
+    return "docker pull ghcr.io/suitenumerique/st-cli:latest"
+
+
 def maybe_warn_upgrade(invoked_subcommand: str | None) -> None:
-    """Best-effort: if a newer upstream version exists, warn to upgrade.
+    """Best-effort: warn about a stale CLI, against the pin and against upstream.
 
     Never raises. Warn-only — it never prompts, never auto-runs
     ``upgrade``, and never exits. Any failure is swallowed silently so the
-    original command proceeds untouched. The hint branches on pipx ownership
-    (``owning_pipx``): when pipx manages this install, ``st-cli upgrade``
-    alone works; otherwise (the container image), the user must pull a new
-    image first.
+    original command proceeds untouched.
+
+    Checks, in order: the installed CLI against the `.st-cli.yml` pin
+    (``core/pin.py``), then the installed CLI against the latest upstream
+    release. A CLI older than the pin: the function returns here. The
+    operator must install the pinned version first. A CLI newer than the
+    pin warns to run ``st-cli upgrade`` to align the repo, unless the CLI
+    is also behind upstream — ``upgrade`` refuses to run in that case, so
+    the function skips that warning and lets the upstream message below
+    name the fix instead. Either way, the function still runs the
+    upstream check after the pin check.
+
+    Each warning names one action only. The upstream message names only
+    the pull command. Once the pull makes the installed CLI newer than
+    the pin, the next command shows the ``st-cli upgrade`` hint. The two
+    steps thus appear one after the other, across two commands.
     """
     if os.environ.get("ST_CLI_NO_UPSTREAM_CHECK"):
         return
@@ -165,16 +191,32 @@ def maybe_warn_upgrade(invoked_subcommand: str | None) -> None:
     if invoked_subcommand in (None, "upgrade"):
         return
 
+    try:
+        m = manifest.load_manifest()
+    except Exception:
+        m = None
+
     latest = get_latest_cached()
-    if not is_behind(latest):
+    behind = is_behind(latest)
+
+    if m is not None:
+        state = pin.compare(m)
+        if state is pin.PinState.CLI_OLDER:
+            ui.warn(
+                f"st-cli {st_cli.__version__} is older than the .st-cli.yml pin "
+                f"{m.cli_version} — run `{install_hint()}`."
+            )
+            return
+        if state is pin.PinState.CLI_NEWER and behind is not True:
+            ui.warn(
+                f"st-cli {st_cli.__version__} is newer than the .st-cli.yml pin "
+                f"{m.cli_version} — run `st-cli upgrade` to align the repo."
+            )
+
+    if not behind:
         return
 
-    if owning_pipx():
-        ui.warn(
-            f"st-cli {__version__} is behind upstream {latest} — run `st-cli upgrade`."
-        )
-    else:
-        ui.warn(
-            f"st-cli {__version__} is behind upstream {latest}, run "
-            "`docker pull ghcr.io/suitenumerique/st-cli:latest` and then `st-cli upgrade`."
-        )
+    ui.warn(
+        f"st-cli {st_cli.__version__} is behind upstream {latest} — run "
+        f"`{install_hint()}`."
+    )

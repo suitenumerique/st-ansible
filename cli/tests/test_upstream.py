@@ -13,7 +13,8 @@ import time
 import types
 
 import st_cli
-from st_cli.core import upstream
+from st_cli.core import manifest, upstream
+from st_cli.core.models import StCliManifest
 
 
 def _enable_upstream(tmp_path, monkeypatch):
@@ -130,7 +131,7 @@ def test_owning_pipx_no_metadata_returns_none(tmp_path, mocker, monkeypatch):
 def test_maybe_warn_upgrade_behind_no_pipx_warns_docker_pull(
     tmp_path, mocker, monkeypatch
 ):
-    """Behind, no pipx → ui.warn points at `docker pull …:latest`; no
+    """Behind, no pipx → ui.warn names only `docker pull …:latest`; no
     questionary prompt, no upgrade call, no raise (fires regardless of isatty)."""
     _enable_upstream(tmp_path, monkeypatch)
     newer = _newer(st_cli.__version__)  # always strictly greater than installed
@@ -151,14 +152,14 @@ def test_maybe_warn_upgrade_behind_no_pipx_warns_docker_pull(
     assert st_cli.__version__ in msg
     assert newer in msg
     assert "docker pull ghcr.io/suitenumerique/st-cli:latest" in msg
-    assert "st-cli upgrade" in msg
+    assert "st-cli upgrade" not in msg
 
 
-def test_maybe_warn_upgrade_behind_with_pipx_warns_plain_upgrade(
+def test_maybe_warn_upgrade_behind_with_pipx_warns_pipx_upgrade_only(
     tmp_path, mocker, monkeypatch
 ):
-    """Behind, pipx present → ui.warn tells the user to run `st-cli upgrade`,
-    with no docker-pull mention."""
+    """Behind, pipx present → ui.warn names only the concrete self-upgrade
+    (`pipx upgrade st-cli`); no docker-pull mention, no `st-cli upgrade` hint."""
     _enable_upstream(tmp_path, monkeypatch)
     newer = _newer(st_cli.__version__)
     mocker.patch.object(upstream, "get_latest_cached", return_value=newer)
@@ -171,7 +172,8 @@ def test_maybe_warn_upgrade_behind_with_pipx_warns_plain_upgrade(
     msg = warn_spy.call_args[0][0]
     assert st_cli.__version__ in msg
     assert newer in msg
-    assert "st-cli upgrade" in msg
+    assert "pipx upgrade st-cli" in msg
+    assert "st-cli upgrade" not in msg
     assert "docker pull" not in msg
 
 
@@ -226,6 +228,135 @@ def test_maybe_warn_upgrade_help_subcommand_skips(tmp_path, mocker, monkeypatch)
     upstream.maybe_warn_upgrade(None)
 
     spy.assert_not_called()
+
+
+# --------------------------------------------------------------------------- pin cases (maybe_warn_upgrade)
+
+
+def _save_pin(cli_version: str) -> None:
+    manifest.save_manifest(StCliManifest("0.0.19", cli_version, []))
+
+
+def test_maybe_warn_upgrade_pin_aligned_upstream_newer_warns_once(
+    repo, mocker, monkeypatch
+):
+    """Pin aligned with the installed CLI, upstream newer: one warning that
+    names only the pull command. The `st-cli upgrade` hint follows on the
+    next command, once the pull makes the CLI newer than the pin."""
+    _enable_upstream(repo, monkeypatch)
+    _save_pin(st_cli.__version__)
+    upstream_latest = _newer(st_cli.__version__)
+    mocker.patch.object(upstream, "get_latest_cached", return_value=upstream_latest)
+    mocker.patch.object(upstream, "owning_pipx", return_value=None)
+    warn_spy = mocker.patch.object(upstream.ui, "warn")
+
+    upstream.maybe_warn_upgrade("deploy")
+
+    warn_spy.assert_called_once()
+    msg = warn_spy.call_args[0][0]
+    assert "is behind upstream" in msg
+    assert upstream_latest in msg
+    assert "docker pull ghcr.io/suitenumerique/st-cli:latest" in msg
+    assert "st-cli upgrade" not in msg
+
+
+def test_maybe_warn_upgrade_cli_older_than_pin_warns_pull_hint_only(
+    repo, mocker, monkeypatch
+):
+    """CLI older than the pin: warns the install hint; skips the upstream message."""
+    _enable_upstream(repo, monkeypatch)
+    pinned = _newer(st_cli.__version__)
+    _save_pin(pinned)
+    mocker.patch.object(upstream, "owning_pipx", return_value=None)
+    # Upstream is also newer, to prove this branch never reaches the upstream check.
+    mocker.patch.object(upstream, "get_latest_cached", return_value=_newer(pinned))
+    warn_spy = mocker.patch.object(upstream.ui, "warn")
+
+    upstream.maybe_warn_upgrade("deploy")
+
+    warn_spy.assert_called_once()
+    msg = warn_spy.call_args[0][0]
+    assert st_cli.__version__ in msg
+    assert pinned in msg
+    assert "older than the .st-cli.yml pin" in msg
+    assert "docker pull ghcr.io/suitenumerique/st-cli:latest" in msg
+    assert "is behind upstream" not in msg
+
+
+def test_maybe_warn_upgrade_cli_newer_than_pin_and_behind_upstream_warns_upstream_only(
+    repo, mocker, monkeypatch
+):
+    """CLI newer than the pin but also behind upstream: only the upstream
+    message fires — the CLI_NEWER `st-cli upgrade` hint would be dead
+    (`upgrade` refuses to run while behind upstream), so it is skipped."""
+    _enable_upstream(repo, monkeypatch)
+    _save_pin("0.0.1")  # well below the installed version
+    upstream_latest = _newer(st_cli.__version__)
+    mocker.patch.object(upstream, "get_latest_cached", return_value=upstream_latest)
+    mocker.patch.object(upstream, "owning_pipx", return_value=None)
+    warn_spy = mocker.patch.object(upstream.ui, "warn")
+
+    upstream.maybe_warn_upgrade("deploy")
+
+    warn_spy.assert_called_once()
+    msg = warn_spy.call_args[0][0]
+    assert "is behind upstream" in msg
+    assert upstream_latest in msg
+    assert "newer than the .st-cli.yml pin" not in msg
+    assert "st-cli upgrade" not in msg
+
+
+def test_maybe_warn_upgrade_cli_newer_than_pin_upstream_uptodate_warns_pin_only(
+    repo, mocker, monkeypatch
+):
+    """CLI newer than the pin, upstream up to date: a single warning to
+    align the repo with `st-cli upgrade`."""
+    _enable_upstream(repo, monkeypatch)
+    _save_pin("0.0.1")  # well below the installed version
+    mocker.patch.object(upstream, "get_latest_cached", return_value=st_cli.__version__)
+    mocker.patch.object(upstream, "owning_pipx", return_value=None)
+    warn_spy = mocker.patch.object(upstream.ui, "warn")
+
+    upstream.maybe_warn_upgrade("deploy")
+
+    warn_spy.assert_called_once()
+    msg = warn_spy.call_args[0][0]
+    assert "newer than the .st-cli.yml pin" in msg
+    assert "0.0.1" in msg
+    assert "st-cli upgrade" in msg
+    assert "is behind upstream" not in msg
+
+
+def test_maybe_warn_upgrade_no_manifest_skips_pin_keeps_upstream(
+    repo, mocker, monkeypatch
+):
+    """No .st-cli.yml: the pin cases are skipped; the upstream check still runs."""
+    _enable_upstream(repo, monkeypatch)
+    upstream_latest = _newer(st_cli.__version__)
+    mocker.patch.object(upstream, "get_latest_cached", return_value=upstream_latest)
+    mocker.patch.object(upstream, "owning_pipx", return_value=None)
+    warn_spy = mocker.patch.object(upstream.ui, "warn")
+
+    upstream.maybe_warn_upgrade("deploy")
+
+    warn_spy.assert_called_once()
+    msg = warn_spy.call_args[0][0]
+    assert "is behind upstream" in msg
+    assert "pin" not in msg
+
+
+def test_maybe_warn_upgrade_manifest_load_failure_never_raises(
+    repo, mocker, monkeypatch
+):
+    """A manifest.load_manifest failure of any kind never breaks the check."""
+    _enable_upstream(repo, monkeypatch)
+    mocker.patch.object(manifest, "load_manifest", side_effect=RuntimeError("boom"))
+    mocker.patch.object(upstream, "get_latest_cached", return_value=None)
+    warn_spy = mocker.patch.object(upstream.ui, "warn")
+
+    upstream.maybe_warn_upgrade("deploy")  # must not raise
+
+    warn_spy.assert_not_called()
 
 
 # --------------------------------------------------------------------------- cache + callback

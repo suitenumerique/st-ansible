@@ -37,21 +37,42 @@ def test_render_meet_backend_keeps_vault_refs():
     assert "LIVEKIT_API_KEY={{ vault_livekit_api_key }}" in body
 
 
-def test_render_drive_backend_env_references_s3_vars():
+def test_render_drive_backend_env_concrete_s3_values():
+    """drive keeps the real literal endpoint/bucket in the backend blob (no
+    st_drive_s3_* indirection) — mirrors
+    test_render_meet_backend_env_concrete_s3_values."""
     blobs = envrender.render_env(
         "drive",
         "drive",
         {
-            "AWS_S3_ENDPOINT_URL": "{{ st_drive_s3_protocol }}://{{ st_drive_s3_host }}",
-            "AWS_STORAGE_BUCKET_NAME": "{{ st_drive_s3_bucket }}",
+            "AWS_S3_ENDPOINT_URL": "https://s3.fr-par.scw.cloud",
+            "AWS_STORAGE_BUCKET_NAME": "drive-media",
         },
     )
     body = blobs["st_drive_backend_env"]
-    assert (
-        "AWS_S3_ENDPOINT_URL={{ st_drive_s3_protocol }}://{{ st_drive_s3_host }}"
-        in body
+    assert "AWS_S3_ENDPOINT_URL=https://s3.fr-par.scw.cloud" in body
+    assert "AWS_STORAGE_BUCKET_NAME=drive-media" in body
+    assert "st_drive_s3" not in body
+
+
+def test_render_drive_caddy_env_s3_values():
+    """drive's Caddy edge proxies media straight to S3 via CADDY_S3_* container
+    env vars (fed through the caddy_env file), not st_drive_s3_* ansible vars —
+    mirrors test_render_meet_caddy_env_s3_values but for drive."""
+    blobs = envrender.render_env(
+        "drive",
+        "drive",
+        {
+            "CADDY_S3_PROTOCOL": "https",
+            "CADDY_S3_HOST": "minio.example.org:9000",
+            "CADDY_S3_BUCKET": "drive-media",
+        },
     )
-    assert "AWS_STORAGE_BUCKET_NAME={{ st_drive_s3_bucket }}" in body
+    body = blobs["st_drive_caddy_env"]
+    assert "CADDY_S3_PROTOCOL=https" in body
+    assert "CADDY_S3_HOST=minio.example.org:9000" in body
+    assert "CADDY_S3_BUCKET=drive-media" in body
+    assert "CADDY_YPROVIDER_ENDPOINTS" not in body
 
 
 def test_render_meet_backend_env_concrete_s3_values():
