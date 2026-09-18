@@ -1,0 +1,5 @@
+minor_changes:
+  - "Update dependency suitenumerique/drive to v0.22.0"
+  - "Update docker.io/collabora/code Docker tag to 26.04.3.2.1"
+  - >-
+    drive: the collabora compose file no longer sets a healthcheck. The 26.04.3 image has no shell, and podman-compose 1.3.0 wraps every compose test in ``/bin/sh -c``. Podman applies the ``HEALTHCHECK`` of the image (``coolwsd --probe``) instead. A custom ``st_drive_collabora_compose_template`` must drop its ``healthcheck`` block too.

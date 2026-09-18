@@ -109,12 +109,11 @@ same public HTTPS URLs the browser uses, and TLS validates normally.
          - "{{ st_drive_collabora_port }}:9980"
        extra_hosts:
          - "{{ st_drive_public_host }}:host-gateway"   # <-- Drive's public domain
-       healthcheck:
-         test: bash -c 'exec 3<>/dev/tcp/localhost/9980'
-         interval: 1m
-         timeout: 3s
-         start_period: 10s
    ```
+
+   Do not add a `healthcheck` to the collabora service. The image has no shell and
+   podman-compose 1.3.0 wraps every compose test in `/bin/sh -c`. Podman applies the
+   `HEALTHCHECK` of the image (`coolwsd --probe`) when the compose file sets none.
 
 2. Point the role at your overrides and keep the WOPI URLs public:
 

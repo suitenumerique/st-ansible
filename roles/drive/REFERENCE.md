@@ -27,21 +27,21 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 | st_drive_registries | Optional private container registries to login the `drive` user onto. | list of 'dict' | no |  |
 | st_drive_frontend_image | Image repository for the drive frontend. | str | no | docker.io/lasuite/drive-frontend |
 | st_drive_backend_image | Image repository for the drive backend. | str | no | docker.io/lasuite/drive-backend |
-| st_drive_tag | Tag of the drive docker images to deploy. | str | no | v0.19.0 |
+| st_drive_tag | Tag of the drive docker images to deploy. | str | no | v0.22.0 |
 | st_drive_enabled | Triggers the installation of the drive application. | bool | no | False |
 | st_drive_dir | Remote path to the base directory for drive app. | str | no | /opt/drive/drive |
-| st_drive_port | The host published port for the drive frontend. | str | no | 50100 |
+| st_drive_port | The host published port for the drive caddy edge. | str | no | 50100 |
 | st_drive_rollback_enabled | Whether or not to trigger the rollback tasks if the drive deployment fails. | bool | no | False |
-| st_drive_nginx_template | Local path to the custom template to use for drive nginx configuration file. | str | no | drive/nginx.conf.j2 |
-| st_drive_s3_protocol | The S3 compatible storage protocol used for media storage. | str | no | https |
-| st_drive_s3_host | The S3 compatible storage host used for media storage. | str | no |  |
-| st_drive_s3_bucket | The S3 compatible storage bucket used for media storage. | str | no |  |
 | st_drive_compose_template | Local path to the custom template to use for drive compose file. | str | no | drive/compose.yaml.j2 |
 | st_drive_backend_env_template | Local path to the custom template to use for drive backend env file. | str | no | drive/backend_env.j2 |
 | st_drive_backend_env | Content of the default backend_env_template, not used if st_drive_backend_env_template is defined. | str | no |  |
 | st_drive_backend_run_migrations | Whether to run database migrations on drive backend startup. | bool | no | True |
 | st_drive_frontend_env_template | Local path to the custom template to use for drive frontend env file. | str | no | drive/frontend_env.j2 |
 | st_drive_frontend_env | Content of the default frotnend_env_template, not used if st_drive_frotnend_env_template is defined. | str | no |  |
+| st_drive_caddy_env_template | Local path to the custom template to use for drive caddy env file. | str | no | drive/caddy_env.j2 |
+| st_drive_caddy_env | Content of the default caddy_env_template, not used if st_drive_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST and CADDY_S3_BUCKET. | str | no |  |
+| st_drive_caddy_image | Image repository for the drive caddy reverse-proxy. | str | no | docker.io/caddy |
+| st_drive_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | 2.11.4-alpine |
 | st_drive_workers_enabled | Triggers the installation of the drive workers | bool | no | False |
 | st_drive_workers_dir | Remote path to the base directory for drive workers. | str | no | /opt/drive/workers |
 | st_drive_workers_env_template | Local path to the custom template to use for drive workers env file. | str | no | workers/env.j2 |
@@ -50,7 +50,7 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 | st_drive_workers_compose_template | Local path to the custom template to use for workers compose file. | str | no | workers/compose.yaml.j2 |
 | st_drive_collabora_enabled | Triggers the installation of collabora. | bool | no | False |
 | st_drive_collabora_image | Image repository for collabora. | str | no | docker.io/collabora/code |
-| st_drive_collabora_tag | Tag of the collabora docker image to deploy. | str | no | 26.04.2.1.1 |
+| st_drive_collabora_tag | Tag of the collabora docker image to deploy. | str | no | 26.04.3.2.1 |
 | st_drive_collabora_dir | Remote path to the base directory for collabora app. | str | no | /opt/drive/collabora |
 | st_drive_collabora_env_template | Local path to the custom template to use for collabora env file. | str | no | collabora/env.j2 |
 | st_drive_collabora_env | Content of the default collabora_env_template, not used if st_drive_collabora_env_template is defined. | str | no |  |

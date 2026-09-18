@@ -3,22 +3,34 @@
 
 name: drive
 services:
-  frontend:
-    container_name: drive-frontend
-    image: "{{ st_drive_frontend_image }}:{{ st_drive_tag }}"
-    env_file: ./frontend_env
+  caddy:
+    container_name: drive-caddy
+    image: "{{ st_drive_caddy_image }}:{{ st_drive_caddy_tag }}"
+    env_file: ./caddy_env
     volumes:
-    - {{ st_drive_dir }}/nginx.conf:/etc/nginx/conf.d/default.conf
+      - {{ st_drive_dir }}/Caddyfile:/etc/caddy/Caddyfile:ro
     ports:
-      - "{{ st_drive_port }}:3000"
+      - "{{ st_drive_port }}:50100"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/healthcheck"]
-      interval: 1s
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:50100/__lbheartbeat__"]
+      interval: 10s
       timeout: 5s
       retries: 3
     depends_on:
       backend:
         condition: service_healthy
+      frontend:
+        condition: service_healthy
+
+  frontend:
+    container_name: drive-frontend
+    image: "{{ st_drive_frontend_image }}:{{ st_drive_tag }}"
+    env_file: ./frontend_env
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   backend:
     container_name: drive-backend
@@ -26,6 +38,7 @@ services:
     env_file: ./backend_env
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "--header", "'Host: {{ st_drive_public_host }}'", "http://127.0.0.1:8000/__heartbeat__"]
-      interval: 1s
-      timeout: 5s
+      interval: 30s
+      timeout: 15s
       retries: 3
+      start_period: 10s

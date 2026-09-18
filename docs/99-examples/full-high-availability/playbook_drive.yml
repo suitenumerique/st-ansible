@@ -39,4 +39,9 @@
         st_drive_frontend_env: |
           NEXT_PUBLIC_API_ORIGIN=https://drive.example.com
           # ... check https://github.com/suitenumerique/drive/blob/main/docs/env.md
+        # The caddy media proxy must target the same S3 endpoint and bucket as the backend.
+        st_drive_caddy_env: |
+          CADDY_S3_PROTOCOL=https
+          CADDY_S3_HOST=s3.example.com
+          CADDY_S3_BUCKET=drive-media-storage
         st_drive_cadvisor_enabled: true

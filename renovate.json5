@@ -26,12 +26,17 @@
       matchManagers: ["pep621"],
       rangeStrategy: "pin",
     },
-    // cadvisor is pinned in 4 roles and valkey in 2 — collapse each into a
-    // single grouped PR instead of one per file.
+    // cadvisor is pinned in 4 roles, caddy in 3 and valkey in 2. Collapse each
+    // into a single grouped PR instead of one per file.
     {
       matchDatasources: ["docker"],
       matchPackageNames: ["ghcr.io/google/cadvisor"],
       groupName: "cadvisor",
+    },
+    {
+      matchDatasources: ["docker"],
+      matchPackageNames: ["docker.io/caddy"],
+      groupName: "caddy",
     },
     {
       matchDatasources: ["docker"],

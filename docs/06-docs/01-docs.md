@@ -33,8 +33,8 @@ docs-docspec (ghcr.io/docspecio/api), no published port
   └── backend-only .docx conversion for the import feature (http://docspec:4000/conversion)
 ```
 
-Unlike Drive, the edge is a caddy container, not the frontend's own nginx. Caddy owns the host
-port and dispatches each request to the backend, the frontend, S3, or the yprovider unit.
+Caddy owns the host port and dispatches each request to the backend, the frontend, S3, or the
+yprovider unit.
 
 ## Prerequisites
 

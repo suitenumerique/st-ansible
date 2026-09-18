@@ -14,9 +14,10 @@
         dest: "backend_env"
       - src: "{{ st_drive_frontend_env_template }}"
         dest: "frontend_env"
-      - src: "{{ st_drive_nginx_template }}"
-        dest: "nginx.conf"
-        mode: "0644"
+      - src: "{{ st_drive_caddy_env_template }}"
+        dest: "caddy_env"
+      - src: "drive/Caddyfile.j2"
+        dest: "Caddyfile"
 
 - name: "Play drive migrations."
   become: true

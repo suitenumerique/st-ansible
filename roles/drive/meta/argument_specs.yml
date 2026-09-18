@@ -30,7 +30,7 @@ argument_specs:
         type: "str"
         description: "Tag of the drive docker images to deploy."
         # renovate: datasource=github-releases depName=suitenumerique/drive versioning=semver
-        default: "v0.19.0"
+        default: "v0.22.0"
       st_drive_enabled:
         type: "bool"
         description: "Triggers the installation of the drive application."
@@ -41,26 +41,12 @@ argument_specs:
         default: "/opt/drive/drive"
       st_drive_port:
         type: "str"
-        description: "The host published port for the drive frontend."
+        description: "The host published port for the drive caddy edge."
         default: "50100"
       st_drive_rollback_enabled:
         type: "bool"
         description: "Whether or not to trigger the rollback tasks if the drive deployment fails."
         default: false
-      st_drive_nginx_template:
-        type: "str"
-        description: "Local path to the custom template to use for drive nginx configuration file."
-        default: "drive/nginx.conf.j2"
-      st_drive_s3_protocol:
-        type: "str"
-        description: "The S3 compatible storage protocol used for media storage."
-        default: "https"
-      st_drive_s3_host:
-        type: "str"
-        description: "The S3 compatible storage host used for media storage."
-      st_drive_s3_bucket:
-        type: "str"
-        description: "The S3 compatible storage bucket used for media storage."
       st_drive_compose_template:
         type: "str"
         description: "Local path to the custom template to use for drive compose file."
@@ -85,6 +71,25 @@ argument_specs:
         type: "str"
         description: "Content of the default frotnend_env_template, not used if st_drive_frotnend_env_template is defined."
         default: ''
+      st_drive_caddy_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for drive caddy env file."
+        default: "drive/caddy_env.j2"
+      st_drive_caddy_env:
+        type: "str"
+        description: "Content of the default caddy_env_template, not used if st_drive_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST and CADDY_S3_BUCKET."
+        default: ""
+      st_drive_caddy_image:
+        type: "str"
+        description: "Image repository for the drive caddy reverse-proxy."
+        default: "docker.io/caddy"
+      st_drive_caddy_tag:
+        type: "str"
+        description:
+          - "The tag of the caddy docker image to use."
+          - "See https://hub.docker.com/_/caddy/tags."
+        # renovate: datasource=docker depName=docker.io/caddy
+        default: "2.11.4-alpine"
       st_drive_workers_enabled:
         type: "bool"
         description: "Triggers the installation of the drive workers"
@@ -121,7 +126,7 @@ argument_specs:
         type: "str"
         description: "Tag of the collabora docker image to deploy."
         # renovate: datasource=docker depName=docker.io/collabora/code versioning=loose
-        default: "26.04.2.1.1"
+        default: "26.04.3.2.1"
       st_drive_collabora_dir:
         type: "str"
         description: "Remote path to the base directory for collabora app."

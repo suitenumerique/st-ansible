@@ -1,0 +1,4 @@
+minor_changes:
+  - "drive: a ``drive-caddy`` container now owns ``st_drive_port`` and proxies the frontend, the backend and the S3 media routes, like docs and meet. ``st_drive_nginx_template`` and the ``st_drive_s3_*`` vars are replaced by ``st_drive_caddy_env`` (``CADDY_S3_*``), ``st_drive_caddy_image`` and ``st_drive_caddy_tag``."
+  - "cli: the drive bootstrap writes ``st_drive_caddy_env`` and literal S3 values, like meet and docs. A 0.4.0 flag makes ``st-cli upgrade`` replay drive and print the manual steps."
+  - "docs: the example playbooks set the caddy env for drive and meet. Renovate groups the caddy bumps in one PR."

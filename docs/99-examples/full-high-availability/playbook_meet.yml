@@ -33,5 +33,14 @@
           DJANGO_SECRET_KEY=changeme
           DATABASE_URL=postgres://user:pass@db.example.com/meet
           REDIS_URL=redis://redis.example.com:6379
+          AWS_S3_ENDPOINT_URL=https://s3.example.com
+          AWS_S3_ACCESS_KEY_ID=meet
+          AWS_S3_SECRET_ACCESS_KEY=changeme
+          AWS_STORAGE_BUCKET_NAME=meet-media-storage
           # ... check https://github.com/suitenumerique/meet
+        # The caddy media proxy must target the same S3 endpoint and bucket as the backend.
+        st_meet_caddy_env: |
+          CADDY_S3_PROTOCOL=https
+          CADDY_S3_HOST=s3.example.com
+          CADDY_S3_BUCKET=meet-media-storage
         st_meet_cadvisor_enabled: true

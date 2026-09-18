@@ -9,19 +9,15 @@ st_drive_frontend_image: docker.io/lasuite/drive-frontend
 # Image repository for the drive backend.
 st_drive_backend_image: docker.io/lasuite/drive-backend
 # Tag of the drive docker images to deploy.
-st_drive_tag: v0.19.0
+st_drive_tag: v0.22.0
 # Triggers the installation of the drive application.
 st_drive_enabled: false
 # Remote path to the base directory for drive app.
 st_drive_dir: /opt/drive/drive
-# The host published port for the drive frontend.
+# The host published port for the drive caddy edge.
 st_drive_port: '50100'
 # Whether or not to trigger the rollback tasks if the drive deployment fails.
 st_drive_rollback_enabled: false
-# Local path to the custom template to use for drive nginx configuration file.
-st_drive_nginx_template: drive/nginx.conf.j2
-# The S3 compatible storage protocol used for media storage.
-st_drive_s3_protocol: https
 # Local path to the custom template to use for drive compose file.
 st_drive_compose_template: drive/compose.yaml.j2
 # Local path to the custom template to use for drive backend env file.
@@ -34,6 +30,15 @@ st_drive_backend_run_migrations: true
 st_drive_frontend_env_template: drive/frontend_env.j2
 # Content of the default frotnend_env_template, not used if st_drive_frotnend_env_template is defined.
 st_drive_frontend_env: ''
+# Local path to the custom template to use for drive caddy env file.
+st_drive_caddy_env_template: drive/caddy_env.j2
+# Content of the default caddy_env_template, not used if st_drive_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST and CADDY_S3_BUCKET.
+st_drive_caddy_env: ''
+# Image repository for the drive caddy reverse-proxy.
+st_drive_caddy_image: docker.io/caddy
+# The tag of the caddy docker image to use.
+# See https://hub.docker.com/_/caddy/tags.
+st_drive_caddy_tag: 2.11.4-alpine
 # Triggers the installation of the drive workers
 st_drive_workers_enabled: false
 # Remote path to the base directory for drive workers.
@@ -51,7 +56,7 @@ st_drive_collabora_enabled: false
 # Image repository for collabora.
 st_drive_collabora_image: docker.io/collabora/code
 # Tag of the collabora docker image to deploy.
-st_drive_collabora_tag: 26.04.2.1.1
+st_drive_collabora_tag: 26.04.3.2.1
 # Remote path to the base directory for collabora app.
 st_drive_collabora_dir: /opt/drive/collabora
 # Local path to the custom template to use for collabora env file.

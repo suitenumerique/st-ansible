@@ -22,12 +22,14 @@ user unit. All sub-apps are disabled by default and must be explicitly enabled.
 ## Container Stack
 
 ```text
-drive-frontend (docker.io/lasuite/drive-frontend)
-  └── nginx reverse proxy → drive-backend (docker.io/lasuite/drive-backend)
+drive-caddy (docker.io/caddy), published on the host
+  ├── /api/*, /external_api/*, /admin, /admin/*, /static/* → drive-backend (docker.io/lasuite/drive-backend)
+  ├── /media/preview/* → S3, forward_auth against drive-backend (inline preview)
+  ├── /media/* → S3, forward_auth against drive-backend (download, Content-Disposition attachment)
+  └── everything else → drive-frontend (docker.io/lasuite/drive-frontend, stock SPA nginx conf)
 ```
 
-The frontend runs nginx, serving the SPA and proxying API requests to the backend.
-A custom `nginx.conf` is mounted into the frontend container.
+Caddy owns the host port and dispatches each request to the backend, the frontend, or S3.
 
 ## Prerequisites
 
@@ -54,27 +56,35 @@ See [roles/drive/REFERENCE.md](../../roles/drive/REFERENCE.md) for the complete 
 | `st_drive_tag` | Docker image tag | see REFERENCE.md |
 | `st_drive_dir` | Application directory | `/opt/drive/drive` |
 | `st_drive_uid` | Unix UID for the drive user | `1101` |
-| `st_drive_port` | Host port for frontend | `50100` |
+| `st_drive_port` | Host port for the caddy edge | `50100` |
 | `st_drive_backend_env` | Backend environment content | _(empty)_ |
-| `st_drive_s3_protocol` | S3 storage protocol | `https` |
-| `st_drive_s3_host` | S3 storage host | **(required)** |
-| `st_drive_s3_bucket` | S3 storage bucket | **(required)** |
+| `st_drive_caddy_env` | Caddy env content: `CADDY_S3_PROTOCOL`, `CADDY_S3_HOST`, `CADDY_S3_BUCKET` for the media proxy | _(empty, required keys)_ |
 | `st_drive_backend_run_migrations` | Run Django migrations on deploy | `true` |
 
 ## Network & Ports
 
 | Variable | Default | Container port |
 |----------|---------|---------------|
-| `st_drive_port` | `50100` | 3000 |
+| `st_drive_port` | `50100` | 50100 (caddy) |
 
-The backend is not published to the host. It's only reachable from the frontend via the Podman bridge network.
+Caddy listens on `50100` inside its own container and is the only container published to the
+host. The frontend and backend are only reachable from caddy via the Podman bridge network.
+
+## S3 Media Auth
+
+Requests under `/media/*` and `/media/preview/*` are proxied straight to S3
+(`CADDY_S3_PROTOCOL` / `CADDY_S3_HOST` / `CADDY_S3_BUCKET`), but caddy first runs a
+`forward_auth` subrequest against the backend endpoint `/api/v1.0/items/media-auth/`. Only a
+request the backend approves reaches the object storage. `/media/*` adds a
+`Content-Disposition: attachment` header so the browser downloads the file; `/media/preview/*`
+omits it so the browser renders the file inline.
 
 ## Data & Volumes
 
 The drive application is stateless: it stores data in an external PostgreSQL database and uses S3-compatible storage
 for media files. No persistent bind mounts are needed for the core application.
 
-A custom `nginx.conf` is mounted into the frontend container at `/etc/nginx/conf.d/default.conf`.
+The `Caddyfile` is mounted read-only into the caddy container at `/etc/caddy/Caddyfile`.
 
 ## Database Migrations
 
@@ -91,8 +101,9 @@ st_drive_backend_run_migrations: "{{ true if inventory_hostname == ansible_play_
 
 You can either:
 
-- Set `st_drive_backend_env` / `st_drive_frontend_env` to provide env content inline
-- Set `st_drive_backend_env_template` / `st_drive_frontend_env_template` to use a custom template
+- Set `st_drive_backend_env` / `st_drive_frontend_env` / `st_drive_caddy_env` to provide env
+  content inline
+- Set the matching `_env_template` variable to use a custom template
 
 ## Troubleshooting
 
