@@ -1,0 +1,14 @@
+---
+- name: "Create pymta application."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "messages"
+    st_podman_application_name: "pymta"
+    st_podman_application_dir: "{{ st_messages_pymta_dir }}"
+    st_podman_application_rollback_enabled: "{{ st_messages_pymta_rollback_enabled }}"
+    st_podman_application_compose_template: "{{ st_messages_pymta_compose_template }}"
+    st_podman_application_files:
+      - src: "{{ st_messages_pymta_env_template }}"
+        dest: "env"

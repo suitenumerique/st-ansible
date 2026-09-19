@@ -64,5 +64,5 @@ dependencies:
     on: yprovider
     # COLLABORATION_SERVER_SECRET and Y_PROVIDER_API_KEY are owned by the docs
     # core (generated in _ask_core) and mirrored into yprovider's vault at
-    # deploy — the messages -> mta-in MDA_API_SECRET pattern.
+    # deploy — the messages -> pymta MDA_API_SECRET pattern.
     shared: []

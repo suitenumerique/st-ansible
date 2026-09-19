@@ -42,22 +42,42 @@ st_messages_workers_env: '{{ st_messages_backend_env }}'
 st_messages_workers_rollback_enabled: false
 # Local path to the custom template to use for messages workers compose file.
 st_messages_workers_compose_template: workers/compose.yaml.j2
-# Triggers the installation of the mta-in.
+# DEPRECATED (use st_messages_pymta_enabled): triggers the installation of the mta-in.
 st_messages_mta_in_enabled: false
-# Image repository for mta-in.
+# DEPRECATED (use st_messages_pymta_image): image repository for mta-in.
 st_messages_mta_in_image: ghcr.io/suitenumerique/messages-mta-in
-# Tag of the mta-in docker image to deploy.
+# DEPRECATED (use st_messages_pymta_tag): tag of the mta-in docker image to deploy.
 st_messages_mta_in_tag: 0.9.0
-# Remote path to the base directory for mta-in app.
+# DEPRECATED (use st_messages_pymta_dir): remote path to the base directory for mta-in app.
 st_messages_mta_in_dir: /opt/messages/mta-in
-# The host published port for the mta-in SMTP endpoint.
+# DEPRECATED (use st_messages_pymta_port): the host published port for the mta-in SMTP endpoint.
 st_messages_mta_in_port: '50425'
-# Local path to the custom template to use for mta-in env file.
+# DEPRECATED (use st_messages_pymta_env_template): local path to the custom template to use for mta-in env file.
 st_messages_mta_in_env_template: mta_in/env.j2
-# Local path to the custom template to use for mta-in compose file.
+# DEPRECATED (use st_messages_pymta_compose_template): local path to the custom template to use for mta-in compose file.
 st_messages_mta_in_compose_template: mta_in/compose.yaml.j2
-# Whether or not to trigger the rollback tasks if the mta-in deployment fails.
+# DEPRECATED (use st_messages_pymta_rollback_enabled): whether or not to trigger the rollback tasks if the mta-in deployment fails.
 st_messages_mta_in_rollback_enabled: false
+# Triggers the installation of pymta, the Python inbound MTA that replaces mta-in.
+st_messages_pymta_enabled: false
+# Image repository for pymta.
+st_messages_pymta_image: ghcr.io/suitenumerique/messages-mta-in-py
+# Tag of the pymta docker image to deploy.
+st_messages_pymta_tag: 0.9.0
+# Remote path to the base directory for pymta app.
+st_messages_pymta_dir: /opt/messages/pymta
+# The host port pymta listens on for SMTP (`PYMTA_SMTP_BIND_PORT`).
+# pymta runs with `network_mode: host`, so this is a port on the host network stack, not a published port.
+st_messages_pymta_port: '50425'
+# The host port of the pymta Prometheus metrics endpoint (`PYMTA_METRICS_BIND_PORT`).
+# The role binds it to `127.0.0.1` only. Set it to `0` to disable the endpoint.
+st_messages_pymta_metrics_port: '50426'
+# Local path to the custom template to use for pymta env file.
+st_messages_pymta_env_template: pymta/env.j2
+# Local path to the custom template to use for pymta compose file.
+st_messages_pymta_compose_template: pymta/compose.yaml.j2
+# Whether or not to trigger the rollback tasks if the pymta deployment fails.
+st_messages_pymta_rollback_enabled: false
 # Triggers the installation of the socks-proxy.
 st_messages_socks_proxy_enabled: false
 # Image repository for socks-proxy.

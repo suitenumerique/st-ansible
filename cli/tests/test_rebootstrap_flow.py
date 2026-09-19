@@ -309,7 +309,7 @@ def test_messages_round_trip_byte_identical(repo, monkeypatch):
             db_mode="discrete", blobs_offload=True, outbound="relay"
         )
         + [
-            ("select", "Bootstrap mta-in now?", "No — bootstrap later"),
+            ("select", "Bootstrap pymta now?", "No — bootstrap later"),
             ("select", "Bootstrap mpa now?", "No — bootstrap later"),
         ],
     )
@@ -322,7 +322,7 @@ def test_messages_round_trip_byte_identical(repo, monkeypatch):
     sq2 = accept_defaults(
         monkeypatch,
         [
-            ("select", "Bootstrap mta-in now?", "No — bootstrap later"),
+            ("select", "Bootstrap pymta now?", "No — bootstrap later"),
             ("select", "Bootstrap mpa now?", "No — bootstrap later"),
         ],
     )
@@ -506,7 +506,7 @@ def test_socks_proxy_replay_never_rotates_or_clobbers(repo, monkeypatch):
         monkeypatch,
         messages_first_run_script()
         + [
-            ("select", "Bootstrap mta-in now?", "No — bootstrap later"),
+            ("select", "Bootstrap pymta now?", "No — bootstrap later"),
             ("select", "Bootstrap mpa now?", "No — bootstrap later"),
             ("select", "Bootstrap socks-proxy now?", "Yes — bootstrap now"),
             ("text", "socks-proxy host(s)", "10.0.0.6"),
@@ -550,7 +550,7 @@ def test_socks_proxy_standalone_mint_then_full_replay_repairs_core_vault(
         monkeypatch,
         messages_first_run_script()
         + [
-            ("select", "Bootstrap mta-in now?", "No — bootstrap later"),
+            ("select", "Bootstrap pymta now?", "No — bootstrap later"),
             ("select", "Bootstrap mpa now?", "No — bootstrap later"),
             ("select", "Bootstrap socks-proxy now?", "No — bootstrap later"),
         ],
@@ -586,7 +586,7 @@ def test_socks_proxy_standalone_mint_then_full_replay_repairs_core_vault(
         [
             ("select", "Database configuration:", "DATABASE_URL"),
             ("select", "Outbound mail mode", "direct"),
-            ("select", "Bootstrap mta-in now?", "No — bootstrap later"),
+            ("select", "Bootstrap pymta now?", "No — bootstrap later"),
             ("select", "Bootstrap mpa now?", "No — bootstrap later"),
             (
                 "select",
@@ -1127,9 +1127,9 @@ def test_override_core_forces_dependency_replay_keeps_constructed_values(
         monkeypatch,
         messages_first_run_script()
         + [
-            ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
-            ("text", "mta-in host(s)", "10.0.0.7"),
-            ("text", "MYHOSTNAME", "mx.example.org"),
+            ("select", "Bootstrap pymta now?", "Yes — bootstrap now"),
+            ("text", "pymta host(s)", "10.0.0.7"),
+            ("text", "PYMTA_SMTP_HOSTNAME", "mx.example.org"),
             ("confirm", "cadvisor", True),
             ("select", "Bootstrap mpa now?", "Yes — bootstrap now"),
             ("text", "mpa host(s)", "10.0.0.8"),
@@ -1143,8 +1143,8 @@ def test_override_core_forces_dependency_replay_keeps_constructed_values(
     )
     bootstrap.bootstrap("messages", "prod")
 
-    mtain_vault_before = vault.decrypt_to_dict(
-        paths.vault_path("messages", "prod", "mta-in")
+    pymta_vault_before = vault.decrypt_to_dict(
+        paths.vault_path("messages", "prod", "pymta")
     )
     mpa_vault_before = vault.decrypt_to_dict(
         paths.vault_path("messages", "prod", "mpa")
@@ -1192,9 +1192,9 @@ def test_override_core_forces_dependency_replay_keeps_constructed_values(
             ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
             ("select", "Outbound mail mode", "direct"),
             ("confirm", "cadvisor", True),
-            # mta-in: no select; forced straight to the deploy branch.
-            ("text", "mta-in host(s)", ACCEPT_DEFAULT),
-            ("text", "MYHOSTNAME", ACCEPT_DEFAULT),
+            # pymta: no select; forced straight to the deploy branch.
+            ("text", "pymta host(s)", ACCEPT_DEFAULT),
+            ("text", "PYMTA_SMTP_HOSTNAME", ACCEPT_DEFAULT),
             ("confirm", "cadvisor", ACCEPT_DEFAULT),
             # mpa: no select either.
             ("text", "mpa host(s)", ACCEPT_DEFAULT),
@@ -1232,8 +1232,8 @@ def test_override_core_forces_dependency_replay_keeps_constructed_values(
     assert core_vault_after["vault_proxy_users"] == sp_vault_before["vault_proxy_users"]
 
     # the provider secrets themselves are never rotated by the override.
-    mtain_vault_after = vault.decrypt_to_dict(
-        paths.vault_path("messages", "prod", "mta-in")
+    pymta_vault_after = vault.decrypt_to_dict(
+        paths.vault_path("messages", "prod", "pymta")
     )
     mpa_vault_after = vault.decrypt_to_dict(paths.vault_path("messages", "prod", "mpa"))
     sp_vault_after = vault.decrypt_to_dict(
@@ -1241,11 +1241,11 @@ def test_override_core_forces_dependency_replay_keeps_constructed_values(
     )
     assert mpa_vault_after == mpa_vault_before
     assert sp_vault_after == sp_vault_before
-    # mta-in's own MDA_API_SECRET DOES change: it mirrors the core's, and the
+    # pymta's own MDA_API_SECRET DOES change: it mirrors the core's, and the
     # core's is a generated secret the override regenerates.
-    assert mtain_vault_after != mtain_vault_before
+    assert pymta_vault_after != pymta_vault_before
     assert (
-        mtain_vault_after["vault_mda_api_secret"]
+        pymta_vault_after["vault_mda_api_secret"]
         == core_vault_after["vault_mda_api_secret"]
     )
 
@@ -1260,7 +1260,7 @@ def test_override_core_recorded_external_dep_reprompts_constructed_value(
         monkeypatch,
         messages_first_run_script()
         + [
-            ("select", "Bootstrap mta-in now?", "No — bootstrap later"),
+            ("select", "Bootstrap pymta now?", "No — bootstrap later"),
             (
                 "select",
                 "Bootstrap mpa now?",
@@ -1315,7 +1315,7 @@ def test_override_core_recorded_external_dep_reprompts_constructed_value(
             ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
             ("select", "Outbound mail mode", "direct"),
             ("confirm", "cadvisor", True),
-            ("select", "Bootstrap mta-in now?", "No — bootstrap later"),
+            ("select", "Bootstrap pymta now?", "No — bootstrap later"),
             # mpa is recorded external; the default is "Keep external
             # (recorded)", picked via ACCEPT_DEFAULT.
             ("select", "Bootstrap mpa now?", ACCEPT_DEFAULT),
@@ -1818,7 +1818,7 @@ def test_blobs_encrypt_keys_multislot_survives_replay(repo, monkeypatch):
         monkeypatch,
         messages_first_run_script(blobs_offload=True)
         + [
-            ("select", "Bootstrap mta-in now?", "No — bootstrap later"),
+            ("select", "Bootstrap pymta now?", "No — bootstrap later"),
             ("select", "Bootstrap mpa now?", "No — bootstrap later"),
             ("select", "Bootstrap socks-proxy now?", "No — bootstrap later"),
         ],
@@ -1848,7 +1848,7 @@ def test_blobs_encrypt_keys_multislot_survives_replay(repo, monkeypatch):
         [
             ("select", "Database configuration:", "DATABASE_URL"),
             ("select", "Outbound mail mode", "direct"),
-            ("select", "Bootstrap mta-in now?", "No — bootstrap later"),
+            ("select", "Bootstrap pymta now?", "No — bootstrap later"),
             ("select", "Bootstrap mpa now?", "No — bootstrap later"),
             ("select", "Bootstrap socks-proxy now?", "No — bootstrap later"),
         ],
@@ -2275,7 +2275,7 @@ def test_silent_enter_through_messages_byte_identical_fresh_deps_skip_quietly(
             {"REGION_NAME": "fr-par"},
         )
         + [
-            ("select", "Bootstrap mta-in now?", "No — bootstrap later"),
+            ("select", "Bootstrap pymta now?", "No — bootstrap later"),
             ("select", "Bootstrap mpa now?", "No — bootstrap later"),
         ],
     )
@@ -2298,7 +2298,7 @@ def test_silent_enter_through_messages_byte_identical_fresh_deps_skip_quietly(
     assert (repo / "messages/prod/messages/vault.yml").read_bytes() == core_vault_before
 
     m2 = manifest.load_manifest()
-    assert not any(u.component in ("mta-in", "mpa") for u in m2.units)
+    assert not any(u.component in ("pymta", "mpa") for u in m2.units)
     unit = next(u for u in m2.units if u.component == "messages")
     assert unit.bootstrapped_with == __version__
 

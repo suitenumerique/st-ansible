@@ -102,7 +102,7 @@ podman image prune -a
 
 | Role | User | Components |
 |------|------|-------------|
-| messages | `messages` | `messages`, `workers`, `mta-in`, `socks-proxy`, `mpa` |
+| messages | `messages` | `messages`, `workers`, `pymta`, `mta-in` (deprecated), `socks-proxy`, `mpa` |
 | drive | `drive` | `drive`, `workers`, `collabora` |
 | keycloak | `keycloak` | `keycloak` |
 | restic | `restic` | `restic-backup`, `restic-forget` (system services, not user) |
