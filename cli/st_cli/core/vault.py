@@ -1,4 +1,4 @@
-"""ansible-vault helpers: vault-password bootstrap + inline ``encrypt_string``."""
+"""ansible-vault helpers: vault-password bootstrap and whole-file encrypt/decrypt."""
 
 from __future__ import annotations
 
@@ -24,17 +24,14 @@ def vault_password_path() -> Path:
 def ensure_vault_password(create: bool = False) -> Path:
     """Return the vault password file, generating it on first use.
 
-    Generates a strong random password, writes the file ``chmod 600`` and prints
-    a loud 'back this up' warning. Raises if the file is missing and ``create``
-    is False.
+    Writes a new password file at mode 0600. Raises if the file is missing and
+    ``create`` is False.
     """
-    pw_path = paths.repo_root() / _DEFAULT_VAULT_PASS
+    pw_path = vault_password_path()
     if pw_path.exists():
-        # Normalise to 0600 on every pass — not just at creation — so a file
-        # copied in at 0644 (or seeded under a loose umask) is repaired before
-        # the next encrypt/decrypt reads it. Mirrors tree.ensure_ssh_scaffold's
-        # config.local chmod.
-        pw_path.chmod(0o600)
+        # Normalise on every pass, so a file copied in at 0644 is repaired
+        # before the next read.
+        pw_path.chmod(paths.SECRET_FILE_MODE)
         return pw_path
     if not create:
         raise StCliError(
@@ -47,11 +44,9 @@ def ensure_vault_password(create: bool = False) -> Path:
     pw = gen_password()
 
     pw_path.parent.mkdir(parents=True, exist_ok=True)
-    # Create atomically at 0600: os.open with O_EXCL + an explicit mode avoids the
-    # TOCTOU window of write_text (0644 under umask 022) → chmod(0600), where the
-    # password would briefly be world-readable between the two calls. The 0o600
-    # mode has no group/other bits, so umask cannot relax it.
-    fd = os.open(pw_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    # Create atomically at 0600: write_text then chmod(0600) leaves a TOCTOU
+    # window where the password is briefly world-readable.
+    fd = os.open(pw_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, paths.SECRET_FILE_MODE)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(pw + "\n")
 
@@ -75,44 +70,43 @@ def is_encrypted(path: Path) -> bool:
         return False
 
 
+def _run_vault(
+    verb: str, path: Path, *, capture: bool = True
+) -> subprocess.CompletedProcess:
+    """Run ``ansible-vault <verb> <path>`` and raise on a non-zero exit.
+
+    ``capture=False`` lets the child inherit the terminal, for a verb (``edit``)
+    that must run ``$EDITOR`` interactively.
+    """
+    pw_file = ensure_vault_password(create=False)
+    cmd = [
+        ansible_bin("ansible-vault"),
+        verb,
+        "--vault-password-file",
+        str(pw_file),
+        str(path),
+    ]
+    opts = {"capture_output": True, "text": True} if capture else {}
+    proc = subprocess.run(cmd, check=False, **opts)
+    if proc.returncode != 0:
+        stderr = proc.stderr.strip() if capture and proc.stderr else ""
+        detail = f": {stderr}" if stderr else "."
+        raise StCliError(f"ansible-vault {verb} failed{detail}")
+    return proc
+
+
 def encrypt_file(path: Path) -> None:
     """Encrypt a plaintext YAML file in place with ansible-vault."""
     if is_encrypted(path):
         return
-    pw_file = ensure_vault_password(create=False)
-    proc = subprocess.run(
-        [
-            ansible_bin("ansible-vault"),
-            "encrypt",
-            "--vault-password-file",
-            str(pw_file),
-            str(path),
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        raise StCliError(f"ansible-vault encrypt failed: {proc.stderr.strip()}")
+    _run_vault("encrypt", path)
 
 
 def decrypt_to_dict(path: Path) -> dict:
     """Decrypt an ansible-vault ``vault.yml`` and return it as a plain dict."""
     if not path.exists():
         return {}
-    pw_file = ensure_vault_password(create=False)
-    proc = subprocess.run(
-        [
-            ansible_bin("ansible-vault"),
-            "view",
-            "--vault-password-file",
-            str(pw_file),
-            str(path),
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        raise StCliError(f"ansible-vault view failed: {proc.stderr.strip()}")
+    proc = _run_vault("view", path)
     from .tree import yaml
 
     return dict(yaml().load(proc.stdout) or {})
@@ -121,23 +115,11 @@ def decrypt_to_dict(path: Path) -> dict:
 def edit_file(path: Path) -> None:
     """Open an encrypted ``vault.yml`` in ``$EDITOR`` via ``ansible-vault edit``.
 
-    Unlike the other wrappers, this does NOT capture output: ``ansible-vault
-    edit`` must inherit the terminal so ``$EDITOR`` runs interactively. The
-    process inherits ``os.environ`` by default, so ``$EDITOR`` is visible.
+    Does not capture output: ``ansible-vault edit`` must inherit the terminal
+    so ``$EDITOR`` runs interactively.
     """
     if not path.exists():
         raise StCliError(f"No encrypted secrets file at {path}.")
     if not is_encrypted(path):
         raise StCliError(f"{path} is not ansible-vault encrypted.")
-    pw_file = ensure_vault_password(create=False)
-    proc = subprocess.run(
-        [
-            ansible_bin("ansible-vault"),
-            "edit",
-            "--vault-password-file",
-            str(pw_file),
-            str(path),
-        ],
-    )
-    if proc.returncode != 0:
-        raise StCliError("ansible-vault edit failed.")
+    _run_vault("edit", path, capture=False)

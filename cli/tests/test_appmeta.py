@@ -1,4 +1,4 @@
-"""Tests for st_cli.core.appmeta — app/component metadata loaded from resources/apps."""
+"""Tests for st_cli.core.appmeta, the app metadata loaded from resources/apps."""
 
 from __future__ import annotations
 
@@ -76,12 +76,8 @@ def test_meet_livekit_shared_rules():
 
 
 def test_meet_egress_component_metadata():
-    """egress is a full, independently-deployable meet component: deploy_order 15
-    (BETWEEN livekit=10 and meet=20), no ``vars`` block, no ``env_render`` (egress
-    reads its ansible vars straight from vars.yml/vault.yml). It is NOT core (the meet
-    Django backend stays the core). The livekit dependency stays ``dependencies[0]``;
-    egress is a SECOND meet dependency appended after it (bundled into the livekit
-    bootstrap step on the CLI side, also targetable standalone via ``-c egress``)."""
+    """egress is a full, independently-deployable meet component: deploy_order 15,
+    no `vars` block, no `env_render`."""
     meta = appmeta.load_app("meet")
     egress = meta.component("egress")
     assert egress.key == "egress"
@@ -100,30 +96,24 @@ def test_meet_egress_component_metadata():
     # livekit and before the meet core on a `st-cli deploy`.
     orders = {c.key: c.deploy_order for c in meta.components}
     assert orders["livekit"] < orders["egress"] < orders["meet"]
-    # the egress dep is shared: [] — egress is fully standalone (no env blob wiring).
+    # the egress dep is shared: [] since egress is fully standalone (no env blob
+    # wiring).
     egress_dep = next(d for d in meta.dependencies if d.on == "egress")
     assert egress_dep.shared == []
 
 
 def test_meet_and_livekit_component_vars_carry_public_host():
     """Both the meet core and the livekit component expose the same
-    st_meet_public_host var (=="{DOMAIN}") so writer.apply_component_vars writes
-    a single source of truth for the public meet domain into BOTH units' vars.yml
-    — the role then derives every public-facing URL (DJANGO_ALLOWED_HOSTS, the
-    login/logout redirects, the LiveKit recording webhook, the recordings download
-    base) from it. The {DOMAIN} placeholder is re-rendered via str.format —
-    single-brace, intentional (unlike the meet core's quadrupled braces which emit
-    literal ``{{ }}`` for an Ansible expression)."""
+    st_meet_public_host var, `{DOMAIN}`, as the single source of truth for the
+    public meet domain."""
     meta = appmeta.load_app("meet")
     assert meta.component_vars("meet")["st_meet_public_host"] == "{DOMAIN}"
     assert meta.component_vars("livekit")["st_meet_public_host"] == "{DOMAIN}"
 
 
-# --------------------------------------------------------------------------- workers component
-
-
 def test_worker_component_metadata():
-    """Each app exposes a first-class workers component (is_worker, app_name, enabled_var)."""
+    """Each app exposes a first-class workers component (is_worker, app_name,
+    enabled_var)."""
     for app in ("drive", "messages", "meet", "docs"):
         w = appmeta.load_app(app).worker()
         assert w is not None, f"{app} has no workers component"
@@ -134,7 +124,8 @@ def test_worker_component_metadata():
         )  # matches the role's st_podman_application_name (systemd unit)
         assert w.enabled_var == f"st_{app}_workers_enabled"
         assert w.is_core is False
-        # workers reuse the same role + user as the core, with no env_render of their own
+        # workers reuse the same role + user as the core, with no env_render of
+        # their own
         core = appmeta.load_app(app).core()
         assert w.role == core.role
         assert w.user == core.user
@@ -144,14 +135,14 @@ def test_worker_component_metadata():
 def test_files_component_worker_resolves_to_core():
     """A worker resolves to the core unit's files; every other component to itself."""
     meta = appmeta.load_app("drive")
-    assert meta.files_component("workers").key == "drive"  # worker → core
-    assert meta.files_component("drive").key == "drive"  # core → itself
+    assert meta.files_component("workers").key == "drive"  # worker maps to core
+    assert meta.files_component("drive").key == "drive"  # core maps to itself
     assert meta.files_component("collabora").key == "collabora"
 
 
 def test_component_implemented_flag():
-    """Component.implemented defaults True; meet's workers is False (no role impl),
-    so it is metadata-only — never prompted, never registered as a unit."""
+    """Component.implemented defaults True; meet's workers is False, so it is
+    metadata-only."""
     # dataclass default
     c = Component(
         key="x",
@@ -165,7 +156,7 @@ def test_component_implemented_flag():
         is_worker=False,
     )
     assert c.implemented is True
-    # drive/messages workers omit the key → default True (deployable)
+    # drive/messages workers omit the key, so the default is True (deployable)
     assert appmeta.load_app("drive").worker().implemented is True
     assert appmeta.load_app("messages").worker().implemented is True
     # meet workers is explicitly flagged False
@@ -174,13 +165,9 @@ def test_component_implemented_flag():
     assert appmeta.load_app("meet").core().implemented is True
 
 
-# --------------------------------------------------------------------------- docs / yprovider
-
-
 def test_docs_yprovider_dependency():
-    """docs depends on yprovider (the collaboration server); the dependency has
-    no shared rules — its two secrets are owned by the docs core and mirrored in
-    at bootstrap (see cmd/bootstrap.py's _ask_docs_yprovider), not wired here."""
+    """docs depends on yprovider; the dependency has no shared rules, since its
+    secrets are owned by the docs core and mirrored in at bootstrap."""
     meta = appmeta.load_app("docs")
     assert ("docs", "yprovider") in [(d.of, d.on) for d in meta.dependencies]
     dep = next(d for d in meta.dependencies if d.on == "yprovider")
@@ -189,9 +176,7 @@ def test_docs_yprovider_dependency():
 
 
 def test_docs_component_metadata():
-    """docs core (order 20) + yprovider (order 10, rolls out first) + workers
-    (order 30). yprovider is a full unit with its own env_render-free
-    st_docs_yprovider_env blob (a manifest vars literal, no env template)."""
+    """docs core is order 20, yprovider is order 10, and workers is order 30."""
     meta = appmeta.load_app("docs")
     core = meta.core()
     assert core.key == "docs"
@@ -235,9 +220,6 @@ def test_docs_core_env_render_and_public_host():
     assert meta.component_vars("docs")["st_docs_public_host"] == "{DOMAIN}"
 
 
-# --------------------------------------------------------------------------- error surface
-
-
 def test_load_app_unknown_raises_stclierror():
     """load_app of an unknown app raises StCliError (not FileNotFoundError) so
     main._run surfaces a clean message instead of a traceback."""
@@ -254,10 +236,8 @@ def test_component_unknown_raises_stclierror():
 
 
 def test_requires_declares_external_infra_per_app():
-    """Apps declare the external infra they need (`requires`), so the bootstrap
-    Requirements checklist only lists what's relevant. projects and keycloak are
-    NOT Django apps and use no Redis/broker; keycloak is itself the IdP. projects
-    stores uploads locally by default (S3 is opt-in, so not a required prep item)."""
+    """Apps declare the external infra they need in `requires`, so the bootstrap
+    Requirements checklist only lists what is relevant."""
     assert appmeta.load_app("projects").requires == ["postgresql", "oidc"]
     assert appmeta.load_app("keycloak").requires == ["postgresql"]
     for app in ("drive", "meet", "messages"):

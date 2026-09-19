@@ -8,12 +8,19 @@ from ruamel.yaml.comments import CommentedMap
 
 from . import appmeta, paths
 from .errors import StCliError
-from .models import SecretConfig, StCliManifest, UnitState
+from .models import (
+    BACKEND_ANSIBLE_VAULT,
+    MODE_EXTERNAL,
+    MODE_MANAGED,
+    SecretConfig,
+    StCliManifest,
+    UnitState,
+)
 from .tree import yaml
 
 
 def load_manifest() -> StCliManifest:
-    """Load ``.st-cli.yml`` into a :class:`StCliManifest`."""
+    """Load `.st-cli.yml` into a `StCliManifest`."""
     p = paths.manifest_path()
     if not p.exists():
         raise StCliError(
@@ -28,7 +35,7 @@ def load_manifest() -> StCliManifest:
                 app=u["app"],
                 env=u["env"],
                 component=u["component"],
-                mode=u.get("mode", "managed"),
+                mode=u.get("mode", MODE_MANAGED),
                 bootstrapped_with=u.get("bootstrapped_with", ""),
             )
             for u in (raw.get("units", []) or [])
@@ -37,7 +44,7 @@ def load_manifest() -> StCliManifest:
             SecretConfig(
                 app=s["app"],
                 env=s["env"],
-                backend=s.get("backend", "ansible-vault"),
+                backend=s.get("backend", BACKEND_ANSIBLE_VAULT),
             )
             for s in (raw.get("secrets", []) or [])
         ]
@@ -52,7 +59,7 @@ def load_manifest() -> StCliManifest:
 
 
 def save_manifest(m: StCliManifest) -> None:
-    """Write ``.st-cli.yml`` from a :class:`StCliManifest`."""
+    """Write `.st-cli.yml` from a `StCliManifest`."""
     doc = CommentedMap()
     doc["versions"] = CommentedMap()
     doc["versions"]["collection"] = m.collection_version
@@ -89,10 +96,8 @@ def save_manifest(m: StCliManifest) -> None:
 def ssh_user() -> str | None:
     """Resolve the remote ssh user (per-operator).
 
-    Returns the ``ST_CLI_SSH_USER`` env var when set and non-empty, else ``None``.
-    When ``None``, both the deploy path (the generated ``ansible.cfg`` omits
-    ``remote_user``) and st-cli's own ssh (``cmd/remote._ssh`` builds a bare host)
-    defer to the ssh config chain (``ssh/config.local`` / ``~/.ssh/config``).
+    Returns `ST_CLI_SSH_USER` if set, else `None`, deferring to the ssh
+    config chain.
     """
     return os.environ.get("ST_CLI_SSH_USER") or None
 
@@ -107,14 +112,15 @@ def upsert_unit(m: StCliManifest, unit: UnitState) -> None:
 
 
 def secret_config_for(m: StCliManifest, app: str, env: str) -> SecretConfig:
-    """Return the :class:`SecretConfig` for ``(app, env)`` or the ansible-vault default.
+    """Return the `SecretConfig` for `(app, env)` or the ansible-vault default.
 
-    A manifest with no ``secrets:`` block resolves every (app, env) to ``ansible-vault``.
+    A manifest with no `secrets:` block resolves every (app, env) to
+    ansible-vault.
     """
     for s in m.secrets:
         if s.app == app and s.env == env:
             return s
-    return SecretConfig(app=app, env=env, backend="ansible-vault")
+    return SecretConfig(app=app, env=env, backend=BACKEND_ANSIBLE_VAULT)
 
 
 def upsert_secret(m: StCliManifest, sc: SecretConfig) -> None:
@@ -129,10 +135,9 @@ def upsert_secret(m: StCliManifest, sc: SecretConfig) -> None:
 def units_for(
     m: StCliManifest, app: str, env: str, components: list[str] | None = None
 ) -> list[UnitState]:
-    """Return the units for an (app, env), optionally narrowed to a set of components.
+    """Return the units for an (app, env), optionally narrowed to `components`.
 
-    ``components`` is a list (repeatable ``-c``); an empty list / ``None`` means
-    "all components" for the (app, env). Duplicates are ignored via set membership.
+    An empty list or `None` means every component of the (app, env).
     """
     out = [u for u in m.units if u.app == app and u.env == env]
     if components:
@@ -142,16 +147,15 @@ def units_for(
 
 
 def managed_units(app_name: str, env: str, components: list[str] | None):
-    """Return managed units for app/env (optionally a subset of components), in deploy order.
+    """Return managed units for app/env, optionally narrowed to `components`, in deploy
+    order.
 
-    ``components`` is a list (repeatable ``-c``); ``None``/empty means all managed
-    units. When a list is given, every requested component must match a managed
-    unit — any that don't are raised by name — and the list is de-duplicated while
-    preserving request order before being sorted by ``deploy_order``.
+    Every requested component must match a managed unit, or `StCliError`
+    names the missing ones.
     """
     m = load_manifest()
     meta = appmeta.load_app(app_name)
-    managed = [u for u in units_for(m, app_name, env) if u.mode != "external"]
+    managed = [u for u in units_for(m, app_name, env) if u.mode != MODE_EXTERNAL]
     if components:
         by_key = {u.component: u for u in managed}
         missing = [c for c in dict.fromkeys(components) if c not in by_key]

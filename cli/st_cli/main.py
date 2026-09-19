@@ -2,26 +2,16 @@
 
 from __future__ import annotations
 
+import contextlib
+
 import typer
 
-from .cmd import (
-    bootstrap as bootstrap_mod,
-)
-from .cmd import (
-    deploy as deploy_mod,
-)
-from .cmd import (
-    remote,
-)
-from .cmd import (
-    secrets as secrets_mod,
-)
-from .cmd import (
-    upgrade as upgrade_mod,
-)
-from .cmd import (
-    version as version_mod,
-)
+from .cmd import bootstrap as bootstrap_mod
+from .cmd import deploy as deploy_mod
+from .cmd import remote
+from .cmd import secrets as secrets_mod
+from .cmd import upgrade as upgrade_mod
+from .cmd import version as version_mod
 from .core import appmeta, drift, ui, upstream
 from .core.errors import StCliError
 
@@ -31,32 +21,36 @@ app = typer.Typer(
     help="Bootstrap and operate suitenumerique.st ansible deployments.",
 )
 
+_component_option = typer.Option(
+    None, "--component", "-c", help="Target component (default: core)."
+)
+_host_option = typer.Option(
+    None,
+    "--host",
+    "-H",
+    help="Target a specific host (default: prompt if several).",
+)
+
+
+def _default_component(app_name: str, component: str | None) -> str:
+    return component or appmeta.load_app(app_name).core().key
+
 
 @app.callback()
 def _main(ctx: typer.Context) -> None:
-    """Global pre-command hook: best-effort upstream-version check.
-
-    Fires before every subcommand. Warn-only — it never raises out of this
-    callback; every exception is swallowed so the check can never break or
-    slow a command noticeably.
-    """
-    try:
+    """Global pre-command hook. Never raises: every exception is swallowed."""
+    with contextlib.suppress(Exception):
         upstream.maybe_warn_upgrade(ctx.invoked_subcommand)
-    except Exception:
-        pass
 
 
 def _run(fn):
-    """Execute fn(): StCliError → clean exit(1); a non-zero int return → exit(that rc).
-
-    Remote ops (oneoff/reset/logs) return the ssh/ansible return code; propagating it
-    lets CI/scripts detect a failed one-off or reset instead of always seeing exit 0.
-    """
+    """Run fn(); a non-zero int return becomes the exit code, so scripts see remote
+    failures."""
     try:
         rc = fn()
     except StCliError as exc:
         ui.error(str(exc))
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     if isinstance(rc, int) and rc != 0:
         raise typer.Exit(rc)
 
@@ -153,7 +147,7 @@ def restart(
 ):
     """Restart the systemd --user services for APP/ENV over ssh.
 
-    Bare (no -c) restarts ALL managed components — warns and asks to confirm first
+    Bare (no -c) restarts ALL managed components, warns, and asks to confirm first
     (-y skips). -c restarts the listed components (no confirm); -H <alias> one host.
     -p/--parallel restarts components concurrently (each still rolls its own hosts
     one at a time) and ignores deploy_order.
@@ -191,15 +185,8 @@ def ps(
 def oneoff(
     app_name: str = typer.Argument(..., metavar="APP"),
     env: str = typer.Argument(...),
-    component: str = typer.Option(
-        None, "--component", "-c", help="Target component (default: core)."
-    ),
-    host: str = typer.Option(
-        None,
-        "--host",
-        "-H",
-        help="Target a specific host (default: prompt if several).",
-    ),
+    component: str = _component_option,
+    host: str = _host_option,
     service: str = typer.Option("backend", "--service", "-s", help="Compose service."),
     entrypoint: str = typer.Option(
         None,
@@ -214,7 +201,7 @@ def oneoff(
     """Run a one-off container command (default: a shell in the backend)."""
 
     def _do():
-        comp = component or appmeta.load_app(app_name).core().key
+        comp = _default_component(app_name, component)
         return remote.oneoff(
             app_name,
             env,
@@ -232,23 +219,16 @@ def oneoff(
 def reset(
     app_name: str = typer.Argument(..., metavar="APP"),
     env: str = typer.Argument(...),
-    component: str = typer.Option(
-        None, "--component", "-c", help="Target component (default: core)."
-    ),
+    component: str = _component_option,
     yes: bool = typer.Option(
         False, "--yes", "-y", help="Skip the confirmation prompt."
     ),
-    host: str = typer.Option(
-        None,
-        "--host",
-        "-H",
-        help="Target a specific host (default: prompt if several).",
-    ),
+    host: str = _host_option,
 ):
     """Destructive: stop, down -v, remove the app dir, then redeploy a component."""
 
     def _do():
-        comp = component or appmeta.load_app(app_name).core().key
+        comp = _default_component(app_name, component)
         return remote.reset(app_name, env, comp, assume_yes=yes, host=host)
 
     _run(_do)
@@ -258,15 +238,8 @@ def reset(
 def logs(
     app_name: str = typer.Argument(..., metavar="APP"),
     env: str = typer.Argument(...),
-    component: str = typer.Option(
-        None, "--component", "-c", help="Target component (default: core)."
-    ),
-    host: str = typer.Option(
-        None,
-        "--host",
-        "-H",
-        help="Target a specific host (default: prompt if several).",
-    ),
+    component: str = _component_option,
+    host: str = _host_option,
     since: str = typer.Option(
         "15 min ago",
         "--since",
@@ -276,10 +249,10 @@ def logs(
         False, "--follow", "-f", help="Stream the journal live (journalctl -f)."
     ),
 ):
-    """Show the systemd --user journal for APP/ENV (default: the core backend)."""
+    """Show the systemd --user journal of APP/ENV's unit (the whole compose stack)."""
 
     def _do():
-        comp = component or appmeta.load_app(app_name).core().key
+        comp = _default_component(app_name, component)
         return remote.logs(app_name, env, comp, host=host, since=since, follow=follow)
 
     _run(_do)
@@ -314,13 +287,13 @@ def doctor(
 
 @app.command()
 def upgrade():
-    """Upgrade the CLI, realign the .st-cli.yml pin, and clean the scaffolding."""
+    """Realign the .st-cli.yml pin, replay flagged units, and clean the scaffolding."""
     _run(upgrade_mod.upgrade)
 
 
 @app.command()
 def version():
-    """Print versions and warn on manifest/installed mismatch."""
+    """Print the installed CLI version and the .st-cli.yml pins."""
     _run(version_mod.show_version)
 
 

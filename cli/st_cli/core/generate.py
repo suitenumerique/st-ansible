@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import importlib.util
 import os
 from pathlib import Path
@@ -10,11 +11,13 @@ from jinja2 import Environment, FileSystemLoader
 
 from . import appmeta, manifest, paths, tree, ui, vault
 from .errors import StCliError
+from .models import BACKEND_HASHI_VAULT, MODE_EXTERNAL
 
 _COLLECTION_REPO = "https://github.com/suitenumerique/st-ansible.git"
 _TEMPLATES = Path(__file__).resolve().parent / "resources" / "templates" / "scaffold"
 
 
+@functools.cache
 def _env() -> Environment:
     return Environment(
         loader=FileSystemLoader(str(_TEMPLATES)),
@@ -39,13 +42,13 @@ def generate_all(app: str, env: str) -> None:
     meta = appmeta.load_app(app)
 
     # Pick the scaffolding flags from the per-(app, env) secret backend choice:
-    #   ansible-vault → emit vault_password_file in ansible.cfg
-    #   hashi_vault   → also install community.hashi_vault in galaxy-requirements
+    # ansible-vault emits vault_password_file in ansible.cfg; hashi_vault also
+    # installs community.hashi_vault in galaxy-requirements.
     sc = manifest.secret_config_for(m, app, env)
-    use_vault = sc.backend != "hashi_vault"
-    hashi_vault = sc.backend == "hashi_vault"
-    # Only nag when hvac is actually missing — the warning is then actionable and
-    # goes away once it's installed, instead of firing on every deploy.
+    use_vault = sc.backend != BACKEND_HASHI_VAULT
+    hashi_vault = sc.backend == BACKEND_HASHI_VAULT
+    # Only nag when hvac is actually missing, so the warning stays actionable
+    # and goes away once it's installed, instead of firing on every deploy.
     if hashi_vault and importlib.util.find_spec("hvac") is None:
         ui.warn(
             "hashi_vault backend selected but the 'hvac' Python library is not "
@@ -57,7 +60,7 @@ def generate_all(app: str, env: str) -> None:
     paths.playbooks_dir().mkdir(parents=True, exist_ok=True)
     paths.collections_dir().mkdir(parents=True, exist_ok=True)
 
-    (paths.st_cli_dir() / "ansible.cfg").write_text(
+    paths.ansible_cfg_path().write_text(
         _render(
             "ansible.cfg.j2",
             collections_path=str(paths.collections_dir()),
@@ -89,7 +92,7 @@ def generate_all(app: str, env: str) -> None:
             f"ignoring version pin {m.collection_version}."
         )
 
-    (paths.st_cli_dir() / "galaxy-requirements.yml").write_text(
+    paths.galaxy_requirements_path().write_text(
         _render(
             "galaxy-requirements.yml.j2",
             collection_repo=_COLLECTION_REPO,
@@ -101,7 +104,7 @@ def generate_all(app: str, env: str) -> None:
         encoding="utf-8",
     )
 
-    units = [u for u in manifest.units_for(m, app, env) if u.mode != "external"]
+    units = [u for u in manifest.units_for(m, app, env) if u.mode != MODE_EXTERNAL]
     if not units:
         raise StCliError(f"No managed units for {app}/{env} in .st-cli.yml.")
 
@@ -121,7 +124,7 @@ def generate_all(app: str, env: str) -> None:
 
     for u in units:
         comp = meta.component(u.component)
-        # workers own no files/hosts of their own — they reuse the core unit's
+        # workers own no files/hosts of their own; they reuse the core unit's
         # vars.yml/vault.yml. The targeted inventory group, however, follows the
         # effective_group rule: a worker with its own [workers] group (in the
         # core's hosts file) targets it, else it falls back to the core group.

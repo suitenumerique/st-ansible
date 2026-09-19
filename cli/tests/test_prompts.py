@@ -1,8 +1,7 @@
 """Unit tests for core/prompts.py's rebootstrap ``default`` pre-fill additions.
 
-A spy replaces ``questionary.text``/``.select`` to record call kwargs, since
-``test_bootstrap.py``'s ``ScriptedQuestionary`` only asserts on the returned
-answer, never on what questionary was called with.
+A spy replaces questionary.text/.select to record call kwargs, unlike
+ScriptedQuestionary, which only asserts on the returned answer.
 """
 
 from __future__ import annotations
@@ -50,11 +49,6 @@ def spies(monkeypatch):
     return text_spy, select_spy
 
 
-# --------------------------------------------------------------------------
-# _ask_hosts
-# --------------------------------------------------------------------------
-
-
 def test_ask_hosts_default_prefills_comma_joined_and_roundtrips(spies):
     text_spy, _ = spies
     text_spy.answer = "10.0.0.1, 10.0.0.2"
@@ -66,13 +60,13 @@ def test_ask_hosts_default_prefills_comma_joined_and_roundtrips(spies):
 
 
 def test_ask_hosts_no_default_omits_prefill(spies):
-    """Today's behaviour (no ``default``) must be preserved exactly."""
+    """Calling with no `default` omits the pre-fill entirely."""
     text_spy, _ = spies
     text_spy.answer = "10.0.0.1"
 
     prompts._ask_hosts("meet")
 
-    # Either omitted entirely or passed as "" — both are "no pre-fill".
+    # Either omitted entirely or passed as "", both are "no pre-fill".
     assert text_spy.kwargs.get("default", "") == ""
 
 
@@ -115,11 +109,6 @@ def test_ask_hosts_cancel_raises(spies):
         prompts._ask_hosts("meet", default=["10.0.0.1"])
 
 
-# --------------------------------------------------------------------------
-# _ask_select
-# --------------------------------------------------------------------------
-
-
 def test_ask_select_default_in_choices_is_passed_through(spies):
     _, select_spy = spies
     select_spy.answer = "b"
@@ -155,11 +144,6 @@ def test_ask_select_cancel_raises(spies):
 
     with pytest.raises(StCliError):
         prompts._ask_select("Pick one:", ["a", "b"])
-
-
-# --------------------------------------------------------------------------
-# silent_replay
-# --------------------------------------------------------------------------
 
 
 def test_ask_auto_accepts_nonempty_recovered_default_without_prompting(spies):
@@ -409,10 +393,9 @@ def test_in_silent_replay_false_outside_true_inside():
 
 
 def test_in_silent_replay_false_after_exception_escapes():
-    with pytest.raises(RuntimeError):
-        with prompts.silent_replay():
-            assert prompts.in_silent_replay() is True
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError), prompts.silent_replay():
+        assert prompts.in_silent_replay() is True
+        raise RuntimeError("boom")
     assert prompts.in_silent_replay() is False
 
 

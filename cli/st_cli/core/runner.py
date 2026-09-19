@@ -19,10 +19,8 @@ class RunnerError(StCliError):
 def ansible_bin(name: str) -> str:
     """Resolve an ansible executable (ansible-playbook/-galaxy/-vault).
 
-    Prefer the copy co-installed next to st-cli's own interpreter (same venv,
-    whether pip or pipx) so a bundled ansible-core is authoritative and runs
-    under the interpreter that also has hvac; fall back to PATH for
-    bring-your-own-ansible installs. Raises StCliError if neither is found.
+    Prefers the copy next to st-cli's own interpreter (it also has hvac) over
+    PATH. Raises `StCliError` if neither exists.
     """
     candidate = Path(sys.executable).parent / name
     if candidate.exists():
@@ -38,7 +36,7 @@ def ansible_bin(name: str) -> str:
 
 def _ansible_env() -> dict:
     env = os.environ.copy()
-    env["ANSIBLE_CONFIG"] = str(paths.st_cli_dir() / "ansible.cfg")
+    env["ANSIBLE_CONFIG"] = str(paths.ansible_cfg_path())
     return env
 
 
@@ -46,9 +44,9 @@ def galaxy_install() -> None:
     """Install the pinned collection into ``.st-cli/collections``.
 
     The version is baked into ``galaxy-requirements.yml`` at generate time, so this
-    just installs ``-r`` that file — no version argument is needed.
+    just installs ``-r`` that file; no version argument is needed.
     """
-    req = paths.st_cli_dir() / "galaxy-requirements.yml"
+    req = paths.galaxy_requirements_path()
     if not req.exists():
         raise RunnerError("galaxy-requirements.yml missing — run generate first.")
     rc = _run(
@@ -94,12 +92,10 @@ def play(
     tags: list[str] | None = None,
     limit: str | None = None,
 ) -> int:
-    """Run the generated playbook for one unit; returns the ansible return code.
+    """Run the generated playbook for one unit; return the ansible exit code.
 
-    ``check=True`` runs ansible in ``--check`` (dry run). ``tags`` limits
-    execution (e.g. ``["deploy"]`` to skip the root ``base`` task). ``limit`` is
-    passed verbatim to ansible ``--limit`` (any host/group/pattern) to narrow the
-    play; the play is always ``serial: 1`` so hosts roll out one at a time.
+    `check=True` passes `--check`; `tags` and `limit` map to ansible
+    `--tags`/`--limit`.
     """
     extra: list[str] = []
     if check:
@@ -112,6 +108,5 @@ def play(
 
 
 def _run(cmd: list[str]) -> int:
-    """Run a command streaming its output; return the exit code."""
-    proc = subprocess.run(cmd, env=_ansible_env())
+    proc = subprocess.run(cmd, env=_ansible_env(), check=False)
     return proc.returncode

@@ -1,9 +1,8 @@
 """Compare the installed CLI version against the `.st-cli.yml` pin.
 
-`.st-cli.yml` records the CLI version last used to bootstrap the repo
-(``versions.cli``). :func:`compare` tells a caller whether the installed
-``st_cli`` build matches that pin, so callers can warn when the two versions
-are different.
+`.st-cli.yml` records the CLI version last used to bootstrap the repo, in
+`versions.cli`. `compare` tells a caller whether the installed `st_cli`
+build matches that pin.
 """
 
 from __future__ import annotations
@@ -14,6 +13,7 @@ from enum import Enum
 import st_cli
 
 from . import upgrades
+from .errors import StCliError
 from .models import StCliManifest
 
 _VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
@@ -47,3 +47,19 @@ def compare(m: StCliManifest) -> PinState:
     if installed < pinned:
         return PinState.CLI_OLDER
     return PinState.CLI_NEWER
+
+
+def require_not_older(m: StCliManifest, retry_hint: str) -> None:
+    """Raise StCliError when the installed CLI is older than the pin.
+
+    `retry_hint` ends the message sentence, so a caller can name its own
+    next step, for example "then retry." or "then re-run `st-cli upgrade`."
+    """
+    if compare(m) is not PinState.CLI_OLDER:
+        return
+    from . import upstream  # local import: upstream.py imports this module
+
+    raise StCliError(
+        f"st-cli {st_cli.__version__} is older than the .st-cli.yml pin "
+        f"{m.cli_version}. Run `{upstream.install_hint()}`, {retry_hint}"
+    )

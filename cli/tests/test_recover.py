@@ -1,7 +1,9 @@
-"""Tests for st_cli.core.recover — rebuilding bootstrap answers from a committed unit."""
+"""Tests for st_cli.core.recover — rebuilding bootstrap answers from a committed
+unit."""
 
 from __future__ import annotations
 
+import pytest
 from helpers import seed_creds, seed_livekit_provider, seed_meet_unit
 from ruamel.yaml.comments import CommentedMap
 
@@ -9,9 +11,32 @@ from st_cli.core import appmeta, paths, recover, tree
 from st_cli.core.manifest import save_manifest
 from st_cli.core.models import StCliManifest, UnitState
 
-# --------------------------------------------------------------------------- #
-# recover()
-# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (True, True),
+        (False, False),
+        ("true", True),
+        ("TRUE", True),
+        ("Yes", True),
+        ("on", True),
+        ("1", True),
+        ("  true  ", True),
+        ("false", False),
+        ("FALSE", False),
+        ("No", False),
+        ("off", False),
+        ("0", False),
+        ("  false  ", False),
+        ("maybe", None),
+        ("", None),
+        (None, None),
+        (2, None),
+    ],
+)
+def test_parse_bool_truth_table(value, expected):
+    assert recover.parse_bool(value) is expected
 
 
 def test_recover_nonexistent_unit_returns_empty(repo):
@@ -56,7 +81,8 @@ def test_recover_merges_multiple_layers(repo):
 
 
 def test_recover_no_env_render_spec_contributes_nothing_from_blobs(repo):
-    """Check that a provider with no env_render spec recovers only via component-var inversion."""
+    """Check that a provider with no env_render spec recovers only via component-var
+    inversion."""
     seed_livekit_provider(repo)
     meta = appmeta.load_app("meet")
     assert meta.env_render_spec("livekit") == {}
@@ -111,7 +137,8 @@ def test_recover_returns_drive_legacy_s3_indirection_verbatim(repo):
 
 
 def test_recover_skips_multi_placeholder_and_literal_templates(repo):
-    """Check that a literal Jinja expression var is never treated as an invertible placeholder."""
+    """Check that a literal Jinja expression var is never treated as an invertible
+    placeholder."""
     seed_meet_unit(repo)
     meta = appmeta.load_app("meet")
     tmpl = meta.component_vars("meet")["st_meet_backend_run_migrations"]
@@ -130,7 +157,8 @@ def test_recover_skips_multi_placeholder_and_literal_templates(repo):
 
 
 def test_recover_blob_takes_precedence_over_inversion(repo):
-    """Check that a value recoverable from both the blob and inversion takes the blob's value."""
+    """Check that a value recoverable from both the blob and inversion takes the blob's
+    value."""
     seed_meet_unit(repo)
     data = tree.load_vars("meet", "prod", "meet")
     data["st_meet_public_host"] = "from-vars.example.org"
@@ -143,7 +171,8 @@ def test_recover_blob_takes_precedence_over_inversion(repo):
 
 
 def test_recover_dotenv_inversion_recovers_socks_proxy_trio(repo):
-    """Check that the multi-placeholder dotenv inversion recovers all three socks-proxy lines."""
+    """Check that the multi-placeholder dotenv inversion recovers all three socks-proxy
+    lines."""
     seed_creds(repo)
     save_manifest(
         StCliManifest(
@@ -167,7 +196,8 @@ def test_recover_dotenv_inversion_recovers_socks_proxy_trio(repo):
 
 
 def test_recover_dotenv_inversion_skips_embedded_placeholder_lines(repo):
-    """Check that a placeholder embedded inside a larger value is skipped, not inverted."""
+    """Check that a placeholder embedded inside a larger value is skipped, not
+    inverted."""
     seed_creds(repo)
     save_manifest(
         StCliManifest(
@@ -218,11 +248,6 @@ def test_recover_dotenv_inversion_blob_takes_precedence(repo, monkeypatch):
     assert answers["MYHOSTNAME"] == "from-blob.example.org"
 
 
-# --------------------------------------------------------------------------- #
-# recover_cadvisor()
-# --------------------------------------------------------------------------- #
-
-
 def test_recover_cadvisor_true(repo):
     seed_meet_unit(repo)
     data = tree.load_vars("meet", "prod", "meet")
@@ -260,11 +285,6 @@ def test_recover_cadvisor_string_roundtrip(repo):
     assert recover.recover_cadvisor("meet", "prod", "meet") is False
 
 
-# --------------------------------------------------------------------------- #
-# recover_hosts()
-# --------------------------------------------------------------------------- #
-
-
 def test_recover_hosts_present(repo):
     seed_meet_unit(repo)
     assert recover.recover_hosts("meet", "prod", "meet") == ["10.0.0.5"]
@@ -273,11 +293,6 @@ def test_recover_hosts_present(repo):
 def test_recover_hosts_missing_returns_empty(repo):
     seed_creds(repo)
     assert recover.recover_hosts("meet", "prod", "meet") == []
-
-
-# --------------------------------------------------------------------------- #
-# recover_oidc()
-# --------------------------------------------------------------------------- #
 
 
 def test_recover_oidc_proconnect_prod():
@@ -321,11 +336,6 @@ def test_recover_oidc_custom_without_url():
 def test_recover_oidc_none_when_no_oidc_answers():
     assert recover.recover_oidc({}) == (None, None, None)
     assert recover.recover_oidc({"DOMAIN": "x"}) == (None, None, None)
-
-
-# --------------------------------------------------------------------------- #
-# recover_shared()
-# --------------------------------------------------------------------------- #
 
 
 def test_recover_shared_returns_generated_secrets_and_plain_vars(repo):
@@ -372,7 +382,8 @@ def test_recover_shared_nonexistent_unit_returns_empty(repo):
 
 
 def test_recover_shared_vault_key_ref_recovered_from_vars_verbatim(repo):
-    """Check that a vault_key rule's ref is recovered from vars.yml with no decryption."""
+    """Check that a vault_key rule's ref is recovered from vars.yml with no
+    decryption."""
     seed_creds(repo)
     save_manifest(
         StCliManifest(
@@ -391,7 +402,8 @@ def test_recover_shared_vault_key_ref_recovered_from_vars_verbatim(repo):
 
 
 def test_recover_shared_survives_undecryptable_vault(repo, monkeypatch):
-    """Check that an undecryptable vault.yml omits the affected keys instead of raising."""
+    """Check that an undecryptable vault.yml omits the affected keys instead of
+    raising."""
     seed_livekit_provider(repo)
     # remove the vault password so vault.decrypt_to_dict raises StCliError
     (paths.repo_root() / ".vault-pass").unlink()

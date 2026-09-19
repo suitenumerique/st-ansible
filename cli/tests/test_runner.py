@@ -1,18 +1,14 @@
-"""Tests for st_cli.core.runner — ansible binary resolution, worker inventory, syntax check."""
+"""Tests for st_cli.core.runner — ansible binary resolution, worker inventory, syntax
+check."""
 
 from __future__ import annotations
 
 import pytest
+from helpers import seed_creds, seed_drive_unit
 
 from st_cli.core import generate, manifest, paths, runner, tree
 from st_cli.core.errors import StCliError
 from st_cli.core.models import StCliManifest, UnitState
-
-from helpers import seed_creds
-
-
-# --------------------------------------------------------------------------- ansible_bin resolver
-# (CONTRACT: resolve ansible binaries next to the interpreter first, then PATH.)
 
 
 def test_ansible_bin_prefers_sys_executable_dir(tmp_path, monkeypatch):
@@ -45,23 +41,9 @@ def test_ansible_bin_missing_raises(tmp_path, monkeypatch):
     assert issubclass(runner.RunnerError, StCliError)
 
 
-# --------------------------------------------------------------------------- worker inventory
-
-
 def test_runner_worker_uses_core_hosts(repo):
     """The runner points the workers playbook at the core unit's hosts file."""
-    seed_creds(repo)
-    tree.write_hosts("drive", "prod", "drive", "drive", ["10.0.0.1"])
-    manifest.save_manifest(
-        StCliManifest(
-            "0.0.19",
-            "0.0.19",
-            [
-                UnitState("drive", "prod", "drive", "managed"),
-                UnitState("drive", "prod", "workers", "managed"),
-            ],
-        )
-    )
+    seed_drive_unit(repo, components=("drive", "workers"))
     tree.save_vars("drive", "prod", "drive", tree.load_vars("drive", "prod", "drive"))
     generate.generate_all("drive", "prod")
 

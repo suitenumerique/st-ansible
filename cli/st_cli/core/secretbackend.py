@@ -1,24 +1,19 @@
-"""Secret-backend strategy for st-cli (CONTRACT section 3).
+"""Secret-backend strategy for st-cli.
 
-Two backends share a small strategy surface so :mod:`st_cli.cmd.bootstrap` and
-:mod:`st_cli.core.generate` branch in one place:
+Two backends share a small strategy surface so `st_cli.cmd.bootstrap` and
+`st_cli.core.generate` branch in one place:
 
-* :class:`AnsibleVaultBackend` — the default. Real values are buffered
-  per-component and written to an ansible-vault-encrypted ``vault.yml``; the
-  plaintext env blob carries ``{{ vault_<key> }}`` Jinja refs.
-* :class:`HashiVaultBackend` — OpenBao/Vault KV-v2, **reference-only**. No
-  ``vault.yml`` is written, no secret is generated, and nothing is written to
-  OpenBao: the env blob carries
-  ``{{ lookup('community.hashi_vault.hashi_vault', '<term>') }}`` refs to
-  existing OpenBao entries. Each ``@openbao(<path>)`` / ``@vault(<path>)`` marker
-  in a prompted value becomes a lookup ref; a value with NO marker is kept
-  literal (plain text) — the operator pre-creates every secret in OpenBao and
-  uses a marker (the prompt pre-fills an editable ``@openbao(kv/data/<app>:<VAR>)``
-  default) to opt a value into a lookup.
+* `AnsibleVaultBackend`, the default. Real values are buffered per-component
+  and written to an ansible-vault-encrypted `vault.yml`. The plaintext env
+  blob carries `{{ vault_<key> }}` Jinja refs.
+* `HashiVaultBackend`, OpenBao/Vault KV-v2, reference-only. It writes no
+  `vault.yml`, generates no secret, and writes nothing to OpenBao: the env
+  blob carries lookup refs to existing OpenBao entries. Each
+  `@openbao(<path>)` or `@vault(<path>)` marker in a prompted value becomes
+  a lookup ref; a value with no marker stays literal text.
 
-Only the backend *choice* (``ansible-vault`` | ``hashi_vault``) lives in
-``.st-cli.yml``; connection details (``ansible_hashi_vault_*``) are written into
-``<app>/<env>/common.yml`` and the token passes through the inherited env.
+Only the backend choice lives in `.st-cli.yml`. Connection details live in
+`<app>/<env>/common.yml`, and the token passes through the inherited env.
 """
 
 from __future__ import annotations
@@ -26,20 +21,14 @@ from __future__ import annotations
 import re
 
 from . import manifest, tree
+from .models import BACKEND_ANSIBLE_VAULT, BACKEND_HASHI_VAULT
 
 
-# --------------------------------------------------------------------------- #
-# pure helpers (unit-testable without a TTY)
-# --------------------------------------------------------------------------- #
 def hashi_lookup_ref(term: str) -> str:
-    """Build the env-blob Jinja ref that resolves a secret via OpenBao.
+    """Build the env-blob Jinja ref that resolves a secret through OpenBao.
 
-    The user's lookup term is embedded into a single-quoted Jinja string literal
-    with ``\\`` and ``'`` escaped, so a term containing a quote or backslash
-    cannot break out of the literal and inject arbitrary Jinja (the ``{{``/``}}``
-    delimiters are inert inside a quoted literal, so escaping the quote is
-    sufficient). No other munging is done — no path rewriting, no ``:field``
-    split (reference-only: nothing is minted or written).
+    Escapes `\\` and `'` in the lookup term so it cannot break out of the
+    surrounding single-quoted Jinja string literal.
     """
     escaped = term.replace("\\", "\\\\").replace("'", "\\'")
     return "{{ lookup('community.hashi_vault.hashi_vault', '" + escaped + "') }}"
@@ -54,11 +43,8 @@ _OPENBAO_MARKER = re.compile(r"@(?:openbao|vault)\(([^)]*)\)")
 def hashi_render(raw: str) -> str:
     """Turn a user-entered hashi secret value into its env-blob string.
 
-    Each ``@openbao(<path>)`` / ``@vault(<path>)`` marker is replaced by a
-    ``community.hashi_vault`` lookup ref for ``<path>`` (via ``hashi_lookup_ref``),
-    with the surrounding text kept literal. A value with NO marker is kept literal
-    (plain text, even for a secret var) — the operator must use ``@openbao()`` /
-    ``@vault()`` to opt a value into a lookup.
+    Replaces each `@openbao(<path>)` or `@vault(<path>)` marker with a lookup
+    ref, keeping surrounding text literal. A value with no marker stays literal.
     """
     if _OPENBAO_MARKER.search(raw):
         return _OPENBAO_MARKER.sub(lambda m: hashi_lookup_ref(m.group(1).strip()), raw)
@@ -66,33 +52,28 @@ def hashi_render(raw: str) -> str:
 
 
 def _extract_start_comment(raw: str) -> str:
-    """Extract the leading ``# ...`` comment block text (without the ``#`` prefixes).
+    """Extract the leading `# ...` comment block text, without the `#` prefixes.
 
-    ruamel does not round-trip a comment block sitting before the ``---`` document
-    marker, so :func:`write_common_connection` captures it from the raw text and
-    re-applies it via ``yaml_set_start_comment`` after the merge. Stops at the
-    first ``---`` or non-comment line.
+    ruamel does not round-trip a comment block before the `---` document
+    marker, so `write_common_connection` captures it from the raw text and
+    re-applies it. Stops at the first `---` or non-comment line.
     """
     lines: list[str] = []
     for line in raw.splitlines():
         if line.startswith("#"):
             lines.append(line.lstrip("# ").rstrip())
-        elif line.strip() == "---":
-            break
         elif line.strip():
-            break  # first content line — stop
+            break
     return "\n".join(lines).strip()
 
 
 def write_common_connection(
     app: str, env: str, url: str, validate_certs: bool, auth_method: str
 ) -> None:
-    """Merge the ``ansible_hashi_vault_*`` connection vars into ``common.yml``.
+    """Merge the `ansible_hashi_vault_*` connection vars into `common.yml`.
 
-    Non-interactive: callers (setup_backend + tests) pass the resolved values.
-    Preserves any pre-existing keys AND the header comment block (ruamel does
-    not round-trip a comment before ``---``, so it is captured from the raw text
-    and re-applied via ``yaml_set_start_comment``).
+    Non-interactive: callers pass the resolved values. Preserves any
+    pre-existing keys and the header comment block.
     """
     tree.ensure_common(app, env)
     preamble = _extract_start_comment(tree.read_common_text(app, env))
@@ -105,9 +86,6 @@ def write_common_connection(
     tree.save_common(app, env, data)
 
 
-# --------------------------------------------------------------------------- #
-# strategy
-# --------------------------------------------------------------------------- #
 class SecretBackend:
     """Base strategy. The two concrete backends override every method."""
 
@@ -119,8 +97,7 @@ class SecretBackend:
     def expand_markers(self, value: str) -> str:
         """Expand inline @openbao()/@vault() markers in a non-secret value.
 
-        Default no-op: only the hashi_vault backend recognizes markers (ansible-vault
-        has no OpenBao). Kept on the base so writers can call it backend-agnostically.
+        No-op on the base: only the hashi_vault backend recognizes markers.
         """
         return value
 
@@ -148,13 +125,10 @@ class SecretBackend:
         provider: str,
         consumer: str,
     ) -> None:
-        """A secret that is BOTH a provider standalone var and a consumer env ref.
+        """A secret that is both a provider standalone var and a consumer env ref.
 
-        Default (ansible-vault): store independently — the raw value in the
-        provider's vault buffer AND a ``vault_<consumer_key>`` copy in the
-        consumer's (two separate stores). The hashi_vault backend overrides this
-        to prompt once and point both refs at a single OpenBao location (single
-        source of truth).
+        Default: stored twice, in the provider's vault buffer and as a
+        `vault_<consumer_key>` consumer copy. `HashiVaultBackend` uses one ref.
         """
         self.var_secret(pvars, var, value, component=provider)
         self.env_secret(answers, consumer_key, component=consumer, value=value)
@@ -163,10 +137,10 @@ class SecretBackend:
 class AnsibleVaultBackend(SecretBackend):
     """The default ansible-vault backend: real values in an encrypted vault.yml."""
 
-    kind = "ansible-vault"
+    kind = BACKEND_ANSIBLE_VAULT
 
     def __init__(self) -> None:
-        # per-component buffer of vault_<key> → raw value (written to vault.yml)
+        # per-component buffer of vault_<key> -> raw value, written to vault.yml
         self._buf: dict[str, dict] = {}
 
     def prompts_values(self) -> bool:
@@ -175,8 +149,6 @@ class AnsibleVaultBackend(SecretBackend):
     def env_secret(
         self, answers: dict, env_key: str, component: str, *, value=None
     ) -> None:
-        # exactly today's _secret(): vault_<key> in the component's vault buffer,
-        # {{ vault_<key> }} ref in the env answers.
         name = "vault_" + env_key.lower()
         self._buf.setdefault(component, {})[name] = value
         answers[env_key] = "{{ " + name + " }}"
@@ -184,11 +156,9 @@ class AnsibleVaultBackend(SecretBackend):
     def var_secret(
         self, pvars, var: str, value, *, component: str, vault_key: str | None = None
     ) -> None:
-        # provider standalone secret scalar. With ``vault_key`` set, follow the
-        # vault-ref split: a ``{{ vault_<key> }}`` ref in the plaintext pvars and
-        # the real value under that ``vault_<key>`` name in vault.yml. Without it,
-        # the raw value is stored under the var name in the vault buffer and pvars
-        # is left untouched.
+        # With vault_key set: a {{ vault_<key> }} ref in the plaintext pvars,
+        # the real value under vault_key in vault.yml. Without it: the raw
+        # value goes straight into the vault buffer under the var name.
         if vault_key:
             pvars[var] = "{{ " + vault_key + " }}"
             self._buf.setdefault(component, {})[vault_key] = value
@@ -200,31 +170,28 @@ class AnsibleVaultBackend(SecretBackend):
 
 
 class HashiVaultBackend(SecretBackend):
-    """OpenBao/Vault KV-v2 backend — reference-only: env blobs carry lookup
-    refs to existing OpenBao entries; no ``vault.yml``, no generation, no writes."""
+    """OpenBao/Vault KV-v2 backend, reference-only.
 
-    kind = "hashi_vault"
+    Env blobs carry lookup refs to existing OpenBao entries. Writes no
+    `vault.yml`, generates no secret, writes nothing to OpenBao.
+    """
+
+    kind = BACKEND_HASHI_VAULT
 
     def __init__(self, app: str) -> None:
-        # app name seeds the pre-filled @openbao(kv/data/<app>:<VAR>) default hint.
         self._app = app
 
     def expand_markers(self, value: str) -> str:
-        # reference-only: turn any inline @openbao()/@vault() marker in a non-secret
-        # value into a lookup ref (a value with no marker is returned unchanged).
         return hashi_render(value)
 
-    # -- prompts (deferred to bootstrap so the strategy stays TTY-free) ------- #
     def _prompt_term(self, label: str) -> str:
         from .prompts import _ask
 
-        # Standard var prompt: label is just the var name, like every other prompt.
-        # Pre-fill an editable @openbao(kv/data/<app>:<VAR>) default the operator can
-        # accept with Enter or edit; hashi_render() turns the marker into a lookup ref.
+        # Pre-fill an editable default the operator can accept with Enter or
+        # edit; hashi_render() turns the marker into a lookup ref.
         hint = f"@openbao(kv/data/{self._app}:{label})"
         return _ask(label, default=hint)
 
-    # -- strategy methods ----------------------------------------------------- #
     def prompts_values(self) -> bool:
         return False
 
@@ -236,10 +203,8 @@ class HashiVaultBackend(SecretBackend):
         *,
         value=None,
     ) -> None:
-        # reference-only: prompt the lookup term and drop the ref into answers.
-        # `value` is accepted for API symmetry with ansible-vault but ignored —
-        # st-cli mints nothing and writes nothing to OpenBao. The term may carry
-        # inline @openbao()/@vault() markers; hashi_render interpolates them.
+        # `value` is accepted for API symmetry with ansible-vault but ignored:
+        # st-cli mints nothing and writes nothing to OpenBao.
         answers[env_key] = hashi_render(self._prompt_term(env_key))
 
     def var_secret(
@@ -251,11 +216,8 @@ class HashiVaultBackend(SecretBackend):
         component: str,
         vault_key: str | None = None,
     ) -> None:
-        # reference-only: prompt the lookup term and drop the ref into pvars.
-        # `value`/`vault_key` are ignored (kept for signature symmetry with
-        # ansible-vault — hashi always writes a lookup ref into pvars.yml). The
-        # term may carry inline @openbao()/@vault() markers; hashi_render
-        # interpolates them.
+        # `value`/`vault_key` are ignored; kept for signature symmetry with
+        # ansible-vault, which uses them.
         pvars[var] = hashi_render(self._prompt_term(var))
 
     def shared_provider_secret(
@@ -269,39 +231,23 @@ class HashiVaultBackend(SecretBackend):
         provider: str,
         consumer: str,
     ) -> None:
-        # single source of truth: prompt one lookup term and point BOTH the
-        # provider var and the consumer env ref at it — no double prompt, no
-        # writes (reference-only). The term may carry inline @openbao()/@vault()
-        # markers; hashi_render interpolates them into a single shared ref.
+        # Single source of truth: one prompt, both the provider var and the
+        # consumer env ref point at the same lookup.
         ref = hashi_render(self._prompt_term(var))
         pvars[var] = ref
         answers[consumer_key] = ref
 
     def component_secrets(self, component: str) -> dict:
-        # always empty → _write_vault no-ops → no vault.yml is written
         return {}
 
 
-# --------------------------------------------------------------------------- #
-# interactive + non-interactive construction
-# --------------------------------------------------------------------------- #
 def setup_backend(m, app: str, env: str) -> SecretBackend:
-    """Interactive: ask the user to choose a secret backend, persist + return it.
+    """Ask the user to choose a secret backend, persist it, and return it.
 
-    Upserts a :class:`~st_cli.core.models.SecretConfig` on ``m`` (caller saves
-    the manifest). For hashi_vault, also prompts connection vars and merges
-    them into ``<app>/<env>/common.yml`` via :func:`write_common_connection`.
-
-    Non-interactive on re-runs: once an (app, env) has been bootstrapped (either
-    a ``secrets:`` entry exists OR prior units were registered — the ansible-vault
-    backend writes no secrets entry), the persisted backend choice is reused
-    silently. Re-asking would be redundant and dangerous: picking a different
-    backend breaks the existing tree.
+    Reuses the persisted choice of an already-bootstrapped (app, env): a
+    different backend breaks the tree. Registered units with no `secrets:`
+    entry, from an older manifest, count as ansible-vault.
     """
-    # REUSE short-circuit: a backend was already chosen for this (app, env) at
-    # the first bootstrap. hashi_vault persists a secrets entry; ansible-vault
-    # writes none (per the "omit empty secrets block" convention), so prior
-    # units are the signal it was bootstrapped.
     existing = next((s for s in m.secrets if s.app == app and s.env == env), None)
     if existing is not None or manifest.units_for(m, app, env):
         from . import ui
@@ -310,7 +256,7 @@ def setup_backend(m, app: str, env: str) -> SecretBackend:
         ui.info(f"Reusing the '{backend_name}' secret backend for {app}/{env}")
         return (
             HashiVaultBackend(app)
-            if backend_name == "hashi_vault"
+            if backend_name == BACKEND_HASHI_VAULT
             else AnsibleVaultBackend()
         )
 
@@ -323,12 +269,14 @@ def setup_backend(m, app: str, env: str) -> SecretBackend:
             "hashi_vault (OpenBao) — HashiCorp Vault or OpenBao external instance",
         ],
     )
-    backend_name = "hashi_vault" if "hashi_vault" in choice else "ansible-vault"
+    backend_name = (
+        BACKEND_HASHI_VAULT if BACKEND_HASHI_VAULT in choice else BACKEND_ANSIBLE_VAULT
+    )
     manifest.upsert_secret(
         m, manifest.SecretConfig(app=app, env=env, backend=backend_name)
     )
 
-    if backend_name == "hashi_vault":
+    if backend_name == BACKEND_HASHI_VAULT:
         from . import ui
 
         ui.note(
@@ -346,9 +294,8 @@ def setup_backend(m, app: str, env: str) -> SecretBackend:
         )
         url = _ask("OpenBao / Vault URL", placeholder="https://vault.internal:8200")
         skip_tls = _confirm("Skip TLS verification?", default=False)
-        # auth_method is always token here (the user supplies VAULT_TOKEN at
-        # runtime) — written for documentation, not prompted. Edit common.yml to
-        # switch to approle/etc.
+        # auth_method is always token: the user supplies VAULT_TOKEN at
+        # runtime. Written for documentation, not prompted.
         write_common_connection(app, env, url, not skip_tls, "token")
         return HashiVaultBackend(app)
     return AnsibleVaultBackend()

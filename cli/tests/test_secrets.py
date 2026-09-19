@@ -1,21 +1,18 @@
 """Tests for st_cli.cmd.secrets — the `st-cli secrets APP ENV` command.
 
-Covers the backend guard (hashi_vault refused), the no-editable-components
-errors, single vs multi component selection, the `-c` narrow path, the
-missing-`.vault-pass` propagation, and the interactive (no capture_output)
-subprocess requirement.
+Covers the backend guard, component selection, and the missing-`.vault-pass`
+propagation.
 """
 
 from __future__ import annotations
 
 import pytest
+from helpers import script_questionary, seed_creds
 
 from st_cli.cmd import secrets as secrets_mod
 from st_cli.core import manifest, paths, vault
 from st_cli.core.errors import StCliError
 from st_cli.core.models import SecretConfig, StCliManifest, UnitState
-
-from helpers import seed_creds, script_questionary
 
 _VAULT_HEADER = "$ANSIBLE_VAULT;1.1;AES256\nfake-encrypted-body\n"
 
@@ -38,9 +35,6 @@ def _seed_vault_file(app, env, component):
     return p
 
 
-# --------------------------------------------------------------------------- backend guard
-
-
 def test_hashi_vault_backend_refused(repo, mocker):
     """A (app, env) on the hashi_vault backend → StCliError pointing to OpenBao."""
     seed_creds(repo)
@@ -57,9 +51,6 @@ def test_hashi_vault_backend_refused(repo, mocker):
     edit_spy.assert_not_called()
 
 
-# --------------------------------------------------------------------------- no editable components
-
-
 def test_no_editable_components(repo, mocker):
     """Units exist but none has a vault.yml → StCliError (no prompt, no edit)."""
     seed_creds(repo)
@@ -70,9 +61,6 @@ def test_no_editable_components(repo, mocker):
         secrets_mod.edit_secrets("meet", "prod", None)
 
     edit_spy.assert_not_called()
-
-
-# --------------------------------------------------------------------------- single component
 
 
 def test_single_component_edits_without_prompt(repo, mocker):
@@ -86,9 +74,6 @@ def test_single_component_edits_without_prompt(repo, mocker):
 
     expected = paths.vault_path("meet", "prod", "meet")
     edit_spy.assert_called_once_with(expected)
-
-
-# --------------------------------------------------------------------------- multiple components
 
 
 def test_multiple_components_prompts_and_edits_chosen(repo, mocker, monkeypatch):
@@ -127,11 +112,8 @@ def test_multiple_components_prompts_and_edits_chosen(repo, mocker, monkeypatch)
     edit_spy.assert_called_once_with(paths.vault_path("messages", "prod", "mpa"))
 
 
-# --------------------------------------------------------------------------- -c with no vault.yml
-
-
 def test_component_flag_no_vault_yml(repo, mocker):
-    """`-c <component>` where that component has no vault.yml → specific StCliError."""
+    """`-c <component>` on a component without vault.yml raises a specific StCliError."""
     seed_creds(repo)
     _seed_manifest(repo, [UnitState("meet", "prod", "meet", "managed")])
     # no vault.yml created for meet
@@ -158,21 +140,15 @@ def test_component_flag_edits_existing_vault(repo, mocker):
     edit_spy.assert_called_once_with(paths.vault_path("meet", "prod", "meet"))
 
 
-# --------------------------------------------------------------------------- missing .vault-pass
-
-
 def test_missing_vault_pass_propagates(repo, mocker):
     """Without .vault-pass, edit_file→ensure_vault_password(create=False) raises;
     edit_secrets propagates that StCliError (no swallow, no subprocess)."""
-    # NOTE: deliberately NOT calling seed_creds — no .vault-pass
+    # NOTE: deliberately NOT calling seed_creds, so there is no .vault-pass
     _seed_manifest(repo, [UnitState("meet", "prod", "meet", "managed")])
-    _seed_vault_file("meet", "prod", "meet")  # is_encrypted → True (header)
+    _seed_vault_file("meet", "prod", "meet")  # is_encrypted returns True (header)
 
     with pytest.raises(StCliError, match="Vault password file"):
         secrets_mod.edit_secrets("meet", "prod", None)
-
-
-# --------------------------------------------------------------------------- interactive (no capture_output)
 
 
 def test_edit_subprocess_has_no_capture_output(repo, mocker):
@@ -195,9 +171,6 @@ def test_edit_subprocess_has_no_capture_output(repo, mocker):
     assert "text" not in kwargs
 
 
-# --------------------------------------------------------------------------- generated .vault-pass
-
-
 def test_ensure_vault_password_generates_file(repo):
     """With no .vault-pass, ensure_vault_password(create=True) generates a strong
     random password, writes it chmod 0600, and is idempotent (a second call
@@ -212,6 +185,6 @@ def test_ensure_vault_password_generates_file(repo):
     assert contents.strip() != ""
     assert pw_path.stat().st_mode & 0o777 == 0o600
 
-    # second call is idempotent — same contents, no regeneration
+    # second call is idempotent: same contents, no regeneration
     vault.ensure_vault_password(create=True)
     assert pw_path.read_text(encoding="utf-8") == contents

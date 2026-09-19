@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+SECRET_FILE_MODE = 0o600
+
 
 def repo_root() -> Path:
     """Root of the deployment repo (the process working directory)."""
@@ -28,6 +30,16 @@ def collections_dir() -> Path:
 def manifest_path() -> Path:
     """Committed manifest path."""
     return repo_root() / ".st-cli.yml"
+
+
+def ansible_cfg_path() -> Path:
+    """Generated ``ansible.cfg`` path, under ``.st-cli/``."""
+    return st_cli_dir() / "ansible.cfg"
+
+
+def galaxy_requirements_path() -> Path:
+    """Generated ``galaxy-requirements.yml`` path, under ``.st-cli/``."""
+    return st_cli_dir() / "galaxy-requirements.yml"
 
 
 def unit_dir(app: str, env: str, component: str) -> Path:
@@ -68,8 +80,8 @@ def ssh_config_path() -> Path:
 def ssh_config_local_path() -> Path:
     """Gitignored per-operator SSH client config (``ssh/config.local``).
 
-    Included first by the container (see ``Dockerfile``) so operator overrides win
-    over the shared committed ``ssh/config``. Missing file → silent no-op.
+    The container includes it first, so operator overrides win over the
+    committed ``ssh/config``. A missing file is a silent no-op.
     """
     return ssh_dir() / "config.local"
 

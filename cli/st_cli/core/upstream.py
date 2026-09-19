@@ -1,18 +1,8 @@
 """Best-effort upstream-version check, plus the `.st-cli.yml` pin check.
 
-Before any subcommand, ``maybe_warn_upgrade`` first compares the installed
-CLI against the `.st-cli.yml` pin (``core/pin.py``), then asks the collection
-repo (via anonymous ``git ls-remote --tags``) for the highest semver tag and,
-if the running CLI is behind, **warns** the user to pull a newer build. Both
-checks are **best-effort and non-fatal**: any failure (offline, git missing,
-timeout, parse error, no manifest) is swallowed silently and the original
-command proceeds untouched. Neither check ever prompts, never auto-runs
-``upgrade``, and never raises out of the callback — each only emits a
-``ui.warn``.
-
-A small JSON cache under ``$XDG_CACHE_HOME/st-cli/upstream.json`` (default
-``~/.cache/st-cli/upstream.json``) avoids hitting the repo on every invocation
-(TTL = 6h).
+`maybe_warn_upgrade` checks the installed CLI against the pin, then against
+the latest upstream tag, and warns through `ui.warn`. Every check is
+best-effort: any failure is silent, and the command proceeds untouched.
 """
 
 from __future__ import annotations
@@ -32,13 +22,10 @@ from . import manifest, pin, ui
 _REPO = "https://github.com/suitenumerique/st-ansible.git"
 _TTL = 6 * 3600  # seconds
 
+NO_CHECK_ENV = "ST_CLI_NO_UPSTREAM_CHECK"
+
 
 def _parse_version(tag: str) -> tuple[int, ...] | None:
-    """Parse a dotted numeric version (e.g. "0.0.21") to a tuple of ints.
-
-    Return None for non-numeric/garbage tags (pre-release suffixes, "main",
-    "v1", empty strings). Used both for filtering tags and for comparison.
-    """
     if not tag:
         return None
     parts = tag.split(".")
@@ -50,9 +37,7 @@ def _parse_version(tag: str) -> tuple[int, ...] | None:
 def latest_upstream_version(timeout: float = 3.0) -> str | None:
     """Return the highest semver git tag on the collection repo, or None.
 
-    Any failure (non-zero rc, git missing, timeout, no parseable tags) → None.
-    Peeled-ref lines (``^{}``) are ignored; only tags ``_parse_version`` accepts
-    are considered; the max is returned as its original string.
+    Peeled-ref lines and tags `_parse_version` rejects are skipped.
     """
     try:
         proc = subprocess.run(
@@ -60,6 +45,7 @@ def latest_upstream_version(timeout: float = 3.0) -> str | None:
             capture_output=True,
             text=True,
             timeout=timeout,
+            check=False,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
@@ -90,7 +76,7 @@ def _cache_path() -> Path:
 
 
 def _read_cache() -> dict:
-    """Read the cache dict, or {} on any error / missing file."""
+    """Never raises. Returns {} on any error or a missing file."""
     try:
         data = json.loads(_cache_path().read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
@@ -99,7 +85,7 @@ def _read_cache() -> dict:
 
 
 def _write_cache(data: dict) -> None:
-    """Write the cache dict, creating parent dirs; swallow IO errors."""
+    """Never raises. Swallows IO errors."""
     try:
         path = _cache_path()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -111,9 +97,8 @@ def _write_cache(data: dict) -> None:
 def get_latest_cached() -> str | None:
     """Return the latest upstream version, using the cache when fresh.
 
-    If the cache was checked within the TTL, return its ``latest`` without any
-    network call. Otherwise query upstream, refresh the cache, and return the
-    result.
+    Skips the network call when the cache is within the TTL; otherwise
+    queries upstream and refreshes the cache.
     """
     cache = _read_cache()
     checked_at = cache.get("checked_at")
@@ -128,8 +113,8 @@ def get_latest_cached() -> str | None:
 def is_behind(latest: str | None) -> bool | None:
     """Return whether the installed CLI is older than `latest`.
 
-    Return None (unknown) when `latest` is None or when either version fails
-    to parse. Return True only when the installed version is strictly older.
+    Return None when `latest` is None or when either version fails to parse.
+    Return True only when the installed version is strictly older.
     """
     if latest is None:
         return None
@@ -143,9 +128,8 @@ def is_behind(latest: str | None) -> bool | None:
 def owning_pipx() -> str | None:
     """Return the pipx executable when pipx manages this install, else None.
 
-    pipx writes ``pipx_metadata.json`` at the root of each venv it owns, so
-    the check on ``sys.prefix`` confirms ownership. pipx on the PATH alone
-    does not mean pipx installed the running st-cli.
+    pipx writes `pipx_metadata.json` in each venv it owns. Its presence
+    under `sys.prefix` confirms ownership, even when pipx is only on PATH.
     """
     if not (Path(sys.prefix) / "pipx_metadata.json").is_file():
         return None
@@ -155,8 +139,8 @@ def owning_pipx() -> str | None:
 def install_hint() -> str:
     """Return the command that installs a newer st-cli build, no backticks.
 
-    Returns ``pipx upgrade st-cli`` when pipx owns this install
-    (``owning_pipx``), else the container-image pull command.
+    Uses `pipx upgrade st-cli` when `owning_pipx` finds pipx owns this
+    install, else the container-image pull command.
     """
     if owning_pipx():
         return "pipx upgrade st-cli"
@@ -164,30 +148,15 @@ def install_hint() -> str:
 
 
 def maybe_warn_upgrade(invoked_subcommand: str | None) -> None:
-    """Best-effort: warn about a stale CLI, against the pin and against upstream.
+    """Warn about a stale CLI, against the pin, then against upstream.
 
-    Never raises. Warn-only — it never prompts, never auto-runs
-    ``upgrade``, and never exits. Any failure is swallowed silently so the
-    original command proceeds untouched.
-
-    Checks, in order: the installed CLI against the `.st-cli.yml` pin
-    (``core/pin.py``), then the installed CLI against the latest upstream
-    release. A CLI older than the pin: the function returns here. The
-    operator must install the pinned version first. A CLI newer than the
-    pin warns to run ``st-cli upgrade`` to align the repo, unless the CLI
-    is also behind upstream — ``upgrade`` refuses to run in that case, so
-    the function skips that warning and lets the upstream message below
-    name the fix instead. Either way, the function still runs the
-    upstream check after the pin check.
-
-    Each warning names one action only. The upstream message names only
-    the pull command. Once the pull makes the installed CLI newer than
-    the pin, the next command shows the ``st-cli upgrade`` hint. The two
-    steps thus appear one after the other, across two commands.
+    Best-effort and warn-only: it never raises, prompts, or runs `upgrade`.
+    Skips the CLI_NEWER pin warning when also behind upstream, because
+    `upgrade` refuses to run in that case.
     """
-    if os.environ.get("ST_CLI_NO_UPSTREAM_CHECK"):
+    if os.environ.get(NO_CHECK_ENV):
         return
-    # Don't nag on bare `st-cli` (help-only) or while already upgrading.
+    # Skip a bare `st-cli` call and the upgrade subcommand itself.
     if invoked_subcommand in (None, "upgrade"):
         return
 

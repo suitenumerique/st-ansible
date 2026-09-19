@@ -1,23 +1,59 @@
-"""Shared test helpers: config-tree seeding + a scripted questionary stand-in.
+"""Shared test helpers: config-tree seeding and a scripted questionary stand-in.
 
-Plain functions (not fixtures) so any test module can import and call them. The
-``repo`` fixture (a tmp_path cwd) lives in ``conftest.py``.
+These are plain functions, not fixtures, so any test module can import and call
+them. The ``repo`` fixture (a tmp_path cwd) lives in ``conftest.py``.
 """
 
 from __future__ import annotations
 
+import stat
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+import ruamel.yaml
 
 from st_cli.cmd import bootstrap
-from st_cli.core import appmeta, manifest, paths, tree, vault, writer
+from st_cli.core import appmeta, manifest, paths, tree, upgrades, vault, writer
 from st_cli.core.models import SecretConfig, StCliManifest, UnitState
 
 
 def seed_creds(repo: Path) -> None:
     """Write a .vault-pass so the vault-password prompt is skipped."""
     (repo / ".vault-pass").write_text("testpass\n")
+
+
+def set_flags(monkeypatch, tmp_path, flags: list[dict]) -> Path:
+    """Point ``upgrades._RESOURCE`` at a temp flags file."""
+    p = tmp_path / "upgrades.yml"
+    y = ruamel.yaml.YAML(typ="safe")
+    with p.open("w", encoding="utf-8") as fh:
+        y.dump(flags, fh)
+    monkeypatch.setattr(upgrades, "_RESOURCE", p)
+    return p
+
+
+def file_mode(path) -> int:
+    """Return the permission bits of ``path``, stripped of the file-type bits."""
+    return stat.S_IMODE(path.stat().st_mode)
+
+
+def call_order_spy() -> tuple[list[str], Callable[[str, Callable], Callable]]:
+    """Return a call-order recorder: a list, and a ``spy(name, real)`` factory.
+
+    ``spy(name, real)`` returns a wrapper that appends ``name`` to the list,
+    then calls ``real``. The list is fresh per call, for one test.
+    """
+    calls: list[str] = []
+
+    def spy(name, real):
+        def _impl(*args, **kwargs):
+            calls.append(name)
+            return real(*args, **kwargs)
+
+        return _impl
+
+    return calls, spy
 
 
 def seed_meet_unit(repo: Path) -> None:
@@ -29,14 +65,47 @@ def seed_meet_unit(repo: Path) -> None:
         )
     )
     data = tree.load_vars("meet", "prod", "meet")
-    # enabled flag is NOT stored in vars.yml — the generated playbook injects it
+    # enabled flag is NOT stored in vars.yml; the generated playbook injects it
     data["st_meet_backend_env"] = "DJANGO_CONFIGURATION=Production\n"
     tree.save_vars("meet", "prod", "meet", data)
     tree.write_hosts("meet", "prod", "meet", "meet", ["10.0.0.5"])
 
 
+def seed_drive_unit(
+    repo: Path,
+    hosts=("10.0.0.1",),
+    *,
+    components: tuple[str, ...] = ("drive",),
+    component_hosts: dict[str, list[str]] | None = None,
+    groups: dict[str, list[str]] | None = None,
+) -> None:
+    """Seed one or more managed drive/prod units (ansible-vault backend).
+
+    ``component_hosts`` overrides ``hosts`` per component; ``groups`` writes a
+    ``write_groups`` split for ``components[0]`` instead of a flat hosts file.
+    """
+    seed_creds(repo)
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.19",
+            "0.0.19",
+            [UnitState("drive", "prod", c, "managed") for c in components],
+        )
+    )
+    if groups is not None:
+        tree.write_groups("drive", "prod", components[0], groups)
+        return
+    if component_hosts:
+        for component, comp_hosts in component_hosts.items():
+            tree.write_hosts("drive", "prod", component, component, list(comp_hosts))
+        return
+    if hosts:
+        tree.write_hosts("drive", "prod", components[0], components[0], list(hosts))
+
+
 def seed_scaffolding_artifacts() -> None:
-    """Pre-create the 4 trashable .st-cli/ artifacts so a clean/no-clean assertion is meaningful."""
+    """Pre-create the 4 trashable .st-cli/ artifacts so a clean/no-clean assertion is
+    meaningful."""
     paths.st_cli_dir().mkdir(parents=True, exist_ok=True)
     (paths.st_cli_dir() / "ansible.cfg").write_text("[defaults]\n")
     (paths.st_cli_dir() / "galaxy-requirements.yml").write_text("collections: []\n")
@@ -48,13 +117,8 @@ def seed_scaffolding_artifacts() -> None:
 def seed_livekit_provider(repo: Path) -> None:
     """Seed a bootstrapped meet/prod/livekit provider unit (vars/vault/hosts).
 
-    The vars reflect what a fresh ``-c livekit`` bootstrap now writes (including the
-    egress-bundled valkey/redis topology decision), so a standalone ``-c egress`` run
-    that ADOPTS them can be asserted on. The seeded redis address is a distinctive
-    value (NOT the ``127.0.0.1:6379`` co-located default) so adoption tests can tell a
-    real adoption apart from the fallback default. The vault also seeds the
-    external-redis password (valkey is disabled here, so a real bootstrap always
-    mirrors one).
+    The redis address is distinctive, not the co-located default, so a test can
+    tell a real adoption apart from the fallback default.
     """
     seed_creds(repo)
     manifest.save_manifest(
@@ -86,8 +150,8 @@ def seed_livekit_provider(repo: Path) -> None:
 def seed_docs_yprovider_unit(repo: Path) -> None:
     """Seed a bootstrapped docs/prod/yprovider unit (vars/vault/hosts).
 
-    The vault carries distinctive secret values so an adoption test can tell the
-    kept unit's values apart from freshly generated ones.
+    The vault carries distinctive secret values so a test can tell a kept unit's
+    values apart from freshly generated ones.
     """
     seed_creds(repo)
     manifest.save_manifest(
@@ -121,11 +185,9 @@ def seed_docs_yprovider_unit(repo: Path) -> None:
 def seed_meet_egress_unit(repo: Path, hosts=("10.0.0.2",)) -> None:
     """Seed a bootstrapped meet/prod/egress unit standalone on ``hosts``.
 
-    Compose with ``seed_livekit_provider`` (call it first): the domain and redis
-    address match its values, so the egress unit reads as already bundled with
-    that livekit unit. Models ``seed_livekit_provider``'s vault shape — the
-    mirrored api key/secret + the redis password ``real-redis-pass`` — so a
-    livekit replay that mirrors them again is a byte no-op.
+    Call ``seed_livekit_provider`` first. It shares that unit's domain, redis
+    address, and vault secrets, so a livekit replay that mirrors them is a
+    byte no-op.
     """
     m = manifest.load_manifest()
     manifest.upsert_unit(m, UnitState("meet", "prod", "egress", "managed"))
@@ -154,12 +216,11 @@ def seed_meet_egress_unit(repo: Path, hosts=("10.0.0.2",)) -> None:
 
 
 def seed_hashi_livekit_provider(repo: Path) -> None:
-    """Seed a bootstrapped meet/prod/livekit provider unit under the hashi_vault
-    backend: lookup-ref secrets in vars.yml, no ``vault.yml``, no ``.vault-pass``.
+    """Seed a bootstrapped meet/prod/livekit unit under the hashi_vault backend:
+    lookup-ref secrets in vars.yml, no ``vault.yml``, no ``.vault-pass``.
 
-    Co-located (valkey enabled, default redis address) so a standalone
-    ``-c livekit`` replay never touches the egress/redis prompts — this seeds
-    for a test about the shared-secret refs, not the redis topology.
+    Co-located with the default redis address, so a standalone replay never
+    touches the redis-topology prompts.
     """
     manifest.save_manifest(
         StCliManifest(
@@ -187,17 +248,12 @@ def seed_hashi_livekit_provider(repo: Path) -> None:
 
 
 def seed_external_livekit_with_leftover_tree(repo: Path) -> None:
-    """Seed a meet/prod/livekit unit recorded ``external`` in the manifest, with
-    its local tree (vars/vault/hosts) still on disk from before it was
-    manually changed to external — the "recorded mode wins over tree
-    presence" scenario.
+    """Seed a meet/prod/livekit unit recorded ``external``, with its local tree
+    still on disk from before it was manually switched (recorded mode wins
+    over tree presence).
 
-    Runs a real co-located meet+livekit bootstrap first (so the core is a
-    genuine, fully-recoverable unit — DB/S3/OIDC included, not just the
-    livekit-related keys), then flips the livekit unit's manifest mode and
-    re-points the core's committed ``LIVEKIT_API_URL`` at a distinct external
-    host — the leftover livekit tree keeps its OWN (now-ignored) domain, so a
-    test can tell the two apart.
+    The leftover tree keeps its own, now-ignored domain, distinct from the
+    core's, so a test can tell the two apart.
     """
     seed_creds(repo)
     with pytest.MonkeyPatch.context() as mp:
@@ -268,10 +324,9 @@ def meet_first_run_script(
 ) -> list[tuple]:
     """Build a first-run meet core script.
 
-    ``db_mode`` picks ``"discrete"`` (DB_HOST/DB_NAME/...) or ``"url"``
-    (DATABASE_URL). Set ``secret_backend=False`` over an already-seeded repo
-    (no "Secret backend:" select). Set ``livekit=None`` to omit the trailing
-    "Bootstrap livekit now?" select, for a wire-only core-only run.
+    ``db_mode`` picks ``"discrete"`` or ``"url"`` DB prompts.
+    ``secret_backend=False`` skips the backend select; ``livekit=None`` skips
+    the trailing select.
     """
     script = []
     if secret_backend:
@@ -327,6 +382,44 @@ def meet_first_run_script(
     return script
 
 
+def livekit_script(
+    host="10.0.0.1",
+    *,
+    egress_host="",
+    ask_now=False,
+    public_domain=False,
+    confirm_livekit=True,
+    confirm_egress=True,
+) -> list[tuple]:
+    """Build the livekit/egress bootstrap prompt fragment shared by many tests.
+
+    ``ask_now``, ``public_domain``, ``confirm_livekit`` and ``confirm_egress``
+    each toggle one optional prompt in the fragment, independently.
+    """
+    script = []
+    if ask_now:
+        script.append(("select", "Bootstrap livekit now?", "Yes — bootstrap now"))
+    script += [
+        ("text", "livekit host(s)", host),
+        ("text", "egress (leave blank", egress_host),
+        ("text", "LiveKit domain (e.g. livekit.example.org)", "livekit.example.org"),
+        ("text", "LiveKit TURN domain (e.g. turn.example.org)", "turn.example.org"),
+    ]
+    if public_domain:
+        script.append(
+            (
+                "text",
+                "Public domain for meet (for the LiveKit recording webhook)",
+                "meet.example.org",
+            )
+        )
+    if confirm_livekit:
+        script.append(("confirm", "livekit", True))
+    if confirm_egress:
+        script.append(("confirm", "egress", True))
+    return script
+
+
 def drive_first_run_script() -> list[tuple]:
     return [
         ("select", "Secret backend:", "ansible-vault"),
@@ -358,9 +451,8 @@ def messages_first_run_script(
     blobs_offload: bool = False,
     outbound: str = "direct",
 ) -> list[tuple]:
-    """Build a first-run messages core script, up to and including the core
-    "cadvisor" confirm.
-    """
+    """Build a first-run messages core script, up to and including the "cadvisor"
+    confirm."""
     script = [("select", "Secret backend:", "ansible-vault")]
     script += [
         ("text", "messages host(s)", "10.0.0.4"),
@@ -427,8 +519,7 @@ def docs_first_run_script(
 ) -> list[tuple]:
     """Build a first-run docs core script.
 
-    Set ``yprovider=None`` to omit the trailing "Bootstrap yprovider now?"
-    select.
+    ``yprovider=None`` omits the trailing "Bootstrap yprovider now?" select.
     """
     script = []
     if secret_backend:
@@ -486,14 +577,11 @@ def projects_first_run_script(
     smtp: bool = False,
     cadvisor: bool = True,
 ) -> list[tuple]:
-    """Build a first-run projects script (a Sails app: no DB-mode select, no
-    dependency loop).
+    """Build a first-run projects script: a Sails app, so no DB-mode select and
+    no dependency loop.
 
-    ``oidc_provider`` picks ``"keycloak"`` (base URL + realm prompts),
-    ``"custom"`` (a typed issuer URL), or any other value (e.g. a
-    ProConnect environment, which prompts for neither). ``scaling=True``
-    routes REDIS_URL through the backend and makes S3 mandatory (no opt-out
-    confirm); otherwise S3 is asked about via ``s3``.
+    ``oidc_provider`` is ``"keycloak"``, ``"custom"`` (typed issuer URL), or
+    any other value (no extra prompt). ``scaling=True`` forces S3 on.
     """
     script = [("select", "Secret backend:", "ansible-vault")]
     script += [
@@ -556,11 +644,12 @@ def with_answers(script: list[tuple], overrides: dict[str, object]) -> list[tupl
 
 
 class _AcceptDefault:
-    """Sentinel script answer: "press Enter" on whatever ``default=`` the
-    prompt call was given (a native editable pre-fill, per
-    ``core/prompts.py``'s ``_text_question``/``_ask_select`` docstrings). Used
-    by rebootstrap tests to script an Enter-through run without hardcoding the
-    recovered value at every single prompt."""
+    """Sentinel script answer: "press Enter" on whatever ``default=`` the prompt
+    call was given.
+
+    Rebootstrap tests use it to script an Enter-through run without
+    hardcoding the recovered value at every single prompt.
+    """
 
     def __repr__(self) -> str:
         return "ACCEPT_DEFAULT"
@@ -582,10 +671,8 @@ class FakeQuestion:
 class ScriptedQuestionary:
     """Replaces questionary.text/password/confirm/select with canned answers.
 
-    Each script is a ``(kind, substring, answer)`` tuple; the first script whose
-    ``kind`` matches and whose ``substring`` is found in the prompt is consumed.
-    ``select`` records the ``(message, choices)`` it was offered so tests can
-    assert on the available options (e.g. no "Yes — bootstrap now" in wire-only mode).
+    Each script is a ``(kind, substring, answer)`` tuple; the first whose
+    ``kind`` matches and whose ``substring`` is in the prompt is consumed.
     """
 
     def __init__(self, scripts):
@@ -593,7 +680,7 @@ class ScriptedQuestionary:
         self.select_calls: list[tuple[str, list[str]]] = []
 
     def _consume(self, kind, prompt):
-        for i, (k, sub, ans) in enumerate(self._scripts):
+        for i, (k, sub, _ans) in enumerate(self._scripts):
             if k == kind and sub in prompt:
                 return self._scripts.pop(i)[2]
         raise AssertionError(
@@ -631,9 +718,8 @@ class ScriptedQuestionary:
 class DefaultsQuestionary(ScriptedQuestionary):
     """Answers ``ACCEPT_DEFAULT`` to every prompt that no script covers.
 
-    An unscripted ``password`` prompt raises. An unscripted required ``text``
-    prompt without a default raises. The hashi_vault backend asks a secret as
-    a ``text`` prompt with a default, so a hashi leg must check ``asked``.
+    An unscripted ``password`` prompt, or a required ``text`` prompt without a
+    default, raises. A hashi_vault leg must check ``asked`` for its secrets.
     """
 
     def __init__(self, scripts):
@@ -642,7 +728,7 @@ class DefaultsQuestionary(ScriptedQuestionary):
 
     def _consume(self, kind, prompt):
         self.prompts.append((kind, prompt))
-        for i, (k, sub, ans) in enumerate(self._scripts):
+        for i, (k, sub, _ans) in enumerate(self._scripts):
             if k == kind and sub in prompt:
                 return self._scripts.pop(i)[2]
         if kind == "password":
@@ -682,10 +768,7 @@ def accept_defaults(monkeypatch, scripts=()) -> DefaultsQuestionary:
 def script_questionary(monkeypatch, scripts) -> ScriptedQuestionary:
     """Patch ``st_cli.core.prompts.questionary`` with scripted responses.
 
-    ``setup_backend`` and the bootstrap helpers all reach questionary through the
-    shared primitives in ``core/prompts.py`` (re-exported by ``cmd/bootstrap.py``),
-    so patching that module's ``questionary`` surface covers every interactive
-    call (vault-password prompts are skipped because the tests pre-seed
-    ``.vault-pass``).
+    Every interactive call reaches questionary through that shared surface,
+    so this one patch covers the whole bootstrap flow.
     """
     return _patch_questionary(monkeypatch, ScriptedQuestionary(scripts))

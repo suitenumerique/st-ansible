@@ -40,7 +40,6 @@ You can find the documentation of the collection under the [docs/](docs/) direct
 - **[troubleshooting.md](docs/troubleshooting.md)** common issues and debug commands
 - **[99-examples/](docs/99-examples/)** playbook examples:
   - [full-high-availability](docs/99-examples/full-high-availability/)
-  - [meet](docs/99-examples/meet/)
 
 ## Roles
 

@@ -1,4 +1,5 @@
-"""Tests for st_cli.core.envrender — per-component env blob + OIDC endpoint rendering."""
+"""Tests for st_cli.core.envrender — per-component env blob + OIDC endpoint
+rendering."""
 
 from __future__ import annotations
 
@@ -38,9 +39,8 @@ def test_render_meet_backend_keeps_vault_refs():
 
 
 def test_render_drive_backend_env_concrete_s3_values():
-    """drive keeps the real literal endpoint/bucket in the backend blob (no
-    st_drive_s3_* indirection) — mirrors
-    test_render_meet_backend_env_concrete_s3_values."""
+    """drive keeps the real literal endpoint and bucket in the backend blob,
+    with no st_drive_s3_* indirection."""
     blobs = envrender.render_env(
         "drive",
         "drive",
@@ -57,8 +57,7 @@ def test_render_drive_backend_env_concrete_s3_values():
 
 def test_render_drive_caddy_env_s3_values():
     """drive's Caddy edge proxies media straight to S3 via CADDY_S3_* container
-    env vars (fed through the caddy_env file), not st_drive_s3_* ansible vars —
-    mirrors test_render_meet_caddy_env_s3_values but for drive."""
+    env vars, not st_drive_s3_* ansible vars."""
     blobs = envrender.render_env(
         "drive",
         "drive",
@@ -94,9 +93,7 @@ def test_render_meet_backend_env_concrete_s3_values():
 
 def test_render_meet_caddy_env_s3_values():
     """meet's Caddy ingress proxies media straight to S3 via CADDY_S3_* container
-    env vars (fed through the caddy_env file), not st_meet_s3_* ansible vars —
-    mirrors test_render_meet_backend_env_concrete_s3_values but for the caddy
-    env_render layer (see apps/meet.yml's caddy layer / meet.caddy.env.j2)."""
+    env vars, not st_meet_s3_* ansible vars."""
     blobs = envrender.render_env(
         "meet",
         "meet",
@@ -113,10 +110,8 @@ def test_render_meet_caddy_env_s3_values():
 
 
 def test_render_messages_backend_env_omits_aws_s3():
-    """messages uses STORAGE_MESSAGE_* for object storage and does NOT emit the
-    django-lasuite generic AWS_S3_* block — even if a stray AWS_S3 answer sneaks
-    in, the base template only renders the block when AWS_S3_ENDPOINT_URL is set,
-    which messages never populates."""
+    """messages uses STORAGE_MESSAGE_* for object storage and never emits the
+    generic AWS_S3_* block."""
     blobs = envrender.render_env(
         "messages",
         "messages",
@@ -133,11 +128,8 @@ def test_render_messages_backend_env_omits_aws_s3():
 
 
 def test_render_messages_backend_env_forces_oidc_create_user():
-    """messages (unlike meet/drive) does not auto-create the local user on OIDC
-    login by default; without OIDC_CREATE_USER=true a first-time ProConnect
-    login is silently rejected. The setting is statically injected into the
-    messages backend overlay (not base.django.env.j2) so meet/drive stay
-    unaffected."""
+    """messages does not auto-create the local user on OIDC login by default,
+    so a first login without OIDC_CREATE_USER=true is silently rejected."""
     messages_body = envrender.render_env("messages", "messages", {})[
         "st_messages_backend_env"
     ]
@@ -150,10 +142,8 @@ def test_render_messages_backend_env_forces_oidc_create_user():
 
 
 def test_render_messages_backend_env_emits_technical_domain():
-    """MESSAGES_TECHNICAL_DOMAIN backs the MX/SPF/DKIM DNS records
-    (get_expected_dns_records substitutes it into MESSAGES_DNS_RECORDS) and the
-    exporter noreply@ address. The in-app default `localhost` breaks real mail,
-    so the backend env emits it when set."""
+    """MESSAGES_TECHNICAL_DOMAIN backs the MX/SPF/DKIM DNS records and the
+    exporter noreply@ address."""
     body = envrender.render_env(
         "messages", "messages", {"MESSAGES_TECHNICAL_DOMAIN": "mail.example.org"}
     )["st_messages_backend_env"]
@@ -161,10 +151,8 @@ def test_render_messages_backend_env_emits_technical_domain():
 
 
 def test_render_messages_frontend_env_points_at_backend_container():
-    """messages frontend (Caddy) overlay emits the backend server the frontend
-    container proxies /api,/admin,/static to — in the split-container setup the
-    backend is reachable at the ``messages-backend`` container_name on port 8000,
-    not the default ``localhost:8000``."""
+    """The messages frontend overlay emits the backend server address the
+    frontend container proxies to, `messages-backend:8000`."""
     blobs = envrender.render_env("messages", "messages", {})
     body = blobs["st_messages_frontend_env"]
     assert "MESSAGES_FRONTEND_BACKEND_SERVER=messages-backend:8000" in body
@@ -172,7 +160,7 @@ def test_render_messages_frontend_env_points_at_backend_container():
 
 
 def test_render_drive_backend_email_block_keeps_vault_ref():
-    """drive backend emits the SHARED email keys and the SMTP password keeps its
+    """drive backend emits the shared email keys and the SMTP password keeps its
     {{ vault_... }} ref verbatim through rendering."""
     blobs = envrender.render_env(
         "drive",
@@ -188,7 +176,8 @@ def test_render_drive_backend_email_block_keeps_vault_ref():
 
 
 def test_render_meet_backend_email_extras():
-    """meet backend emits the meet-only email extras (DOMAIN / APP_BASE_URL) when set."""
+    """meet backend emits the meet-only email extras (DOMAIN / APP_BASE_URL) when
+    set."""
     blobs = envrender.render_env(
         "meet",
         "meet",
@@ -203,14 +192,8 @@ def test_render_meet_backend_email_extras():
 
 
 def test_render_meet_backend_env_emits_recording_block_when_enabled():
-    """meet backend emits the RECORDING_* block when RECORDING_ENABLE is set: LiveKit
-    egress uploads to the backend's existing AWS_S3_* bucket; RECORDING_STORAGE_EVENT_ENABLE
-    is pinned False so completion is signalled via the LiveKit webhook. RECORDING_DOWNLOAD_BASE_URL
-    references the st_meet_public_host ansible var (set by _ask_core to the same
-    single-source-of-truth value DJANGO_ALLOWED_HOSTS / the redirects reference);
-    the {{ }} lands verbatim in the env blob and ANSIBLE resolves it at deploy from
-    the core vars.yml (DOMAIN still feeds the {DOMAIN} component var). RECORDING_OUTPUT_FOLDER
-    is optional."""
+    """meet backend emits the RECORDING_* block when RECORDING_ENABLE is set,
+    with RECORDING_STORAGE_EVENT_ENABLE pinned False."""
     blobs = envrender.render_env(
         "meet",
         "meet",
@@ -232,9 +215,8 @@ def test_render_meet_backend_env_emits_recording_block_when_enabled():
 
 
 def test_render_meet_backend_env_omits_recording_block_when_disabled():
-    """Without RECORDING_ENABLE, none of the RECORDING_* lines appear in the rendered
-    meet backend env — mirrors the AWS_S3 guard test for messages
-    (test_render_messages_backend_env_omits_aws_s3)."""
+    """Without RECORDING_ENABLE, no RECORDING_* line appears in the rendered meet
+    backend env."""
     blobs = envrender.render_env("meet", "meet", {"DOMAIN": "meet.example.org"})
     body = blobs["st_meet_backend_env"]
     assert "RECORDING_" not in body
@@ -242,7 +224,7 @@ def test_render_meet_backend_env_omits_recording_block_when_disabled():
 
 def test_render_keycloak_env_keeps_vault_refs_and_omits_baked_keys():
     """keycloak renders the KC_* runtime keys with vault refs for the secrets, and
-    does NOT emit KC_DB (baked into the image) or any Django keys."""
+    emits neither KC_DB nor any Django key."""
     blobs = envrender.render_env(
         "keycloak",
         "keycloak",
@@ -267,21 +249,16 @@ def test_render_keycloak_env_keeps_vault_refs_and_omits_baked_keys():
 
 def test_render_email_block_absent_when_unconfigured():
     """When no DJANGO_EMAIL_* answers are set, the email block is omitted entirely
-    for both drive and messages (messages has no such settings upstream)."""
+    for both drive and messages."""
     for app, component in (("drive", "drive"), ("messages", "messages")):
         blobs = envrender.render_env(app, component, {})
         body = blobs[f"st_{app}_backend_env"]
         assert "DJANGO_EMAIL_" not in body
 
 
-# --------------------------------------------------------------------------- docs
-
-
 def test_render_docs_backend_references_public_host_and_collaboration_urls():
-    """docs backend emits OIDC_REDIRECT_ALLOWED_HOSTS + the collaboration URLs
-    verbatim (the {{ st_docs_public_host }} ref travels through the answer value
-    unresolved — the jinja2 env template just prints the string; ANSIBLE resolves
-    it at deploy from the core vars.yml, same pattern as meet's public-host refs)."""
+    """docs backend emits OIDC_REDIRECT_ALLOWED_HOSTS and the collaboration URLs
+    verbatim, unresolved until Ansible renders them at deploy."""
     blobs = envrender.render_env(
         "docs",
         "docs",
@@ -311,8 +288,8 @@ def test_render_docs_backend_references_public_host_and_collaboration_urls():
 
 
 def test_render_docs_backend_optional_keys_absent_when_unset():
-    """Y_PROVIDER_API_BASE_URL and the frontend theme keys are guarded — absent
-    from the rendered body when not set in answers."""
+    """Y_PROVIDER_API_BASE_URL and the frontend theme keys are absent from the
+    rendered body when not set in answers."""
     body = envrender.render_env("docs", "docs", {"DOMAIN": "docs.example.org"})[
         "st_docs_backend_env"
     ]
@@ -333,10 +310,8 @@ def test_render_docs_backend_theme_customization():
 
 
 def test_render_docs_caddy_env_s3_and_yprovider_values():
-    """docs' Caddy ingress proxies /media/* straight to S3 via CADDY_S3_* container
-    env vars and /collaboration/* to the y-provider upstreams via
-    CADDY_YPROVIDER_ENDPOINTS (a space-separated host:port list caddy expands at
-    parse time), all fed through the caddy_env file."""
+    """docs' Caddy ingress proxies /media/* to S3 via CADDY_S3_* and
+    /collaboration/* to the y-provider upstreams via CADDY_YPROVIDER_ENDPOINTS."""
     blobs = envrender.render_env(
         "docs",
         "docs",
@@ -373,5 +348,6 @@ def test_oidc_issuer_per_provider():
         envrender.oidc_issuer("custom", "https://idp.example.org/realms/x/", None)
         == "https://idp.example.org/realms/x"
     )
-    # keycloak without base_url/realm cannot be derived → empty, never a broken URL
+    # keycloak without base_url/realm cannot be derived, so it renders empty, never
+    # a broken URL
     assert envrender.oidc_issuer("keycloak", None, None) == ""

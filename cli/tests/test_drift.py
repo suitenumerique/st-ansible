@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import pytest
-import ruamel.yaml
-from helpers import seed_creds, seed_meet_unit
+from helpers import call_order_spy, seed_creds, seed_meet_unit, set_flags
 from typer.testing import CliRunner
 
 from st_cli import main as main_mod
@@ -16,38 +15,25 @@ from st_cli.core import (
     runner,
     tree,
     ui,
-    upgrades,
 )
 from st_cli.core.errors import StCliError
 from st_cli.core.models import StCliManifest, UnitState, UpgradeNeed
 
 
-def _set_flags(monkeypatch, tmp_path, flags: list[dict]):
-    """Point upgrades._RESOURCE at a temp flags file (see test_upgrades.py)."""
-    p = tmp_path / "upgrades.yml"
-    y = ruamel.yaml.YAML(typ="safe")
-    with p.open("w", encoding="utf-8") as fh:
-        y.dump(flags, fh)
-    monkeypatch.setattr(upgrades, "_RESOURCE", p)
-    return p
-
-
-# --------------------------------------------------------------------------- check_app (rebootstrap status)
-
-
 def test_check_app_no_flags_is_clean(repo, tmp_path, monkeypatch):
     seed_meet_unit(repo)
-    _set_flags(monkeypatch, tmp_path, [])
+    set_flags(monkeypatch, tmp_path, [])
     assert drift.check_app("meet", "prod") == []
 
 
 def test_check_app_reports_flag_newer_than_stamp(repo, tmp_path, monkeypatch):
-    """Check that an outranking flag is reported with version, reason, link, and command."""
+    """Check that an outranking flag is reported with version, reason, link, and
+    command."""
     seed_meet_unit(repo)
     m = manifest.load_manifest()
     m.units[0].bootstrapped_with = "0.2.0"
     manifest.save_manifest(m)
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [
@@ -72,7 +58,7 @@ def test_check_app_reports_flag_newer_than_stamp(repo, tmp_path, monkeypatch):
 def test_check_app_omits_warning_text(repo, tmp_path, monkeypatch):
     """Check that a flag's warnings stay out of the check_app line."""
     seed_meet_unit(repo)
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [
@@ -112,7 +98,7 @@ def test_check_app_flag_older_than_stamp_is_silent(repo, tmp_path, monkeypatch):
     m = manifest.load_manifest()
     m.units[0].bootstrapped_with = "0.5.0"
     manifest.save_manifest(m)
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.3.0", "apps": "all", "reason": "r", "link": ""}],
@@ -121,9 +107,10 @@ def test_check_app_flag_older_than_stamp_is_silent(repo, tmp_path, monkeypatch):
 
 
 def test_check_app_missing_stamp_is_reported(repo, tmp_path, monkeypatch):
-    """Check that a missing `bootstrapped_with` stamp is treated as 0.0.0 and matches every flag."""
+    """Check that a missing `bootstrapped_with` stamp is treated as 0.0.0 and matches
+    every flag."""
     seed_meet_unit(repo)  # bootstrapped_with defaults to ""
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.0.1", "apps": "all", "reason": "r", "link": ""}],
@@ -136,7 +123,7 @@ def test_check_app_missing_stamp_is_reported(repo, tmp_path, monkeypatch):
 def test_check_app_multiple_flags_reports_only_newest(repo, tmp_path, monkeypatch):
     """Check that several outstanding flags on one unit collapse to only the newest."""
     seed_meet_unit(repo)
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [
@@ -155,7 +142,8 @@ def test_check_app_multiple_flags_reports_only_newest(repo, tmp_path, monkeypatc
 def test_check_app_external_unit_excluded_even_with_managed_sibling(
     repo, tmp_path, monkeypatch
 ):
-    """Check that an external unit gets no rebootstrap warning even with a managed sibling."""
+    """Check that an external unit gets no rebootstrap warning even with a managed
+    sibling."""
     manifest.save_manifest(
         StCliManifest(
             "0.0.19",
@@ -166,7 +154,7 @@ def test_check_app_external_unit_excluded_even_with_managed_sibling(
             ],
         )
     )
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.0.1", "apps": "all", "reason": "r", "link": ""}],
@@ -178,9 +166,9 @@ def test_check_app_external_unit_excluded_even_with_managed_sibling(
 
 
 def test_check_app_all_external_warns_not_silent(repo, tmp_path, monkeypatch):
-    """An all-external (app, env) yields a warning, not an empty (clean) list —
-    nothing was actually evaluated, so it must not look like a clean pass."""
-    _set_flags(monkeypatch, tmp_path, [])
+    """An all-external (app, env) yields a warning, not an empty (clean) list,
+    since nothing was actually evaluated."""
+    set_flags(monkeypatch, tmp_path, [])
     manifest.save_manifest(
         StCliManifest(
             "0.0.19", "0.0.19", [UnitState("meet", "prod", "meet", "external")]
@@ -198,13 +186,11 @@ def test_check_app_no_units_still_raises(repo):
         drift.check_app("meet", "prod")
 
 
-# --------------------------------------------------------------------------- pending_needs
-
-
 def test_pending_needs_newest_per_unit_narrowed_to_components(
     repo, tmp_path, monkeypatch
 ):
-    """pending_needs narrows to --component and collapses to the newest flag per unit."""
+    """pending_needs narrows to --component and collapses to the newest flag per
+    unit."""
     manifest.save_manifest(
         StCliManifest(
             "0.0.19",
@@ -215,7 +201,7 @@ def test_pending_needs_newest_per_unit_narrowed_to_components(
             ],
         )
     )
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [
@@ -239,7 +225,7 @@ def test_pending_needs_skips_external_units(repo, tmp_path, monkeypatch):
             [UnitState("meet", "prod", "livekit", "external")],
         )
     )
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.0.1", "apps": "all", "reason": "r", "link": ""}],
@@ -254,40 +240,28 @@ def test_pending_needs_no_units_raises(repo):
         drift.pending_needs("meet", "prod")
 
 
-# --------------------------------------------------------------------------- preflight (single pair)
-
-
 def test_preflight_calls_generate_then_galaxy_in_order(repo, mocker):
-    """Check that preflight only calls generate_all then galaxy_install, no rebootstrap check."""
+    """Check that preflight only calls generate_all then galaxy_install, no rebootstrap
+    check."""
     seed_meet_unit(repo)
-    call_order: list[str] = []
-
-    def _spy(name, real):
-        def _impl(*args, **kwargs):
-            call_order.append(name)
-            return real(*args, **kwargs)
-
-        return _impl
+    call_order, spy = call_order_spy()
 
     mocker.patch.object(
-        generate, "generate_all", _spy("generate_all", lambda *a, **k: None)
+        generate, "generate_all", spy("generate_all", lambda *a, **k: None)
     )
     mocker.patch.object(
-        runner, "galaxy_install", _spy("galaxy_install", lambda *a, **k: None)
+        runner, "galaxy_install", spy("galaxy_install", lambda *a, **k: None)
     )
 
     assert drift.preflight("meet", "prod") is None
     assert call_order == ["generate_all", "galaxy_install"]
 
 
-# --------------------------------------------------------------------------- preflight_all (sweep)
-
-
 def test_preflight_all_never_touches_collection_or_network(
     repo, mocker, tmp_path, monkeypatch
 ):
     """Check that preflight_all touches neither the collection nor the network."""
-    _set_flags(monkeypatch, tmp_path, [])
+    set_flags(monkeypatch, tmp_path, [])
     manifest.save_manifest(
         StCliManifest(
             "0.0.19",
@@ -297,7 +271,7 @@ def test_preflight_all_never_touches_collection_or_network(
                 UnitState("meet", "staging", "meet", "managed"),
                 UnitState(
                     "drive", "prod", "drive", "external"
-                ),  # external-only → skipped
+                ),  # external-only, skipped
             ],
         )
     )
@@ -320,7 +294,7 @@ def test_preflight_all_app_only_narrows_to_app_envs(
     repo, mocker, tmp_path, monkeypatch
 ):
     """preflight_all(app='meet') checks all envs of meet and no other app."""
-    _set_flags(monkeypatch, tmp_path, [])
+    set_flags(monkeypatch, tmp_path, [])
     manifest.save_manifest(
         StCliManifest(
             "0.0.19",
@@ -330,7 +304,7 @@ def test_preflight_all_app_only_narrows_to_app_envs(
                 UnitState("meet", "staging", "meet", "managed"),
                 UnitState(
                     "drive", "prod", "drive", "managed"
-                ),  # different app → excluded
+                ),  # different app, excluded
             ],
         )
     )
@@ -402,9 +376,6 @@ def test_preflight_all_single_pair_passes_component(repo, mocker):
     gal_spy.assert_not_called()
 
 
-# --------------------------------------------------------------------------- doctor command
-
-
 @pytest.mark.parametrize(
     ("argv", "expected_call"),
     [
@@ -431,7 +402,7 @@ def test_doctor_command_clean_routes_through_preflight_all(
 
 def test_doctor_command_aggregates_warnings_on_drift(repo, mocker):
     """doctor warns per preflight_all warning and skips the clean success message
-    when there IS an outstanding rebootstrap."""
+    when there is an outstanding rebootstrap."""
     seed_meet_unit(repo)
     warnings = [
         "meet/prod/meet: rebootstrap needed (0.3.0 — reason). Run `st-cli bootstrap meet prod`.",
@@ -448,9 +419,6 @@ def test_doctor_command_aggregates_warnings_on_drift(repo, mocker):
     assert warn_spy.call_count == 2
     warn_spy.assert_any_call(warnings[0])
     warn_spy.assert_any_call(warnings[1])
-
-
-# --------------------------------------------------------------------------- env_key_report
 
 
 def _seed_full_meet_unit(repo):

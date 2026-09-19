@@ -1,11 +1,7 @@
 """Pure writers for the committed config tree (vars.yml / vault.yml / hosts).
 
-Extracted from :mod:`st_cli.cmd.bootstrap` so the interactive questionnaire
-stays separate from the I/O that materialises a unit's files. These helpers
-take already-collected answers + a secret-backend strategy and write the
-plaintext ``vars.yml`` (with ``{{ vault_* }}`` Jinja refs) and the
-ansible-vault-encrypted ``vault.yml`` (no-op when empty). No prompting, no
-manifest mutation — callers drive the flow.
+Takes already-collected answers and a secret backend. Prompts nothing and
+mutates no manifest.
 """
 
 from __future__ import annotations
@@ -18,12 +14,15 @@ from ruamel.yaml.scalarstring import LiteralScalarString
 from .. import __version__
 from . import envblob, envrender, paths, secrets, tree, ui, vault
 from .errors import StCliError
+from .models import BACKEND_HASHI_VAULT
 from .secretbackend import SecretBackend
 
 
-# --------------------------------------------------------------------------- #
-# shared-rule helpers
-# --------------------------------------------------------------------------- #
+def _scalar(value: str):
+    """Wrap a multi-line string as a readable `|` block; leave a one-liner plain."""
+    return LiteralScalarString(value) if "\n" in value else value
+
+
 def gen_value(rule: dict) -> str:
     """Materialise a generated shared value (token/secret) from a rule."""
     kind = rule.get("generate")
@@ -55,9 +54,8 @@ def inject_consumer(
 ) -> None:
     """Inject a shared value into the consumer's env answers.
 
-    Provider-only rules (no ``consumer_env_key``) inject nothing. Secrets are
-    routed through the backend (``env_secret``); ``consumer_format`` reshapes
-    the value (e.g. ``wss://{value}``) for non-secret refs like the LiveKit URL.
+    No `consumer_env_key` means no injection. Secrets route through the
+    backend; `consumer_format` reshapes a non-secret value.
     """
     key = rule.get("consumer_env_key")
     if not key:
@@ -68,9 +66,6 @@ def inject_consumer(
         answers[key] = (rule.get("consumer_format") or "{value}").format(value=value)
 
 
-# --------------------------------------------------------------------------- #
-# writers
-# --------------------------------------------------------------------------- #
 _REFERENCE_URL = (
     "https://github.com/suitenumerique/st-ansible/blob/main/roles/{role}/REFERENCE.md"
 )
@@ -79,14 +74,11 @@ _REFERENCE_URL = (
 def vars_header(app: str, meta, comp, backend: SecretBackend | None = None) -> str:
     """A documentation comment for the top of a component's vars.yml.
 
-    The secrets line describes the backend actually in use: the hashi_vault
-    backend writes no ``vault.yml`` at all (secrets stay in OpenBao and the blob
-    carries lookup refs), so claiming otherwise would send the operator hunting
-    for a file that does not exist. ``backend=None`` keeps the ansible-vault
-    wording (the default backend).
+    Describes the secret backend in use; `backend=None` defaults to the
+    ansible-vault wording.
     """
     role = comp.role.split(".")[-1]
-    if backend is not None and backend.kind == "hashi_vault":
+    if backend is not None and backend.kind == BACKEND_HASHI_VAULT:
         # literal (non-f) line so the Jinja braces survive verbatim:
         secrets_line = (
             " Secrets are referenced as {{ lookup('community.hashi_vault.hashi_vault',"
@@ -107,47 +99,35 @@ def vars_header(app: str, meta, comp, backend: SecretBackend | None = None) -> s
 
 
 def apply_component_vars(data, meta, comp, answers: dict) -> None:
-    """Add metadata-declared component vars (e.g. st_drive_public_host,
-    st_drive_collabora_env) to vars.yml, rendering ``{DOMAIN}``-style placeholders
-    from the questionnaire answers. Multi-line values become readable `|` blocks.
+    """Add metadata-declared component vars to vars.yml, rendering
+    `{DOMAIN}`-style placeholders from the answers.
 
-    When a placeholder cannot be rendered (the answer is missing or the template
-    is malformed) the committed value is KEPT if there already is one, and only
-    an absent key falls back to writing the literal template for the operator to
-    fix by hand. That asymmetry matters since ``write_core`` became a merge: on a
-    rebootstrap, ``answers`` is recovered from the tree and a recovery gap would
-    otherwise overwrite a perfectly good committed value with the literal string
-    ``"{DOMAIN}"`` — turning a partial recovery into silent config corruption.
-    Writing the literal is only ever an improvement on writing nothing at all.
+    A failed render keeps the committed value if one exists; only an absent
+    key gets the literal template.
     """
     for name, tmpl in meta.component_vars(comp.key).items():
         try:
             rendered = str(tmpl).format(**answers)
         except (KeyError, IndexError, ValueError):
             if name in data:
-                continue  # keep what is committed — never clobber it with "{PLACEHOLDER}"
-            rendered = str(
-                tmpl
-            )  # nothing to preserve → leave literal for the user to fix
-        data[name] = LiteralScalarString(rendered) if "\n" in rendered else rendered
+                # keep what is committed; do not clobber it with "{PLACEHOLDER}"
+                continue
+            # nothing to preserve; leave the literal template for the user to fix
+            rendered = str(tmpl)
+        data[name] = _scalar(rendered)
 
 
 def expand_var_markers(data, backend: SecretBackend) -> None:
-    """Expand inline @openbao()/@vault() markers in every string leaf of a
-    component's vars map (env blobs + st_* scalars) via the backend.
+    """Expand inline `@openbao()`/`@vault()` markers in every string leaf of a
+    component's vars map, via the backend.
 
-    No-op for ansible-vault (its expand_markers returns the value unchanged);
-    idempotent for hashi_vault (already-rendered lookup refs carry no marker).
-    Multi-line values are re-wrapped as LiteralScalarString to preserve the
-    readable `|` block style.
+    No-op for ansible-vault; idempotent for hashi_vault.
     """
     for name, val in list(data.items()):
         if isinstance(val, str):
             rendered = backend.expand_markers(val)
             if rendered != val:
-                data[name] = (
-                    LiteralScalarString(rendered) if "\n" in rendered else rendered
-                )
+                data[name] = _scalar(rendered)
 
 
 def write_vault(
@@ -158,34 +138,11 @@ def write_vault(
     *,
     replace: bool = False,
 ) -> None:
-    """Write + ansible-vault encrypt a unit's ``vault.yml``, merging on rebootstrap.
+    """Write and ansible-vault encrypt a unit's `vault.yml`, merging on rebootstrap.
 
-    The secret mapping comes from ``backend.component_secrets(component)``:
-    empty (e.g. hashi_vault mode, or a rebootstrap that prompted no NEW secret)
-    ⇒ **no-op**, file untouched — this matters because on a rebootstrap that
-    buffer holds only newly-prompted secrets (an already-answered secret is
-    never re-prompted), so writing it wholesale would silently destroy every
-    secret already committed. When the buffer is non-empty and ``vault.yml``
-    already exists, the existing mapping is decrypted first and the new values
-    are merged over it (new wins, everything else survives) before the union
-    is (re)encrypted. The decrypt happens before any write is attempted, so a
-    missing/wrong ``.vault-pass`` or a corrupt file raises ``StCliError`` with
-    nothing on disk touched.
-
-    ``replace=True`` (an OVERRIDE rebootstrap) skips the decrypt-and-merge
-    entirely and writes ``vault_vars`` wholesale — the whole point of an
-    override is to drop what is already committed, not carry it forward.
-
-    A merge that changes nothing is also a no-op. ansible-vault salts every
-    encryption, so re-encrypting an identical mapping produces a completely
-    different ciphertext — the file would show up in ``git diff`` on every
-    rebootstrap even though not one secret changed. That is not merely noise:
-    a rerun that reports "nothing changed" while rewriting an encrypted file
-    is exactly the kind of diff an operator learns to ignore, and it hides the
-    reruns that DID rotate something. Several paths legitimately re-mirror an
-    unchanged secret (e.g. reusing a livekit provider re-mirrors its api
-    key/secret into the meet core's vault), so this is the common case, not
-    the rare one.
+    No-op when `backend.component_secrets` is empty: on a rebootstrap it holds
+    only the newly prompted secrets, so a wholesale write would drop the rest.
+    `replace=True` skips the merge and writes `vault_vars` wholesale.
     """
     vault_vars = backend.component_secrets(component)
     if not vault_vars:
@@ -199,6 +156,8 @@ def write_vault(
     if not replace and path.exists():
         existing = vault.decrypt_to_dict(path)
         merged = {**existing, **vault_vars}
+        # ansible-vault salts every run; re-encrypting an unchanged mapping only
+        # adds git churn.
         if merged == existing:
             return
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -211,7 +170,7 @@ def write_vault(
         # plaintext secrets are world-readable while ansible-vault encrypt runs
         # in-place below. O_TRUNC covers any pre-existing tmp from a prior
         # aborted run; 0o600 has no group/other bits so umask cannot relax it.
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, paths.SECRET_FILE_MODE)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             tree.yaml().dump(cm, fh)
         vault.encrypt_file(tmp)
@@ -223,13 +182,10 @@ def write_vault(
 
 
 def ensure_vault_readable(app: str, env: str, components: list[str]) -> None:
-    """Raise ``StCliError`` up front if any named component's vault can't be read.
+    """Raise `StCliError` up front if any named component's vault cannot be read.
 
-    A no-op for a component with no ``vault.yml`` (fresh unit, or hashi_vault
-    mode which never writes one). Meant to be called by the rebootstrap flow
-    BEFORE the (potentially long) questionnaire runs: a missing/wrong
-    ``.vault-pass`` or a corrupt vault file should fail immediately, not after
-    the operator has re-answered every prompt only to lose the write at the end.
+    Call before the rebootstrap questionnaire, so a bad `.vault-pass` fails
+    before the operator re-answers every prompt.
     """
     for component in components:
         path = paths.vault_path(app, env, component)
@@ -240,9 +196,8 @@ def ensure_vault_readable(app: str, env: str, components: list[str]) -> None:
 def cadvisor_var(app: str) -> str:
     """The per-app cadvisor toggle var name (`st_<app>_cadvisor_enabled`).
 
-    Every component of an app runs the same role, so the var name is uniform
-    across the core and every provider unit — only the vars.yml it lands in
-    (and the hosts it deploys to) differs per component.
+    Uniform across every component of the app; only the vars.yml it lands in
+    differs.
     """
     return f"st_{app}_cadvisor_enabled"
 
@@ -258,30 +213,11 @@ def write_core(
     *,
     fresh: bool = False,
 ) -> None:
-    """Render + write the core component's vars.yml (plaintext) + vault.yml + hosts.
+    """Render and write the core component's vars.yml, vault.yml, and hosts.
 
-    This is a **merge**, not a replace: ``tree.load_vars`` loads whatever is
-    already committed (an empty ``CommentedMap`` when the unit is fresh) and we
-    mutate it in place, updating only the keys st-cli itself owns (the
-    manifest-declared component vars, the cadvisor toggle, and the env-render
-    blobs). Everything else an operator hand-edited — extra ``st_*`` vars,
-    comments, ``*_env_template``/``*_compose_template`` overrides — lives on
-    keys this function never touches, so it round-trips untouched. This is the
-    safety property the rebootstrap flow rests on: an Enter-through rerun must
-    leave ``vars.yml`` byte-identical.
-
-    ``fresh=True`` (an OVERRIDE rebootstrap) starts from an empty
-    ``CommentedMap`` instead of loading the committed one, so hand-edits and
-    old ``st_*`` vars are dropped, and passes ``replace=True`` down to
-    :func:`write_vault` so the vault is rebuilt wholesale too. Nothing on disk
-    is touched until this function's own writes at the end, so an aborted
-    questionnaire leaves the previous tree intact.
-
-    The core's ``hosts`` ini may carry two inventory groups: the core group
-    (``core.app_name``) and, when worker IPs were entered, a ``[workers]`` group
-    (``worker.app_name``). Workers own no directory of their own — both groups
-    live in the core's ``hosts`` file. An empty ``worker_hosts`` writes no
-    ``[workers]`` section, so the workers fall back to the core group.
+    Merges into what is committed; only the keys st-cli owns change, so a
+    hand-edited key round-trips untouched. `fresh=True` starts from an empty
+    map and rebuilds the vault wholesale.
     """
     app, core = meta.app, meta.core()
     rendered = envrender.render_env(app, core.key, answers)
@@ -302,7 +238,7 @@ def write_core(
         )  # readable `|` block, with {{ vault_* }} refs
     expand_var_markers(data, backend)
     if not data.ca.comment:
-        # Only stamp the header when the file has no start comment already — a
+        # Only stamp the header when the file has no start comment already: a
         # rebootstrap over an existing header must not stack a duplicate one.
         data.yaml_set_start_comment(vars_header(app, meta, core, backend))
     tree.save_vars(app, env, core.key, data)

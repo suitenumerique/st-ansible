@@ -9,8 +9,6 @@ from st_cli.core import manifest, tree
 from st_cli.core.errors import StCliError
 from st_cli.core.models import SecretConfig, StCliManifest, UnitState
 
-# --------------------------------------------------------------------------- units
-
 
 def test_manifest_roundtrip_no_hosts(repo):
     seed_creds(repo)
@@ -69,7 +67,7 @@ def test_managed_units_multiple_components_sorted_by_deploy_order(repo):
     )
     tree.save_vars("drive", "prod", "drive", tree.load_vars("drive", "prod", "drive"))
 
-    # requested out of deploy order — returned sorted (collabora=10 < drive=20)
+    # requested out of deploy order; returned sorted (collabora=10 < drive=20)
     _, units = manifest.managed_units("drive", "prod", ["drive", "collabora"])
     assert [u.component for u in units] == ["collabora", "drive"]
 
@@ -109,9 +107,6 @@ def test_managed_units_unknown_component_in_unit_raises_stclierror(repo):
         manifest.managed_units("meet", "prod", None)
 
 
-# --------------------------------------------------------------------------- malformed manifest
-
-
 def test_load_manifest_malformed_missing_unit_key_raises_stclierror(repo):
     """A hand-edited .st-cli.yml missing a required unit key raises StCliError
     (not a bare KeyError) so main._run surfaces a clean message."""
@@ -145,9 +140,6 @@ def test_load_manifest_malformed_missing_secret_key_raises_stclierror(repo):
     )
     with pytest.raises(StCliError, match=r"\.st-cli\.yml is malformed \(missing key"):
         manifest.load_manifest()
-
-
-# --------------------------------------------------------------------------- bootstrapped_with
 
 
 def test_bootstrapped_with_roundtrips(repo):
@@ -194,14 +186,11 @@ def test_bootstrapped_with_empty_is_omitted_on_save(repo):
     assert "bootstrapped_with" not in raw
 
 
-# --------------------------------------------------------------------------- ssh_user resolution
-
-
 @pytest.mark.parametrize(
     ("env_value", "expected"),
     [
-        ("deployer", "deployer"),  # non-empty → that value
-        (None, None),  # unset → None (defer to the ssh config chain)
+        ("deployer", "deployer"),  # non-empty returns that value
+        (None, None),  # unset returns None (defer to the ssh config chain)
         ("", None),  # empty ST_CLI_SSH_USER= must NOT yield an empty user
     ],
 )
@@ -214,11 +203,9 @@ def test_ssh_user_from_env(monkeypatch, env_value, expected):
     assert manifest.ssh_user() == expected
 
 
-# --------------------------------------------------------------------------- secret config
-
-
 def test_manifest_roundtrips_secret_config(repo):
-    """.st-cli.yml round-trips the per-(app,env) secrets: list; no block ⇒ ansible-vault."""
+    """.st-cli.yml round-trips the per-(app,env) secrets: list; no block ⇒
+    ansible-vault."""
     seed_creds(repo)
     m = StCliManifest(
         "0.0.20",
@@ -247,7 +234,7 @@ def test_manifest_roundtrips_secret_config(repo):
         manifest.secret_config_for(loaded2, "meet", "prod").backend == "ansible-vault"
     )
 
-    # upsert_secret replaces by (app, env) — not append
+    # upsert_secret replaces by (app, env), not append
     manifest.upsert_secret(loaded, SecretConfig("meet", "prod", "ansible-vault"))
     assert len(loaded.secrets) == 1 and loaded.secrets[0].backend == "ansible-vault"
     manifest.upsert_secret(loaded, SecretConfig("drive", "prod", "hashi_vault"))

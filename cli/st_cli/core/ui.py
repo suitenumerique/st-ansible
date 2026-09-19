@@ -43,21 +43,17 @@ def note(body: str, title: str = "Note") -> None:
 
 
 def host_header(name: str, host: str) -> None:
-    """Print a compact, colored ``<name> on <host>`` section header (e.g. for ``ps``).
-
-    Sets a component/unit name apart from the host it runs on so per-host output
-    blocks are easy to scan."""
+    """Print a compact, colored `<name> on <host>` section header (e.g. for `ps`)."""
     console.print(f"[bold cyan]{name}[/bold cyan] [dim]on[/dim] [green]{host}[/green]")
 
 
 class _Reporter:
     """Per-item progress reporter: a live Rich spinner on a TTY, plain lines otherwise.
 
-    Thread-safe — the parallel restart drives several components concurrently. Each
-    item gets a handle from :meth:`start`; call :meth:`update` to advance its line,
-    then :meth:`done` OR :meth:`fail` exactly once."""
+    Thread-safe. Call `done` or `fail` exactly once per handle from `start`.
+    """
 
-    def __init__(self, progress: "Progress | None") -> None:
+    def __init__(self, progress: Progress | None) -> None:
         self._p = progress  # a live Rich Progress on a TTY, else None
         self._lock = threading.Lock()
 
@@ -83,16 +79,14 @@ class _Reporter:
         with self._lock:
             if self._p is not None:
                 self._p.remove_task(handle)
-                error(label)
-            else:
-                error(label)
+            error(label)
 
 
 @contextmanager
 def progress_reporter():
-    """Yield a :class:`_Reporter`. On a TTY it drives a transient Rich spinner group
-    (spinner rows vanish on exit, leaving only the printed ✓/✗ summary lines); off a
-    TTY it degrades to plain info/success/error lines (clean, linear CI output)."""
+    """Yield a `_Reporter`. On a TTY it drives a transient spinner; off a TTY it
+    prints plain info/success/error lines.
+    """
     if console.is_terminal:
         progress = Progress(
             SpinnerColumn(),

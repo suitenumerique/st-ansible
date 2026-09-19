@@ -1,26 +1,7 @@
-"""Direct ssh operations for restart / ps / oneoff / reset / logs (no ansible).
+"""Direct ssh operations: restart, ps, oneoff, reset, logs. No ansible.
 
-Every command targets hosts read from the component's ``hosts`` file. ``restart``
-and ``ps`` loop ssh over each host of a unit (all by default, or one via
-``-H/--host``); ``logs`` / ``oneoff`` / ``reset`` hit exactly one host (prompting
-to pick when several). ``-H`` is the inventory *alias* (e.g. ``meet1``), validated
-against the component's own hosts file so a stray value can't reach another env;
-ssh connects to the alias's ``ansible_host`` ip. ``restart -p/--parallel`` fans
-the components out concurrently while keeping each component's own hosts serial
-(one at a time, so a multi-host unit is never fully down). ``restart`` shows a
-per-component progress reporter — a live spinner on a TTY (advancing per host,
-leaving a persistent ``✓``/``✗`` summary line) or plain info/success/error lines
-off a TTY — and suppresses ssh transport stdout/stderr so banners, motd and
-host-key chatter can't clutter the display or garble the spinner.
-
-ssh transport noise (the sshd auth Banner, the ``sudo -i`` login motd, and
-``Warning: Permanently added … to known_hosts``) all lands on stderr and carries no
-signal on success. The non-interactive, output-producing commands (``ps``, ``reset``
-teardown) run with ``_ssh(capture_stderr=True)``: stdout streams live, stderr is
-buffered and replayed only if the command fails. The interactive commands
-(``logs`` / ``oneoff``) can't capture (their stderr is merged onto the PTY), but
-every ``_ssh`` call passes ``-o LogLevel=ERROR`` to trim client-side host-key
-warnings.
+``-H/--host`` is the inventory alias, validated against the unit's hosts file.
+``restart`` rolls each component's hosts one at a time so it is never fully down.
 """
 
 from __future__ import annotations
@@ -28,9 +9,11 @@ from __future__ import annotations
 import shlex
 import subprocess
 import sys
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Iterator
+
+import questionary
 
 from ..core import appmeta, manifest, runner, sshuser, tree, ui
 from ..core.errors import StCliError
@@ -42,47 +25,52 @@ class Target:
     user: str
     app_name: str
     remote_dir: str
-
-
-def _ssh_user() -> str | None:
-    """Resolve the ssh user (ST_CLI_SSH_USER env var, else None → ssh config)."""
-    return manifest.ssh_user()
+    alias: str
 
 
 def _as_user(user: str, inner: str) -> str:
-    """Wrap an inner shell command to run in the app user's login shell.
+    """Wrap ``inner`` to run in the app user's login shell via `sudo -iu`.
 
-    ``sudo -iu`` sources ~/.bash_profile so XDG_RUNTIME_DIR / DOCKER_HOST are set
-    (needed for ``systemctl --user`` and rootless podman). ``inner`` is assembled
-    from shlex.quote'd fragments; quote it (and user) once more to survive the
-    remote-shell + sudo argv layers intact.
+    `sudo -iu` sources ~/.bash_profile so XDG_RUNTIME_DIR and DOCKER_HOST are set.
+    `inner` is already quoted; quote it again to survive the remote shell and sudo.
     """
     return f"sudo -iu {shlex.quote(user)} bash -lc {shlex.quote(inner)}"
 
 
-def _aliases(entries: list[tuple[str, str]]) -> str:
-    return ", ".join(a for a, _ in entries)
+def _require_tty_confirm(
+    non_tty_msg: str, warn_msg: str, *, confirmed: Callable[[], object]
+) -> bool:
+    """Guard an interactive prompt: raise off a TTY, else warn and call `confirmed`.
+
+    Returns False, after the warning "Aborted.", when the operator declines.
+    """
+    if not sys.stdin.isatty():
+        raise StCliError(non_tty_msg)
+    ui.warn(warn_msg)
+    if not confirmed():
+        ui.warn("Aborted.")
+        return False
+    return True
 
 
 def _select_host(
     entries: list[tuple[str, str]], host: str | None, pick: bool
 ) -> tuple[str, str]:
-    """Pick one ``(alias, ip)``: an explicit --host alias (validated), the sole
-    host, or an interactive prompt when several and pick=True on a TTY. With
-    several hosts and no choice, raise rather than silently defaulting to the
-    first."""
+    """Pick one ``(alias, ip)``: an explicit alias, the sole host, or a TTY prompt.
+
+    Raises when several hosts exist and none is chosen, rather than defaulting to the
+    first.
+    """
     if host is not None:
         e = tree.find_host(entries, host)
         if e is None:
             raise StCliError(
-                f"Host '{host}' is not an alias of this unit: {_aliases(entries)}."
+                f"Host '{host}' is not an alias of this unit: {tree.alias_list(entries)}."
             )
         return e
     if len(entries) == 1:
         return entries[0]
     if pick and sys.stdin.isatty():
-        import questionary
-
         labels = {f"{a} ({ip})": (a, ip) for a, ip in entries}
         answer = questionary.select(
             "Multiple hosts for this unit — pick one:",
@@ -93,35 +81,37 @@ def _select_host(
             raise StCliError("Aborted: no host selected.")
         return labels[answer]
     raise StCliError(
-        f"Unit has multiple hosts ({_aliases(entries)}); choose one with --host/-H "
-        f"(or run on a TTY to be prompted)."
+        f"Unit has multiple hosts ({tree.alias_list(entries)}); choose one with "
+        f"--host/-H (or run on a TTY to be prompted)."
     )
 
 
 def resolve_target(
     app: str, env: str, component: str, host: str | None = None, pick: bool = False
 ) -> Target:
-    """Resolve (host ip, app user, systemd name, remote dir) for a unit."""
+    """Resolve (host ip, app user, systemd name, remote dir, alias) for a unit."""
     m = manifest.load_manifest()
     if not manifest.units_for(m, app, env, [component]):
         raise StCliError(f"No unit {app}/{env}/{component} in .st-cli.yml.")
     meta = appmeta.load_app(app)
     comp = meta.component(component)
-    # workers own no hosts/vars files — they reuse the core unit's. component_inventory
-    # follows the effective_group rule (a worker with its own [workers] group targets
-    # it, else the core group); the vars file path and remote dir stay anchored on the
-    # core (files), while app_name/dir_var stay the worker's own.
+    # A worker has no hosts/vars files of its own: vars and remote dir come
+    # from the core unit, but app_name and dir_var stay the worker's.
     entries = tree.component_inventory(app, env, meta, comp)
     if not entries:
         raise StCliError(
             f"Unit {app}/{env}/{component} has no hosts (check its hosts file)."
         )
-    _alias, ip = _select_host(entries, host, pick)
+    alias, ip = _select_host(entries, host, pick)
     files = meta.files_component(component)
     data = tree.load_vars(app, env, files.key)
     remote_dir = data.get(comp.dir_var) or f"/opt/{comp.user}/{comp.app_name}"
     return Target(
-        host=ip, user=comp.user, app_name=comp.app_name, remote_dir=str(remote_dir)
+        host=ip,
+        user=comp.user,
+        app_name=comp.app_name,
+        remote_dir=str(remote_dir),
+        alias=alias,
     )
 
 
@@ -132,30 +122,24 @@ def _ssh(
     quiet: bool = False,
     capture_stderr: bool = False,
 ) -> int:
-    """Run ``remote_cmd`` on ``target_host`` over ssh, returning the exit code.
+    """Run ``remote_cmd`` on ``target_host`` over ssh and return the exit code.
 
-    ``interactive`` allocates a tty (``-t``) for shells/pagers. ``quiet`` discards
-    BOTH streams (``restart`` only needs the exit code). ``capture_stderr`` keeps
-    stdout live but buffers stderr and only replays it on failure — this hides the
-    ssh transport noise that carries no signal on success (the sshd auth Banner, the
-    ``sudo -i`` login motd, ``Warning: Permanently added … to known_hosts``, all of
-    which land on stderr) while still surfacing real errors. ``-o LogLevel=ERROR``
-    trims client-side host-key warnings on every call, including the interactive ones
-    that can't capture. ``quiet`` and ``capture_stderr`` are mutually exclusive
-    (quiet wins)."""
+    ``quiet`` discards both streams; ``capture_stderr`` buffers stderr and replays
+    it only on failure. ``quiet`` wins when both are set.
+    """
     sshuser.ensure_ssh_user([target_host])
-    user = _ssh_user()
+    user = manifest.ssh_user()
     target = f"{user}@{target_host}" if user else target_host
     cmd = ["ssh", "-o", "LogLevel=ERROR"]
     if interactive:
         cmd.append("-t")
     cmd += [target, remote_cmd]
+    opts: dict = {}
     if quiet:
-        proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        opts = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
     elif capture_stderr:
-        proc = subprocess.run(cmd, stderr=subprocess.PIPE, text=True)
-    else:
-        proc = subprocess.run(cmd)
+        opts = {"stderr": subprocess.PIPE, "text": True}
+    proc = subprocess.run(cmd, check=False, **opts)
     rc = proc.returncode
     if (
         rc != 0 and capture_stderr
@@ -165,7 +149,7 @@ def _ssh(
             ui.warn(err)
     if (
         rc == 255 and not quiet
-    ):  # ssh connection error — often a host key not yet accepted
+    ):  # ssh connection error, often a host key not yet accepted
         ui.warn(
             f"ssh could not connect to {target} (exit 255). If this host is "
             f"new, its key hasn't been accepted yet — connect once manually with "
@@ -175,58 +159,11 @@ def _ssh(
     return rc
 
 
-def _iter_hosts(
-    app: str,
-    env: str,
-    meta,
-    units,
-    components: list[str] | None,
-    host: str | None,
-    skip_workers: bool = False,
-) -> Iterator[tuple[object, str, str]]:
-    """Yield ``(comp, alias, ip)`` for every targeted host across ``units``.
-
-    Default is all of each component's hosts; ``host`` (an alias) narrows to one.
-    With ``components`` set, a missing ``host`` raises; without it, a component that
-    lacks the host is skipped. If ``host`` is given but matches nothing anywhere,
-    raise. ``skip_workers`` drops ``is_worker`` components (used by ``ps``: a worker
-    shares the core's user+hosts)."""
-    matched = False
-    for u in units:
-        comp = meta.component(u.component)
-        if skip_workers and comp.is_worker:
-            continue
-        entries = tree.component_inventory(app, env, meta, comp)
-        if not entries:
-            raise StCliError(
-                f"Unit {app}/{env}/{u.component} has no hosts (check its hosts file)."
-            )
-        if host is not None:
-            e = tree.find_host(entries, host)
-            if e is None:
-                if components:
-                    raise StCliError(
-                        f"Host '{host}' is not an alias of {app}/{env}/{u.component}: "
-                        f"{_aliases(entries)}."
-                    )
-                ui.info(f"Skipping {u.component}: alias '{host}' not in its inventory.")
-                continue
-            entries = [e]
-        for alias, ip in entries:
-            matched = True
-            yield comp, alias, ip
-    if host is not None and not matched:
-        raise StCliError(
-            f"Host alias '{host}' matched no managed component's inventory."
-        )
-
-
 def _restart_component(comp, hosts: list[tuple[str, str]], reporter) -> list[str]:
-    """Restart ONE component, rolling its hosts one at a time (no downtime).
+    """Restart one component, rolling its hosts one at a time.
 
-    Drives ``reporter`` (a ui spinner on a TTY, plain lines otherwise) and returns a
-    list of failure strings (empty on success). Never raises — the caller aggregates
-    failures across components and raises once."""
+    Never raises; returns the list of failure strings for the caller to aggregate.
+    """
     failures: list[str] = []
     n = len(hosts)
     plural = "host" if n == 1 else "hosts"
@@ -260,41 +197,31 @@ def restart(
     assume_yes: bool = False,
     parallel: bool = False,
 ) -> None:
-    """Restart systemd --user services over ssh, looping each targeted host.
+    """Restart systemd --user services over ssh for each targeted host.
 
-    Bare (no --component) restarts ALL managed components and warns + confirms
-    first (``assume_yes`` skips). ``--component`` restarts the listed components
-    only (no confirm); ``--host <alias>`` narrows to a single host. ``-p/--parallel``
-    restarts the components concurrently (each still rolls its own hosts one at a
-    time, so a multi-host unit is never fully down) and ignores ``deploy_order``.
-
-    Progress is shown per component: a live spinner on a TTY (advancing as each
-    host of a component rolls, leaving a persistent ``✓``/``✗`` summary line on
-    exit) or plain info/success/error lines off a TTY (clean CI output). ssh
-    transport stdout/stderr is suppressed during restart so banners, motd and
-    host-key chatter can't clutter the display or garble the spinner."""
+    Bare restart (no --component) confirms first, unless ``assume_yes``.
+    ``-p/--parallel`` runs components concurrently, each still rolling its own hosts one
+    at a time.
+    """
     meta = appmeta.load_app(app)
     _m, units = manifest.managed_units(app, env, components)
     if not components and not assume_yes:
-        if not sys.stdin.isatty():
-            raise StCliError(
-                "Refusing to restart ALL components non-interactively; "
-                "pass -c <component> or -y/--yes."
-            )
-        import questionary
-
         names = ", ".join(u.component for u in units)
-        ui.warn(
+        proceed = _require_tty_confirm(
+            "Refusing to restart ALL components non-interactively; "
+            "pass -c <component> or -y/--yes.",
             f"This will restart ALL components ({names}) of {app}/{env} "
-            "across all their hosts."
+            "across all their hosts.",
+            confirmed=lambda: questionary.confirm("Proceed?", default=False).ask(),
         )
-        if not questionary.confirm("Proceed?", default=False).ask():
-            ui.warn("Aborted.")
+        if not proceed:
             return
     # group hosts per component, preserving deploy_order (managed_units sorts by it) and
     # inventory order within each component.
     groups: dict = {}
-    for comp, alias, ip in _iter_hosts(app, env, meta, units, components, host):
+    for comp, alias, ip in tree.iter_targeted_hosts(
+        app, env, meta, units, components, host
+    ):
         groups.setdefault(comp.key, [comp, []])[1].append((alias, ip))
     if not groups:
         return
@@ -333,14 +260,13 @@ def ps(
     components: list[str] | None = None,
     host: str | None = None,
 ) -> None:
-    """Run ``podman ps -a`` as each managed component's app user, per host, over ssh.
+    """Run ``podman ps -a`` as each managed component's app user, over ssh.
 
-    Workers are skipped (they share the core's user+hosts). ``--component`` narrows
-    to a subset of components, ``--host <alias>`` to one host. Read-only: a nonzero rc on one
-    host warns and continues."""
+    Skips worker components; a nonzero rc on one host warns and continues.
+    """
     meta = appmeta.load_app(app)
     _m, units = manifest.managed_units(app, env, components)
-    for comp, alias, ip in _iter_hosts(
+    for comp, alias, ip in tree.iter_targeted_hosts(
         app, env, meta, units, components, host, skip_workers=True
     ):
         ui.host_header(comp.app_name, ip)
@@ -362,7 +288,7 @@ def logs(
     since: str = "15 min ago",
     follow: bool = False,
 ) -> int:
-    """Show a unit's systemd --user journal over ssh (journalctl --user -u <unit>)."""
+    """Show a unit's systemd --user journal over ssh via journalctl."""
     t = resolve_target(app, env, component, host=host, pick=True)
     inner = (
         f"journalctl --user -u {shlex.quote(t.app_name)} --since {shlex.quote(since)}"
@@ -385,10 +311,10 @@ def oneoff(
     cmd: list[str] | None = None,
     entrypoint: str | None = None,
 ) -> int:
-    """Open an interactive one-off container shell (or run cmd) for a unit.
+    """Open an interactive one-off container shell, or run ``cmd``, for a unit.
 
-    ``entrypoint`` overrides the image entrypoint (e.g. ``sh`` for containers like
-    collabora whose default entrypoint starts a server instead of a shell).
+    ``entrypoint`` overrides the image entrypoint, for a container whose default
+    entrypoint starts a server.
     """
     t = resolve_target(app, env, component, host=host, pick=True)
     run_cmd = " ".join(shlex.quote(c) for c in cmd) if cmd else "sh"
@@ -413,22 +339,17 @@ def reset(
     """Destructive: stop, down -v, rm the app dir, then redeploy a unit."""
     t = resolve_target(app, env, component, host=host, pick=True)
     if not assume_yes:
-        if not sys.stdin.isatty():
-            raise StCliError(
-                f"Refusing to reset {t.app_name} non-interactively; pass -y/--yes."
-            )
-        import questionary
-
-        ui.warn(
+        proceed = _require_tty_confirm(
+            f"Refusing to reset {t.app_name} non-interactively; pass -y/--yes.",
             f"This will STOP {t.app_name}, run 'podman-compose down -v' (removing "
             f"named volumes) and DELETE {t.remote_dir} on {t.host}, then redeploy.\n"
-            "External Postgres/S3 are untouched; local container volumes are wiped."
+            "External Postgres/S3 are untouched; local container volumes are wiped.",
+            confirmed=lambda: (
+                questionary.text(f"Type the unit name '{t.app_name}' to confirm:").ask()
+                == t.app_name
+            ),
         )
-        answer = questionary.text(
-            f"Type the unit name '{t.app_name}' to confirm:"
-        ).ask()
-        if answer != t.app_name:
-            ui.warn("Aborted.")
+        if not proceed:
             return 1
 
     q = shlex.quote
@@ -443,10 +364,9 @@ def reset(
     if rc != 0:
         raise StCliError(f"Teardown failed (rc={rc}); not redeploying.")
 
-    # redeploy this single component
     from ..core import generate
 
     ui.info(f"Redeploying {app}/{env}/{component} …")
     generate.generate_all(app, env)
     runner.galaxy_install()
-    return runner.play(app, env, component)
+    return runner.play(app, env, component, limit=t.alias)

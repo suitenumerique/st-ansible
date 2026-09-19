@@ -7,9 +7,6 @@ from st_cli.core import envblob
 MARKER = "# added by st-cli 0.3.0"
 
 
-# --------------------------------------------------------------------------- parse
-
-
 def test_parse_value_contains_equals():
     text = "DATABASE_URL=postgres://user:pw@host/db?opt=1\n"
     assert envblob.parse(text) == {"DATABASE_URL": "postgres://user:pw@host/db?opt=1"}
@@ -44,15 +41,9 @@ def test_parse_ignores_invalid_key_lines():
     assert envblob.parse(text) == {}
 
 
-# --------------------------------------------------------------------------- keys
-
-
 def test_keys_in_file_order_first_occurrence():
     text = "B=1\nA=2\nB=3\n"
     assert envblob.keys(text) == ["B", "A"]
-
-
-# --------------------------------------------------------------------------- merge
 
 
 def test_merge_idempotent():

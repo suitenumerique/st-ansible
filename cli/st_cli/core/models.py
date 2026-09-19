@@ -1,62 +1,61 @@
-"""Shared dataclasses for st-cli (CONTRACT section 2).
+"""Shared dataclasses for st-cli.
 
-These are pure data holders with no I/O. ``appmeta.py`` owns ``AppMeta`` and
-``Dependency``; everything else that needs the component/unit/manifest shapes
-imports from here.
+Pure data holders with no I/O. ``appmeta.py`` owns ``AppMeta`` and
+``Dependency``. Every other module imports the component, unit, and manifest
+shapes from here.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+MODE_MANAGED = "managed"
+MODE_EXTERNAL = "external"
+BACKEND_ANSIBLE_VAULT = "ansible-vault"
+BACKEND_HASHI_VAULT = "hashi_vault"
+
 
 @dataclass(frozen=True)
 class Component:
-    """A deployable piece of an app (maps to a collection role + systemd unit)."""
+    """A deployable piece of an app. Maps to a collection role and a systemd unit."""
 
     key: str  # "livekit"
     role: str  # "suitenumerique.st.meet"
     user: str  # "meet"
-    app_name: str  # "livekit" (systemd unit + inventory group)
+    app_name: str  # "livekit", the systemd unit and inventory group
     dir_var: str  # "st_meet_livekit_dir"
     enabled_var: str  # "st_meet_livekit_enabled"
     deploy_order: int  # lower deploys first
     is_core: bool  # True for the app's main Django component
-    is_worker: (
-        bool  # True for the app's Celery workers component (same role/user as core)
-    )
-    # False when the role has no workers implementation yet (e.g. meet) — such a
-    # component is metadata-only: bootstrap neither prompts for worker IPs nor
-    # registers a workers unit, so it never deploys.
+    is_worker: bool  # True for the Celery workers component, same role and user as core
+    # False when the role has no workers implementation yet, for example meet.
+    # Such a component is metadata-only: bootstrap does not prompt for worker
+    # IPs and does not register a workers unit, so it never deploys.
     implemented: bool = True
 
 
 @dataclass
 class UnitState:
-    """One bootstrapped component for an (app, env), as recorded in .st-cli.yml."""
+    """One bootstrapped component for an app and env, as recorded in .st-cli.yml."""
 
     app: str
     env: str
     component: str  # component key
-    mode: str  # "managed" (deployed by us) | "external" (runs elsewhere)
-    # NB: hosts are NOT stored here — the <app>/<env>/<component>/hosts ini file
-    # is the single source of truth (read via tree.read_hosts()).
-    # The st-cli version whose bootstrap questionnaire last ran for this unit.
-    # Stamped by `bootstrap` itself on every run (including a rebootstrap) —
-    # it records an action st-cli performed, never a claim that an operator
-    # did some matching manual work. Empty ("") means the unit predates this
-    # field (bootstrapped before rebootstrap tracking existed); see
-    # `core/upgrades.py` for how that default is treated.
+    mode: str  # MODE_MANAGED (deployed by us) or MODE_EXTERNAL (runs elsewhere)
+    # Hosts are not stored here. The <app>/<env>/<component>/hosts file is
+    # the source of truth, read through tree.read_hosts().
+    # bootstrap stamps this value on every run, including a rebootstrap. It
+    # records an action st-cli performed, not an operator's manual work.
+    # An empty value means the unit predates this field.
     bootstrapped_with: str = ""
 
 
 @dataclass
 class SecretConfig:
-    """Per-(app, env) secret backend choice recorded in .st-cli.yml.
+    """Per app, per env secret backend choice, recorded in .st-cli.yml.
 
-    Only the backend name lives here — no paths, mount, or connection details
-    (those go in ``<app>/<env>/common.yml`` for hashi_vault). A manifest with no
-    ``secrets:`` block yields the ``ansible-vault`` default.
+    Only the backend name lives here. Connection details for hashi_vault live
+    in <app>/<env>/common.yml.
     """
 
     app: str
@@ -78,23 +77,22 @@ class StCliManifest:
 class UpgradeNeed:
     """One outstanding rebootstrap flag matched against a bootstrapped unit.
 
-    Produced by ``core/upgrades.needed()`` (one flag x one unit, when the
-    flag's version outranks the unit's ``bootstrapped_with`` stamp). Pure data
-    — no I/O — hence its home here alongside the other manifest-shaped holders
-    rather than in ``core/upgrades.py``, which owns the matching logic.
+    Produced by core/upgrades.needed() when a flag's version outranks the
+    unit's bootstrapped_with stamp.
     """
 
     app: str
     env: str
     component: str
-    version: str  # the flagged release version, e.g. "0.3.0"
+    version: str  # the flagged release version, for example "0.3.0"
     reason: str
     link: str
-    # True forces a full pre-filled replay (ReplayAction.MODIFY) instead of a
-    # silent one — a unit that old, or a change that big, needs a full review.
+    # True forces a full pre-filled replay through ReplayAction.MODIFY,
+    # instead of a silent one. A unit that old, or a change that big, needs
+    # a full review.
     full_replay: bool = False
-    # Manual steps a rebootstrap cannot do for the operator (from the flag's
-    # `warnings` list). Empty when the flag carries none.
+    # Manual steps a rebootstrap cannot do for the operator, from the flag's
+    # warnings list. Empty when the flag carries none.
     warnings: tuple[str, ...] = ()
 
 
@@ -102,9 +100,8 @@ class UpgradeNeed:
 class NewComponentOffer:
     """A component newly declared by a flag that a unit could now bootstrap.
 
-    Produced by ``core/upgrades.new_component_offers()``: the flag names
-    ``component`` as newly available for ``app``, and ``(app, env)`` has no
-    unit for it yet. Pure data, same rationale as :class:`UpgradeNeed`.
+    Produced by core/upgrades.new_component_offers() when the flag names
+    component as newly available for app, and (app, env) has no unit for it.
     """
 
     app: str

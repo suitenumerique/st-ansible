@@ -53,7 +53,8 @@ Committed by the operator, per `(app, env, component)`:
   an env-key diff between a fresh render and the committed blob.
 - **restart / ps / logs / oneoff / reset** (`cmd/remote.py`): direct `ssh`.
   `-H/--host` is the inventory alias. They never block on versions. `reset`
-  also redeploys the unit through `runner.play` after the teardown.
+  tears down the unit over ssh, then redeploys it through `generate`,
+  `runner.galaxy_install` and `runner.play`, limited to the selected host.
 
 ## 3. What you must maintain
 
@@ -121,7 +122,7 @@ flags:
     apps: [drive]          # list of app names, or the string "all"
     components: [drive]    # optional: component keys of apps; not with "all"
     reason: "drive 3.0 needs the new S3 vars"
-    link: "https://.../CHANGELOG.md#v0-4-0"  # optional: overrides the derived CHANGELOG anchor
+    link: "https://example.org/pr/12"  # optional: overrides the derived CHANGELOG anchor
     full_replay: true      # optional: full pre-filled replay, not a silent one
     new_components: [foo]  # optional: dependency keys to offer once; not with "all"
     warnings: ["..."]      # optional: manual steps the replay cannot do; a list
@@ -187,32 +188,32 @@ hint then appears on the next command.
 `deploy` blocks in two cases only, before any ssh or network side effect:
 installed < pin, or a pending flag whose version is at or below the pin (the
 replay is missing or crashed; the fix is `st-cli upgrade`). Every other pending
-flag is a warning. `upgrade` moves the pin. `docker pull` moves the installed
+flag is a warning. There is no override flag for this gate. `upgrade` moves the pin. `docker pull` moves the installed
 CLI. Nothing else writes the pin. `ST_CLI_NO_UPSTREAM_CHECK` disables the
-callback only.
+global callback and the upstream gate of `st-cli upgrade`.
 
 ## 5. Module map
 
 | Module | Role |
 |---|---|
 | `core/appmeta.py` | Loads `resources/apps/<app>.yml`: components, vars, `env_render`, `dependencies[]` with `shared[]` rules. |
-| `core/recover.py` | Inverse of render: rebuilds `answers` from a committed unit. Best-effort, app-agnostic, values verbatim. |
-| `core/envblob.py` | Text merge of dotenv blobs. Keeps existing lines in place, appends new keys, never deletes. `merge(x, x) == x`. |
+| `core/recover.py` | Inverse of render: rebuilds `answers` from a committed unit. Best-effort, app-agnostic, values verbatim. `parse_bool` tolerantly parses a YAML bool or a yes/no-shaped string. |
+| `core/envblob.py` | Text merge of dotenv blobs. Keeps existing lines in place, appends new keys, never deletes. `merge(x, x, m) == x` when `x` ends with one newline. |
 | `core/envrender.py` | Renders env blobs from `templates/env/*.j2`. Missing keys render as `""`. `oidc_endpoints`. |
 | `core/writer.py` | Writes `vars.yml` / `vault.yml` / hosts. Merges on rebootstrap, skips an unchanged vault write. |
 | `core/prompts.py` | questionary primitives, `Recovered`, `silent_replay()`, `suspend_silent()`. `_password` never auto-accepts. |
 | `core/secretbackend.py` | `AnsibleVaultBackend` (values in `vault.yml`) and `HashiVaultBackend` (reference-only lookup refs, mints nothing). |
 | `core/upgrades.py` | `needed`, `newest_per_unit`, `pending_warnings`, `new_component_offers`, `parse_version`. |
 | `core/drift.py` | `pending_needs`, `check_app`, `format_need`, env-key diff, `preflight`. |
-| `core/pin.py` | `PinState`, `compare(m)`. |
+| `core/pin.py` | `PinState`, `compare(m)`, `require_not_older(m, retry_hint)` raises `StCliError` when the CLI is older than the pin. |
 | `core/upstream.py` | Upstream tag lookup, `is_behind`, `install_hint`, `maybe_warn_upgrade`. |
 | `core/manifest.py` | `.st-cli.yml` I/O: pins, units, secret backend, `ssh_user`. |
-| `core/tree.py` | Committed tree I/O with ruamel round-trip, `!vault` scalars, INI hosts, `find_host`. |
+| `core/tree.py` | Committed tree I/O with ruamel round-trip, `!vault` scalars, INI hosts, `find_host`, `iter_targeted_hosts`, `yaml_safe` for read-only resources. |
 | `core/generate.py` | Renders `.st-cli/` scaffolding. `ST_CLI_COLLECTION_SOURCE` overrides the collection pin. |
-| `core/runner.py` | `galaxy_install`, `play`, `syntax_check` subprocess wrappers. |
+| `core/runner.py` | `galaxy_install`, `play` subprocess wrappers. |
 | `core/vault.py` | `ansible-vault` wrappers and `.vault-pass` handling. |
 | `core/secrets.py` | `gen_secret`, `gen_token`, `gen_password` for `_ask_secret(gen=...)`. |
-| `core/paths.py` | All path computation, anchored at `Path.cwd()`. |
+| `core/paths.py` | All path computation, anchored at `Path.cwd()`. `SECRET_FILE_MODE` is the mode of a secret file. |
 | `core/ui.py` | All console output. `warn`/`error` go to stderr. No bare `print`. |
 | `core/sshuser.py` | Once-per-process ssh user guard. `ST_CLI_SSH_USER` overrides. |
 | `core/models.py`, `core/errors.py` | Dataclasses; `StCliError`. |
@@ -241,8 +242,9 @@ ruff check --fix . && ruff format . && pytest -q -n 6
 
 CI (`.github/workflows/cli-tests.yml`) runs `ruff check`, `ruff format
 --check` and `pytest` on Python 3.13. Every change must leave the tree
-ruff-clean. Tests are offline. Each bootstrap test spawns `ansible-vault`, so
-the full suite takes minutes without `-n`. One `test_<module>.py` per module.
+ruff-clean. `pyproject.toml` commits the rule set under `[tool.ruff.lint]`.
+Tests are offline. Each bootstrap test spawns `ansible-vault`, so the full
+suite takes minutes without `-n`. One `test_<module>.py` per module.
 `tests/conftest.py` provides the `repo` tmp-cwd fixture and disables the
 upstream check. `tests/helpers.py` provides the seeders, the first-run script
 builders, `script_questionary` (strict: an unscripted prompt fails) and

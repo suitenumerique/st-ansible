@@ -5,12 +5,11 @@ from __future__ import annotations
 import re
 
 import ruamel.yaml
+from helpers import set_flags
 
 import st_cli
 from st_cli.core import appmeta, upgrades
 from st_cli.core.models import NewComponentOffer, StCliManifest, UnitState, UpgradeNeed
-
-# --------------------------------------------------------------------------- parse_version
 
 
 def test_parse_version_well_formed():
@@ -38,9 +37,6 @@ def test_parse_version_next_outranks_every_release():
     assert upgrades.parse_version(upgrades.NEXT) > upgrades.parse_version("999.999.999")
 
 
-# --------------------------------------------------------------------------- changelog_link
-
-
 def test_changelog_link_derives_anchor_from_version():
     assert (
         upgrades.changelog_link("0.4.0")
@@ -52,9 +48,6 @@ def test_changelog_link_empty_for_next_or_missing():
     assert upgrades.changelog_link(upgrades.NEXT) == ""
     assert upgrades.changelog_link(None) == ""
     assert upgrades.changelog_link("") == ""
-
-
-# --------------------------------------------------------------------------- load_flags
 
 
 def test_load_flags_missing_file_yields_empty_list(tmp_path, monkeypatch):
@@ -116,9 +109,6 @@ def test_load_baseline_absent_yields_empty_string(tmp_path, monkeypatch):
     assert upgrades.load_baseline() == ""
 
 
-# --------------------------------------------------------------------------- _normalise_warnings
-
-
 def test_normalise_warnings_degrades_every_malformed_shape_to_empty_tuple():
     assert upgrades._normalise_warnings(5) == ()
     assert upgrades._normalise_warnings({"a": "b"}) == ()
@@ -128,30 +118,18 @@ def test_normalise_warnings_degrades_every_malformed_shape_to_empty_tuple():
     assert upgrades._normalise_warnings(["", "  "]) == ()
 
 
-# --------------------------------------------------------------------------- needed()
-
-
-def _set_flags(monkeypatch, tmp_path, flags: list[dict]):
-    p = tmp_path / "upgrades.yml"
-    y = ruamel.yaml.YAML(typ="safe")
-    with p.open("w", encoding="utf-8") as fh:
-        y.dump(flags, fh)
-    monkeypatch.setattr(upgrades, "_RESOURCE", p)
-    return p
-
-
 def _manifest(units):
     return StCliManifest("0.0.20", "0.0.20", units)
 
 
 def test_needed_no_flags_yields_empty(tmp_path, monkeypatch):
-    _set_flags(monkeypatch, tmp_path, [])
+    set_flags(monkeypatch, tmp_path, [])
     m = _manifest([UnitState("meet", "prod", "meet", "managed", "0.1.0")])
     assert upgrades.needed(m) == []
 
 
 def test_needed_flag_older_than_stamp_is_not_needed(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.1.0", "apps": "all", "reason": "r", "link": "l"}],
@@ -161,7 +139,7 @@ def test_needed_flag_older_than_stamp_is_not_needed(tmp_path, monkeypatch):
 
 
 def test_needed_flag_newer_than_stamp_is_needed(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.3.0", "apps": "all", "reason": "r", "link": "l"}],
@@ -181,7 +159,7 @@ def test_needed_flag_newer_than_stamp_is_needed(tmp_path, monkeypatch):
 
 
 def test_needed_next_flag_applies_to_a_current_stamp(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "next", "apps": "all", "reason": "reason"}],
@@ -195,7 +173,7 @@ def test_needed_next_flag_applies_to_a_current_stamp(tmp_path, monkeypatch):
 
 
 def test_needed_derives_link_when_flag_has_none(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.3.0", "apps": "all", "reason": "r"}],
@@ -209,7 +187,7 @@ def test_needed_derives_link_when_flag_has_none(tmp_path, monkeypatch):
 
 
 def test_needed_keeps_explicit_link(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.3.0", "apps": "all", "reason": "r", "link": "l"}],
@@ -220,7 +198,7 @@ def test_needed_keeps_explicit_link(tmp_path, monkeypatch):
 
 
 def test_needed_apps_all_matches_every_app(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.3.0", "apps": "all", "reason": "r", "link": "l"}],
@@ -239,7 +217,7 @@ def test_needed_apps_all_matches_every_app(tmp_path, monkeypatch):
 
 
 def test_needed_app_not_in_flag_list_is_skipped(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.3.0", "apps": ["meet"], "reason": "r", "link": "l"}],
@@ -255,7 +233,7 @@ def test_needed_app_not_in_flag_list_is_skipped(tmp_path, monkeypatch):
 
 
 def test_needed_components_narrow_the_flag_to_listed_units(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [
@@ -280,12 +258,12 @@ def test_needed_components_narrow_the_flag_to_listed_units(tmp_path, monkeypatch
 
 
 def test_needed_missing_stamp_treated_as_0_0_0(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.0.1", "apps": "all", "reason": "r", "link": "l"}],
     )
-    # bootstrapped_with defaults to "" — a unit that predates the feature.
+    # bootstrapped_with defaults to "": a unit that predates the feature.
     m = _manifest([UnitState("meet", "prod", "meet", "managed")])
     result = upgrades.needed(m)
     assert len(result) == 1
@@ -293,7 +271,7 @@ def test_needed_missing_stamp_treated_as_0_0_0(tmp_path, monkeypatch):
 
 
 def test_needed_external_units_are_skipped(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.3.0", "apps": "all", "reason": "r", "link": "l"}],
@@ -303,7 +281,7 @@ def test_needed_external_units_are_skipped(tmp_path, monkeypatch):
 
 
 def test_needed_filters_by_app_and_env(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.3.0", "apps": "all", "reason": "r", "link": "l"}],
@@ -323,7 +301,7 @@ def test_needed_filters_by_app_and_env(tmp_path, monkeypatch):
 
 
 def test_needed_carries_interactive_from_flag(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [
@@ -342,7 +320,7 @@ def test_needed_carries_interactive_from_flag(tmp_path, monkeypatch):
 
 
 def test_needed_interactive_defaults_to_false(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.3.0", "apps": "all", "reason": "r", "link": "l"}],
@@ -353,7 +331,7 @@ def test_needed_interactive_defaults_to_false(tmp_path, monkeypatch):
 
 
 def test_needed_ignores_a_string_warnings_field(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [
@@ -372,7 +350,7 @@ def test_needed_ignores_a_string_warnings_field(tmp_path, monkeypatch):
 
 
 def test_needed_carries_a_list_warning_stripped_and_non_empty(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [
@@ -391,7 +369,7 @@ def test_needed_carries_a_list_warning_stripped_and_non_empty(tmp_path, monkeypa
 
 
 def test_needed_no_warning_yields_empty_tuple(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.3.0", "apps": "all", "reason": "r", "link": "l"}],
@@ -409,7 +387,7 @@ def test_needed_baseline_flag_carries_no_warning(tmp_path, monkeypatch):
 
 
 def test_needed_is_deterministically_ordered(tmp_path, monkeypatch):
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [
@@ -427,9 +405,6 @@ def test_needed_is_deterministically_ordered(tmp_path, monkeypatch):
     result = upgrades.needed(m)
     keys = [(n.app, n.env, n.component, n.version) for n in result]
     assert keys == sorted(keys)
-
-
-# --------------------------------------------------------------------------- newest_per_unit
 
 
 def test_newest_per_unit_unions_warnings_of_two_flags_for_one_unit():
@@ -482,9 +457,6 @@ def test_newest_per_unit_ors_interactive_across_the_collapsed_set():
     assert result[0].full_replay is True
     # order-independent
     assert upgrades.newest_per_unit([new_silent, old_interactive]) == result
-
-
-# --------------------------------------------------------------------------- pending_warnings
 
 
 def test_pending_warnings_collects_every_need_not_only_the_newest():
@@ -589,9 +561,6 @@ def test_needed_baseline_skips_external_units(tmp_path, monkeypatch):
     assert upgrades.needed(m) == []
 
 
-# --------------------------------------------------------------------------- offerable_components()
-
-
 def test_offerable_components_meet_excludes_egress_and_workers():
     # "egress" is bundled into the livekit step; "workers" is never a dependency target
     assert upgrades.offerable_components("meet") == {"livekit"}
@@ -605,11 +574,9 @@ def test_offerable_components_unknown_app_yields_empty_set():
     assert upgrades.offerable_components("not-a-real-app") == set()
 
 
-# --------------------------------------------------------------------------- new_component_offers()
-
-
 def _mta_in_flag(**overrides) -> dict:
-    # "mta-in" is a real dependency target; unlike "egress" it is its own dep-loop iteration
+    # "mta-in" is a real dependency target; unlike "egress" it is its own
+    # dep-loop iteration
     flag = {
         "version": "0.3.0",
         "apps": ["messages"],
@@ -747,8 +714,6 @@ def test_new_component_offers_filters_by_app_and_env(tmp_path, monkeypatch):
     assert [(o.app, o.env) for o in result] == [("messages", "staging")]
 
 
-# --------------------------------------------------------------------------- flag-file lint (real bundled resource)
-
 _FLAG_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
@@ -773,7 +738,8 @@ class TestUpgradeFlagFileLint:
         )
 
     def test_every_flag_outranks_the_baseline(self):
-        # prune rule: an entry at or below the baseline is dead weight the baseline covers
+        # prune rule: an entry at or below the baseline is dead weight the
+        # baseline covers
         baseline = upgrades.parse_version(upgrades.load_baseline())
         for entry in upgrades.load_flags():
             version = entry.get("version")

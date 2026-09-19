@@ -1,21 +1,6 @@
-"""`st-cli upgrade` — the only upgrade path.
+"""`st-cli upgrade` realigns the CLI pin and replays flagged units.
 
-Checks the cached upstream version first. When it is ahead of the installed
-CLI, the command stops and names the concrete upgrade command instead of
-replaying anything: old code must not replay a questionnaire against new
-release templates. When upstream is unknown (offline, check disabled), the
-run continues with the installed version.
-
-Then compares the installed CLI against the ``.st-cli.yml`` pin
-(``core/pin.py``). An installed CLI older than the pin stops here too: a
-realign would move the pin backwards, which is wrong.
-
-Once past both gates: loads ``.st-cli.yml``, realigns the collection+cli pin
-to the installed version, then replays every unit flagged by
-``core/upgrades.py`` — silently pre-filled from its recovered answers,
-unless a flag demands a full replay. Finally cleans the
-trashable scaffolding for a clean slate. Does NOT generate / galaxy-install /
-doctor — the subsequent ``doctor`` and ``deploy`` do that.
+Refuses when upstream is ahead or the installed CLI is older than the pin.
 """
 
 from __future__ import annotations
@@ -33,20 +18,16 @@ from .bootstrap import ReplayAction
 
 def _upstream_latest() -> str | None:
     """Return the cached upstream version, or None when the check is disabled."""
-    if os.environ.get("ST_CLI_NO_UPSTREAM_CHECK"):
+    if os.environ.get(upstream.NO_CHECK_ENV):
         return None
     return upstream.get_latest_cached()
 
 
 def _clean_scaffolding() -> None:
-    """Delete only the regeneratable ``.st-cli/`` artifacts for a clean slate.
-
-    Never removes the ``.st-cli/`` dir wholesale — a vault-pass could live
-    there in an edge case. Reports each removed artifact via ``ui.info``.
-    """
+    """Delete only the regeneratable `.st-cli/` artifacts, not the whole directory."""
     files = [
-        paths.st_cli_dir() / "ansible.cfg",
-        paths.st_cli_dir() / "galaxy-requirements.yml",
+        paths.ansible_cfg_path(),
+        paths.galaxy_requirements_path(),
     ]
     dirs = [paths.playbooks_dir(), paths.collections_dir()]
     for p in files:
@@ -60,27 +41,14 @@ def _clean_scaffolding() -> None:
 
 
 def upgrade() -> None:
-    """Upgrade the CLI's pin, replay flagged units, and clean the scaffolding.
+    """Upgrade the CLI pin, replay flagged units, and clean the scaffolding.
 
-    Checks upstream first: behind the latest release, warns with the concrete
-    command to run and stops — replaying with old templates would leave units
-    half-migrated. Unknown upstream continues with the installed version.
-
-    Then checks the installed CLI against the ``.st-cli.yml`` pin
-    (``core/pin.py``): an older CLI stops here too, since realigning the pin
-    would move it backwards.
-
-    Realigns the ``.st-cli.yml`` pin before replaying anything: a crash
-    mid-replay leaves the pin correct and the stamp old. Because the pin is
-    already aligned at that point, ``deploy`` still blocks on the pending
-    flag, and a plain re-run resumes cleanly. Replays run even when the pin
-    was already aligned — a prior run may have realigned the pin but failed
-    before finishing every replay.
+    Stops before realigning the pin when upstream is ahead or the installed
+    CLI is older than the pin.
     """
-    # ST_CLI_NO_UPSTREAM_CHECK is a deliberate opt-out, not a failed check —
-    # both collapse to `latest is None` in `_upstream_latest`, so track the
-    # opt-out separately to keep the "could not check" info accurate.
-    skip_upstream_check = bool(os.environ.get("ST_CLI_NO_UPSTREAM_CHECK"))
+    # A disabled check and a failed check both collapse to `latest is None`;
+    # track the opt-out separately to keep the "could not check" info accurate.
+    skip_upstream_check = bool(os.environ.get(upstream.NO_CHECK_ENV))
     latest = _upstream_latest()
     behind = upstream.is_behind(latest)
 
@@ -101,12 +69,7 @@ def upgrade() -> None:
         ui.warn("No .st-cli.yml here — nothing to align. (Run from a deployment repo.)")
         return
 
-    if pin.compare(m) is pin.PinState.CLI_OLDER:
-        raise StCliError(
-            f"st-cli {st_cli.__version__} is older than the .st-cli.yml pin "
-            f"{m.cli_version} — run `{upstream.install_hint()}`, then re-run "
-            "`st-cli upgrade`."
-        )
+    pin.require_not_older(m, "then re-run `st-cli upgrade`.")
 
     installed = st_cli.__version__
     changed = (m.collection_version, m.cli_version) != (installed, installed)
@@ -147,7 +110,7 @@ def upgrade() -> None:
             for version, text in upgrades.pending_warnings(all_groups[(app, env)]):
                 manual_steps.append((app, env, version, text))
 
-        # Every group's vault is checked before any questionnaire runs — one
+        # Every group's vault is checked before any questionnaire runs: one
         # bad vault must abort the whole upgrade, not just its own group.
         for app, env in sorted(core_keys):
             components = [u.component for u in manifest.units_for(m, app, env)]

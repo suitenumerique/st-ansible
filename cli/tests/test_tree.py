@@ -1,15 +1,18 @@
-"""Tests for st_cli.core.tree — the committed config tree (hosts INI, vars.yml, common.yml)."""
+"""Tests for st_cli.core.tree — the committed config tree (hosts INI, vars.yml,
+common.yml)."""
 
 from __future__ import annotations
 
 import re
 
+import pytest
 from ruamel.yaml.scalarstring import LiteralScalarString
 
-from st_cli.core import paths, tree
+from st_cli.core import appmeta, paths, tree
+from st_cli.core.errors import StCliError
+from st_cli.core.models import UnitState
 
-
-# --------------------------------------------------------------------------- hosts / groups
+# ----------------------------------------------------------------------- hosts / groups
 
 
 def test_read_hosts_parses_ini(repo):
@@ -49,7 +52,7 @@ def test_write_groups_and_read_hosts_by_group(repo):
     assert tree.read_hosts("drive", "prod", "drive", group="workers") == []
 
 
-# --------------------------------------------------------------------------- inventory (alias, ip)
+# ---------------------------------------------------------------- inventory (alias, ip)
 
 
 def test_read_inventory_returns_alias_ip_pairs(repo):
@@ -123,18 +126,19 @@ def test_ensure_common_seeds_then_preserves_edits(repo):
     assert p.exists()
     assert "---" in p.read_text()
 
-    # hand-edit the file — a second ensure_common call must leave it untouched.
+    # hand-edit the file; a second ensure_common call must leave it untouched.
     edited = "# my custom content\n---\nst_meet_uid: 1234\n"
     p.write_text(edited)
     tree.ensure_common("meet", "prod")
     assert p.read_text() == edited
 
 
-# --------------------------------------------------------------------------- ssh scaffold
+# ------------------------------------------------------------------------- ssh scaffold
 
 
 def test_ensure_ssh_scaffold_seeds_config_and_known_hosts(repo):
-    """ensure_ssh_scaffold writes ssh/config + ssh/known_hosts once with seed content."""
+    """ensure_ssh_scaffold writes ssh/config + ssh/known_hosts once with seed
+    content."""
     assert not paths.ssh_config_path().exists()
     assert not paths.ssh_known_hosts_path().exists()
     tree.ensure_ssh_scaffold()
@@ -148,16 +152,15 @@ def test_ensure_ssh_scaffold_seeds_config_and_known_hosts(repo):
 
 
 def test_ensure_ssh_scaffold_seeds_no_active_host_star(repo):
-    """No active `Host *` block is seeded — only `#`-commented mentions — so the file is
-    safe to Include into a user's personal ~/.ssh/config (a `Host *` would override their
-    global ssh defaults)."""
+    """The seed has no active `Host *` block, so an Include keeps the user's ssh defaults."""
     tree.ensure_ssh_scaffold()
     cfg_text = paths.ssh_config_path().read_text()
     assert not re.search(r"^\s*Host\s+\*", cfg_text, re.MULTILINE)
 
 
 def test_ensure_ssh_scaffold_is_idempotent(repo):
-    """A second call never overwrites a hand-edited ssh/config (mirrors ensure_common)."""
+    """A second call never overwrites a hand-edited ssh/config (mirrors
+    ensure_common)."""
     tree.ensure_ssh_scaffold()
     cfg = paths.ssh_config_path()
     sentinel = "SENTINEL-DO-NOT-OVERWRITE\n"
@@ -205,7 +208,7 @@ def test_ensure_ssh_scaffold_tightens_config_local_perms(repo):
     local_cfg = paths.ssh_config_local_path()
     sentinel = "Host *\n    CertificateFile /ssh-cert.pub\n"
     local_cfg.write_text(sentinel)
-    local_cfg.chmod(0o664)  # loose umask / hand-edited → ssh would refuse it
+    local_cfg.chmod(0o664)  # loose umask / hand-edited, so ssh would refuse it
     tree.ensure_ssh_scaffold()
     assert local_cfg.stat().st_mode & 0o777 == 0o600
     assert local_cfg.read_text() == sentinel  # content preserved
@@ -221,7 +224,7 @@ def test_ensure_ssh_scaffold_tightens_config_perms(repo):
     cfg = paths.ssh_config_path()
     sentinel = "Host bastion\n    HostName bastion.example.org\n"
     cfg.write_text(sentinel)
-    cfg.chmod(0o664)  # simulates a loose-umask checkout → ssh would refuse it
+    cfg.chmod(0o664)  # simulates a loose-umask checkout, so ssh would refuse it
     tree.ensure_ssh_scaffold()
     mode = cfg.stat().st_mode & 0o777
     assert mode == 0o644
@@ -234,3 +237,29 @@ def test_ssh_dir_is_not_gitignored(repo):
     secret and the inventory IPs are already tracked in the committed hosts files."""
     assert "ssh/" not in tree._GITIGNORE_ENTRIES
     assert "ssh" not in tree._GITIGNORE_ENTRIES
+
+
+# ------------------------------------------------------------------ iter_targeted_hosts
+
+
+def test_iter_targeted_hosts_narrows_by_alias(repo):
+    """iter_targeted_hosts(host=<alias>) yields only that host's (comp, alias, ip)."""
+    tree.write_hosts("drive", "prod", "drive", "drive", ["10.0.0.1", "10.0.0.2"])
+    meta = appmeta.load_app("drive")
+    units = [UnitState("drive", "prod", "drive", "managed")]
+
+    got = list(tree.iter_targeted_hosts("drive", "prod", meta, units, None, "drive2"))
+    assert len(got) == 1
+    comp, alias, ip = got[0]
+    assert comp.key == "drive"
+    assert (alias, ip) == ("drive2", "10.0.0.2")
+
+
+def test_iter_targeted_hosts_unmatched_alias_raises(repo):
+    """A host alias that matches no unit's inventory raises."""
+    tree.write_hosts("drive", "prod", "drive", "drive", ["10.0.0.1"])
+    meta = appmeta.load_app("drive")
+    units = [UnitState("drive", "prod", "drive", "managed")]
+
+    with pytest.raises(StCliError, match="matched no"):
+        list(tree.iter_targeted_hosts("drive", "prod", meta, units, None, "nope"))

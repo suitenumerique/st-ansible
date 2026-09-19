@@ -8,13 +8,12 @@ import threading
 import types
 
 import pytest
+from helpers import seed_creds, seed_drive_unit
 
 from st_cli.cmd import remote
 from st_cli.core import generate, manifest, runner, tree
 from st_cli.core.errors import StCliError
 from st_cli.core.models import StCliManifest, UnitState
-
-from helpers import seed_creds
 
 
 def _drive_core(repo, hosts=("10.0.0.1",)):
@@ -27,25 +26,13 @@ def _drive_core(repo, hosts=("10.0.0.1",)):
     )
 
 
-# --------------------------------------------------------------------------- worker target resolution
+# ------------------------------------------------------------- worker target resolution
 
 
 def test_remote_worker_resolves_to_core_host_and_worker_unit(repo):
-    """`st-cli remote` targets the core's host but the worker's own systemd unit + dir."""
-    seed_creds(repo)
-    tree.write_hosts(
-        "drive", "prod", "drive", "drive", ["10.0.0.1"]
-    )  # only the core has hosts
-    manifest.save_manifest(
-        StCliManifest(
-            "0.0.19",
-            "0.0.19",
-            [
-                UnitState("drive", "prod", "drive", "managed"),
-                UnitState("drive", "prod", "workers", "managed"),
-            ],
-        )
-    )
+    """`st-cli remote` targets the core's host but the worker's own systemd unit +
+    dir."""
+    seed_drive_unit(repo, components=("drive", "workers"))
 
     t = remote.resolve_target("drive", "prod", "workers")
     assert t.host == "10.0.0.1"  # core's host (worker owns no hosts file)
@@ -54,24 +41,12 @@ def test_remote_worker_resolves_to_core_host_and_worker_unit(repo):
 
 
 def test_remote_worker_resolves_to_workers_host_when_group_present(repo):
-    """With a [workers] group seeded, resolve_target returns the worker's own host
-    (still using the worker's systemd unit + dir); the core-host fallback when no
-    [workers] group exists is covered by test_remote_worker_resolves_to_core_host_and_worker_unit."""
-    seed_creds(repo)
-    manifest.save_manifest(
-        StCliManifest(
-            "0.0.19",
-            "0.0.19",
-            [
-                UnitState("drive", "prod", "drive", "managed"),
-                UnitState("drive", "prod", "workers", "managed"),
-            ],
-        )
+    """A worker's own `[workers]` inventory group overrides the core-host fallback."""
+    seed_drive_unit(
+        repo,
+        components=("drive", "workers"),
+        groups={"drive": ["10.0.0.1"], "workers": ["10.0.0.2"]},
     )
-    tree.write_groups(
-        "drive", "prod", "drive", {"drive": ["10.0.0.1"], "workers": ["10.0.0.2"]}
-    )
-    tree.save_vars("drive", "prod", "drive", tree.load_vars("drive", "prod", "drive"))
 
     t = remote.resolve_target("drive", "prod", "workers")
     assert t.host == "10.0.0.2"  # the [workers] host, not the core's
@@ -108,22 +83,9 @@ def test_oneoff_entrypoint_override(repo, monkeypatch):
 # --------------------------------------------------------------------------- ssh user
 
 
-def test_ssh_user_from_env(repo, monkeypatch):
-    """ST_CLI_SSH_USER resolves the ssh user for the direct-SSH path
-    (restart/oneoff/reset/logs); unset → None (defer to ssh config)."""
-    seed_creds(repo)
-    monkeypatch.setenv("ST_CLI_SSH_USER", "deployer")
-
-    assert remote._ssh_user() == "deployer"
-
-    # unset → None (no local-file fallback)
-    monkeypatch.delenv("ST_CLI_SSH_USER", raising=False)
-    assert remote._ssh_user() is None
-
-
 def test_ssh_bare_host_when_user_unset(repo, monkeypatch):
-    """With ST_CLI_SSH_USER unset, _ssh targets a bare host (no 'user@') so the
-    ssh config chain supplies the User."""
+    """With ST_CLI_SSH_USER unset, `_ssh` targets a bare host so the ssh config chain
+    supplies the user."""
     _drive_core(repo)
     monkeypatch.delenv("ST_CLI_SSH_USER", raising=False)
 
@@ -163,8 +125,8 @@ def test_ssh_user_at_host_when_user_set(repo, monkeypatch):
 
 
 def test_ssh_passes_loglevel_error(repo, monkeypatch):
-    """Every _ssh call carries `-o LogLevel=ERROR` to trim client host-key warnings
-    (host stays at argv[-2], remote cmd at argv[-1])."""
+    """Every `_ssh` call carries `-o LogLevel=ERROR` to trim client host-key
+    warnings."""
     _drive_core(repo)
     monkeypatch.delenv("ST_CLI_SSH_USER", raising=False)
 
@@ -184,9 +146,8 @@ def test_ssh_passes_loglevel_error(repo, monkeypatch):
 
 
 def test_ssh_capture_stderr_hidden_on_success_shown_on_failure(repo, monkeypatch):
-    """`_ssh(capture_stderr=True)` keeps stdout live (not piped) but buffers stderr:
-    on success the buffered banner/motd is discarded (no ui.warn), on failure it is
-    replayed via ui.warn so real errors still surface."""
+    """`_ssh(capture_stderr=True)` discards buffered stderr on success and replays it on
+    failure."""
     monkeypatch.setattr(remote.sshuser, "ensure_ssh_user", lambda hosts: None)
 
     warns: list[str] = []
@@ -224,8 +185,8 @@ def test_ssh_capture_stderr_hidden_on_success_shown_on_failure(repo, monkeypatch
 
 
 def test_logs_default_and_follow(repo, monkeypatch):
-    """`logs()` shells out to `journalctl --user -u <unit>`; `-f` is appended only
-    when follow=True (default omits it)."""
+    """`logs()` shells out to `journalctl --user -u <unit>` and appends `-f` only when
+    follow=True."""
     _drive_core(repo)
 
     captured: dict = {}
@@ -251,8 +212,7 @@ def test_logs_default_and_follow(repo, monkeypatch):
 
 
 def test_logs_since_is_shell_safe(repo, monkeypatch):
-    """An untrusted --since value can't break out of the bash -lc script: it
-    survives all quoting layers as a single intact token, injecting nothing."""
+    """An untrusted `--since` value cannot break out of the `bash -lc` script."""
     _drive_core(repo)
 
     captured: dict = {}
@@ -272,9 +232,7 @@ def test_logs_since_is_shell_safe(repo, monkeypatch):
 
 
 def test_logs_host_selection(repo, monkeypatch):
-    """Multi-host units: an explicit --host ALIAS wins (ssh targets its ip), an
-    unknown alias raises, and an interactive prompt picks when pick=True on a TTY.
-    Single-host units never prompt."""
+    """`logs -H <alias>` targets that host; an unknown alias raises."""
     seed_creds(repo)
     tree.write_hosts("drive", "prod", "drive", "drive", ["10.0.0.1", "10.0.0.2"])
     manifest.save_manifest(
@@ -290,11 +248,11 @@ def test_logs_host_selection(repo, monkeypatch):
         lambda host, remote_cmd, **kw: captured.update(host=host, cmd=remote_cmd) or 0,
     )
 
-    # a) explicit alias → ssh targets its ip (drive2 = 10.0.0.2)
+    # a) explicit alias: ssh targets its ip (drive2 = 10.0.0.2)
     remote.logs("drive", "prod", "drive", host="drive2")
     assert captured["host"] == "10.0.0.2"
 
-    # b) a raw ip is NOT an alias → raises (can't reach a host from another env)
+    # b) a raw ip is NOT an alias: raises (can't reach a host from another env)
     with pytest.raises(StCliError):
         remote.logs("drive", "prod", "drive", host="10.0.0.2")
     # c) unknown alias raises too
@@ -311,12 +269,12 @@ def test_logs_host_selection(repo, monkeypatch):
     assert captured["host"] == "10.0.0.2"
 
 
-# --------------------------------------------------------------------------- reset host selection
+# ----------------------------------------------------------------- reset host selection
 
 
 def test_reset_host_selection(repo, monkeypatch):
-    """`reset` honours -H/--host (alias) like logs, and a multi-host unit with no
-    --host and no TTY raises instead of silently picking the first host."""
+    """`reset -H <alias>` targets that host; a multi-host unit needs `--host` off a
+    TTY."""
     seed_creds(repo)
     tree.write_hosts("drive", "prod", "drive", "drive", ["10.0.0.1", "10.0.0.2"])
     manifest.save_manifest(
@@ -338,7 +296,7 @@ def test_reset_host_selection(repo, monkeypatch):
     monkeypatch.setattr(runner, "galaxy_install", lambda *a, **k: 0)
     monkeypatch.setattr(runner, "play", lambda *a, **k: 0)
 
-    # a) explicit alias → the teardown _ssh call targets its ip
+    # a) explicit alias: the teardown _ssh call targets its ip
     remote.reset("drive", "prod", "drive", assume_yes=True, host="drive2")
     assert captured["host"] == "10.0.0.2"
 
@@ -348,12 +306,32 @@ def test_reset_host_selection(repo, monkeypatch):
         remote.reset("drive", "prod", "drive", assume_yes=True)
 
 
-# --------------------------------------------------------------------------- restart (ssh loop)
+def test_reset_redeploys_only_the_selected_host(repo, monkeypatch):
+    """`reset -H <alias>` redeploys with that alias as the ansible `--limit`."""
+    seed_creds(repo)
+    tree.write_hosts("drive", "prod", "drive", "drive", ["10.0.0.1", "10.0.0.2"])
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.19", "0.0.19", [UnitState("drive", "prod", "drive", "managed")]
+        )
+    )
+
+    monkeypatch.setattr(remote, "_ssh", lambda *a, **k: 0)
+    monkeypatch.setattr(generate, "generate_all", lambda *a, **k: None)
+    monkeypatch.setattr(runner, "galaxy_install", lambda *a, **k: 0)
+    play_calls: list[dict] = []
+    monkeypatch.setattr(runner, "play", lambda *a, **k: play_calls.append(k) or 0)
+
+    remote.reset("drive", "prod", "drive", assume_yes=True, host="drive2")
+
+    assert play_calls[0]["limit"] == "drive2"
+
+
+# ------------------------------------------------------------------- restart (ssh loop)
 
 
 def test_restart_loops_all_hosts(repo, monkeypatch):
-    """Bare restart (with -y) ssh-loops every host of the component, running
-    `systemctl --user restart <unit>` on each."""
+    """A bare `restart -y` loops `systemctl --user restart <unit>` over every host."""
     _drive_core(repo, hosts=("10.0.0.1", "10.0.0.2"))
 
     calls: list = []
@@ -396,14 +374,14 @@ def test_restart_all_confirmation(repo, monkeypatch):
     )
     monkeypatch.setattr(remote.sys.stdin, "isatty", lambda: True)
 
-    # decline → nothing restarts
+    # decline: nothing restarts
     monkeypatch.setattr(
         "questionary.confirm", lambda *a, **k: types.SimpleNamespace(ask=lambda: False)
     )
     remote.restart("drive", "prod")
     assert calls == []
 
-    # accept → restarts
+    # accept: restarts
     monkeypatch.setattr(
         "questionary.confirm", lambda *a, **k: types.SimpleNamespace(ask=lambda: True)
     )
@@ -416,29 +394,17 @@ def test_restart_all_confirmation(repo, monkeypatch):
         remote.restart("drive", "prod")
 
 
-def _seed_drive_and_collabora(repo) -> None:
-    """Seed drive + collabora as two managed components, each with 2 hosts."""
-    seed_creds(repo)
-    tree.write_hosts("drive", "prod", "drive", "drive", ["10.0.0.1", "10.0.0.2"])
-    tree.write_hosts(
-        "drive", "prod", "collabora", "collabora", ["10.0.0.3", "10.0.0.4"]
-    )
-    manifest.save_manifest(
-        StCliManifest(
-            "0.0.19",
-            "0.0.19",
-            [
-                UnitState("drive", "prod", "drive", "managed"),
-                UnitState("drive", "prod", "collabora", "managed"),
-            ],
-        )
-    )
-
-
 def test_restart_parallel_fans_out_components_host_serial(repo, monkeypatch):
-    """`-p` restarts components concurrently; within each component hosts stay
-    serial (one at a time, in inventory order)."""
-    _seed_drive_and_collabora(repo)
+    """`-p` restarts components concurrently while each component's hosts stay
+    serial."""
+    seed_drive_unit(
+        repo,
+        components=("drive", "collabora"),
+        component_hosts={
+            "drive": ["10.0.0.1", "10.0.0.2"],
+            "collabora": ["10.0.0.3", "10.0.0.4"],
+        },
+    )
     monkeypatch.setenv("ST_CLI_SSH_USER", "deployer")  # ensure_ssh_user is a fast no-op
 
     calls: list[tuple[str, str]] = []
@@ -463,10 +429,15 @@ def test_restart_parallel_fans_out_components_host_serial(repo, monkeypatch):
 
 
 def test_restart_parallel_aggregates_failures(repo, monkeypatch):
-    """`-p` does NOT fail-fast: a failing host is recorded, the remaining hosts of
-    that component AND all other components still run; failures are raised once at
-    the end with the failing unit@alias."""
-    _seed_drive_and_collabora(repo)
+    """`-p` does not fail fast: a failing host is recorded and the rest still run."""
+    seed_drive_unit(
+        repo,
+        components=("drive", "collabora"),
+        component_hosts={
+            "drive": ["10.0.0.1", "10.0.0.2"],
+            "collabora": ["10.0.0.3", "10.0.0.4"],
+        },
+    )
     monkeypatch.setenv("ST_CLI_SSH_USER", "deployer")
 
     calls: list[str] = []
@@ -489,8 +460,7 @@ def test_restart_parallel_aggregates_failures(repo, monkeypatch):
 
 
 def test_restart_parallel_prewarms_ssh_user(repo, monkeypatch):
-    """`-p` pre-warms the once-per-process ssh-user guard on the MAIN thread
-    (before fanning out) so worker threads never race the first prompt."""
+    """`-p` pre-warms the ssh-user guard on the main thread before fanning out."""
     _drive_core(repo)
 
     guard_calls: list[list[str]] = []
@@ -506,9 +476,7 @@ def test_restart_parallel_prewarms_ssh_user(repo, monkeypatch):
 
 
 def test_restart_ssh_quiet_discards_output(repo, monkeypatch):
-    """`_ssh(quiet=True)` discards ssh stdout+stderr (DEVNULL) so banners / motd /
-    host-key chatter can't clutter output or garble the live spinner; the rc==255
-    warning is also suppressed under quiet. A non-quiet call passes neither."""
+    """`_ssh(quiet=True)` discards both ssh stdout and stderr."""
     monkeypatch.setattr(remote.sshuser, "ensure_ssh_user", lambda hosts: None)
 
     captured: dict = {}
@@ -530,10 +498,15 @@ def test_restart_ssh_quiet_discards_output(repo, monkeypatch):
 
 
 def test_restart_reports_success_per_component(repo, monkeypatch, capfd):
-    """Off a TTY (the test default) the per-component reporter degrades to plain
-    lines: each component prints a `Successfully restarted <comp> (N hosts)` summary
-    via ui.success. Both components' summaries appear in stdout."""
-    _seed_drive_and_collabora(repo)
+    """Off a TTY, restart's per-component reporter prints plain success lines."""
+    seed_drive_unit(
+        repo,
+        components=("drive", "collabora"),
+        component_hosts={
+            "drive": ["10.0.0.1", "10.0.0.2"],
+            "collabora": ["10.0.0.3", "10.0.0.4"],
+        },
+    )
     monkeypatch.setenv("ST_CLI_SSH_USER", "deployer")  # ensure_ssh_user is a fast no-op
     monkeypatch.setattr(remote, "_ssh", lambda *a, **k: 0)
 
@@ -545,10 +518,15 @@ def test_restart_reports_success_per_component(repo, monkeypatch, capfd):
 
 
 def test_restart_failure_hint_mentions_logs(repo, monkeypatch):
-    """On a failed host the aggregated error names the failing
-    ``unit@alias (rc=…)`` and points at `st-cli logs` for details (ssh output is
-    suppressed, so the hint is the only pointer)."""
-    _seed_drive_and_collabora(repo)
+    """A failed host's aggregated error names it and points at `st-cli logs`."""
+    seed_drive_unit(
+        repo,
+        components=("drive", "collabora"),
+        component_hosts={
+            "drive": ["10.0.0.1", "10.0.0.2"],
+            "collabora": ["10.0.0.3", "10.0.0.4"],
+        },
+    )
     monkeypatch.setenv("ST_CLI_SSH_USER", "deployer")
     monkeypatch.setattr(
         remote, "_ssh", lambda host, *a, **k: 1 if host == "10.0.0.3" else 0
@@ -562,23 +540,14 @@ def test_restart_failure_hint_mentions_logs(repo, monkeypatch):
     assert "st-cli logs" in msg
 
 
-# --------------------------------------------------------------------------- ps (ssh loop)
+# ------------------------------------------------------------------------ ps (ssh loop)
 
 
 def test_ps_loops_hosts_and_skips_workers(repo, monkeypatch):
-    """ps runs `podman ps -a` per host and skips is_worker components."""
-    seed_creds(repo)
-    manifest.save_manifest(
-        StCliManifest(
-            "0.0.19",
-            "0.0.19",
-            [
-                UnitState("drive", "prod", "drive", "managed"),
-                UnitState("drive", "prod", "workers", "managed"),
-            ],
-        )
+    """`ps` runs `podman ps -a` per host and skips `is_worker` components."""
+    seed_drive_unit(
+        repo, hosts=["10.0.0.1", "10.0.0.2"], components=("drive", "workers")
     )
-    tree.write_hosts("drive", "prod", "drive", "drive", ["10.0.0.1", "10.0.0.2"])
 
     calls: list = []
     monkeypatch.setattr(
@@ -596,8 +565,7 @@ def test_ps_loops_hosts_and_skips_workers(repo, monkeypatch):
 
 
 def test_ps_header_is_compact(repo, monkeypatch, capfd):
-    """ps prints a compact `<unit> on <host>` header, not the old verbose
-    `podman ps -a for drive/prod/drive on drive1 (...) (user drive)` line."""
+    """`ps` prints a compact `<unit> on <host>` header."""
     seed_creds(repo)
     manifest.save_manifest(
         StCliManifest(

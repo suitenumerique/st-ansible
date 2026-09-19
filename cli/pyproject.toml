@@ -20,7 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest==9.1.1", "pytest-mock==3.15.1"]
-ansible = ["ansible-core==2.21.2"]
+ansible = ["ansible-core==2.21.3"]
 hashivault = ["hvac==2.4.0"]
 full = ["ansible-core==2.21.3", "hvac==2.4.0"]
 
@@ -28,9 +28,18 @@ full = ["ansible-core==2.21.3", "hvac==2.4.0"]
 st-cli = "st_cli.main:app"
 
 [tool.hatch.build.targets.wheel]
-# hatchling includes ALL files under the package dir (incl. the apps/*.yml and
-# *.j2 templates) — no force-include needed, and adding one would duplicate them.
+# hatchling includes every file under the package dir, so the apps/*.yml and
+# the *.j2 templates need no force-include.
 packages = ["st_cli"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "W", "I", "UP", "B", "SIM", "PIE", "PERF", "ISC", "PLR0402", "PLW1510"]
+# B008: typer.Option() in a default is the Typer idiom.
+# UP042: StrEnum would change str() of ReplayAction and PinState.
+ignore = ["B008", "UP042"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

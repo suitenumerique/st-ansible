@@ -1,6 +1,6 @@
 ---
 app: meet
-env_docs_url: "https://github.com/suitenumerique/meet"
+env_docs_url: "https://github.com/suitenumerique/meet/blob/main/env.d/development/common.dist"
 arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/03-meet"
 requires: [postgresql, redis, s3, oidc]
 components:

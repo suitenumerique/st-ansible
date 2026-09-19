@@ -1,8 +1,7 @@
 """Tests for st_cli.core.sshuser — the pre-connect ssh-user guard.
 
-The autouse conftest fixture disables the guard for the whole suite; here we
-re-enable it per test (``_checked = False``) and mock the resolution / TTY
-surfaces so the four branches are covered offline.
+Each test re-enables the guard and mocks resolution and TTY, to cover all
+four branches offline.
 """
 
 from __future__ import annotations
@@ -11,11 +10,9 @@ import os
 import re
 
 import pytest
-
-import st_cli.core.sshuser as sshuser
-from st_cli.core import paths, ui
-
 from helpers import script_questionary
+
+from st_cli.core import paths, sshuser, ui
 
 
 @pytest.fixture(autouse=True)

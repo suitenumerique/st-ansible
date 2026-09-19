@@ -1,52 +1,7 @@
 """Interactive bootstrap for an ``(app, env)`` deployment.
 
-Flow: backend choice → ssh/vault setup → core host IPs → identity provider +
-core Django answers → per-dependency 3-state prompt (deploy / reuse / external)
-→ write the committed tree and record units in ``.st-cli.yml``.
-
-Secret handling is routed through a :mod:`st_cli.core.secretbackend` strategy
-chosen per (app, env) at bootstrap:
-
-* ``ansible-vault`` (the default, unchanged): ``<app>/<env>/<component>/vars.yml``
-  is **plaintext / diffable**. Secrets inside an env blob are Jinja refs, e.g.
-  ``DJANGO_SECRET_KEY={{ vault_django_secret_key }}``.
-  ``<app>/<env>/<component>/vault.yml`` is a **whole-file ansible-vault** encrypted
-  mapping holding the real values.
-* ``hashi_vault`` (OpenBao, reference-only): no ``vault.yml`` is written — the
-  env blob carries ``{{ lookup('community.hashi_vault.hashi_vault', '<term>') }}``
-  refs to existing OpenBao entries and the real values live in OpenBao. st-cli
-  never generates secrets and never writes to OpenBao in this mode.
-
-The generated playbook loads ``vars.yml`` + (if present) ``vault.yml`` via
-``vars_files`` and ansible resolves the refs. Hosts live only in the ``hosts``
-ini (not duplicated in ``.st-cli.yml``).
-
-**Rebootstrap.** Re-running this questionnaire over an ``(app, env, component)``
-that already has a committed ``vars.yml`` is a *rebootstrap*, not a destructive
-rebuild: every prompt is pre-filled from what is already on disk
-(:mod:`st_cli.core.recover`) so pressing Enter through the whole thing
-reproduces the current config byte-for-byte (the property the whole feature
-rests on — see ``core/recover.py``'s module docstring). Three mechanisms make
-that possible, used throughout this module:
-
-* :func:`_recall` — the pre-fill (``default=``) for an ordinary text prompt.
-* :func:`_ask_secret` — a secret is **never** re-prompted or regenerated once
-  a value for its key already sits in ``answers`` (a recovered ``{{ vault_x
-  }}``/hashi-lookup ref is exactly what the next render needs — asking again,
-  or worse regenerating, would silently rotate a live credential).
-* Conditional gates (the SMTP confirm, the blobs-offload confirm, the
-  DATABASE_URL/discrete select, the direct/relay select, the OIDC provider
-  select, and the per-dependency deploy/reuse/external select) derive their
-  *default* from recovered state instead of a hardcoded first-run default —
-  otherwise an Enter-through rebootstrap would silently tear out working
-  configuration (see each gate's own comment for the reasoning).
-
-:func:`core.writer.write_core` already merges rather than replaces
-``vars.yml`` (comments/hand-edits survive) and :func:`core.writer.write_vault`
-already merges rather than replaces ``vault.yml`` (and no-ops when nothing new
-was prompted) — this module's job is only to feed both of those the same
-answers a from-scratch run would have produced, so neither ever sees a reason
-to touch what is already correct.
+Flow: backend choice, host IPs, identity provider and core answers, a
+deploy / skip / external prompt per dependency, then write the tree.
 """
 
 from __future__ import annotations
@@ -73,7 +28,15 @@ from ..core import (
     writer,
 )
 from ..core.errors import StCliError
-from ..core.models import NewComponentOffer, StCliManifest, UnitState, UpgradeNeed
+from ..core.models import (
+    BACKEND_ANSIBLE_VAULT,
+    MODE_EXTERNAL,
+    MODE_MANAGED,
+    NewComponentOffer,
+    StCliManifest,
+    UnitState,
+    UpgradeNeed,
+)
 from ..core.prompts import (
     Recovered,
     _ask,
@@ -86,13 +49,16 @@ from ..core.prompts import (
     silent_replay,
     suspend_silent,
 )
-from ..core.secretbackend import SecretBackend, setup_backend
+from ..core.secretbackend import (
+    SecretBackend,
+    setup_backend,
+)
 
 __all__ = ["ReplayAction", "bootstrap"]
 
 
 class ReplayAction(str, enum.Enum):
-    """What :func:`bootstrap` does when the targeted unit already exists."""
+    """What `bootstrap` does when the targeted unit already exists."""
 
     ASK = "ask"  # CLI default: 3-way select when the unit exists
     MODIFY = "modify"  # pre-filled interactive replay (current behaviour)
@@ -102,6 +68,11 @@ class ReplayAction(str, enum.Enum):
 
 
 _OIDC_PROVIDERS = ["keycloak", "proconnect-prod", "proconnect-integ", "custom"]
+
+_S3_ENDPOINT_PLACEHOLDER = "https://s3.fr-par.scw.cloud"
+_IDP_PLACEHOLDER = "https://idp.example.org"
+_SMTP_PLACEHOLDER = "smtp.example.org"
+_DOCS_CORE_SECRETS = ("COLLABORATION_SERVER_SECRET", "Y_PROVIDER_API_KEY")
 
 # Requirements-checklist lines, keyed by the capability names apps declare in
 # their `requires` (apps/<app>.yml). Insertion order is the display order; the
@@ -129,7 +100,7 @@ _KC_DB_URL_RE = re.compile(
 )
 
 # Inverse of the drive/collabora shared rule's "https://{value}/hosting/discovery"
-# consumer_format (see apps/drive.yml) — that rule has no `var`, so
+# consumer_format (see apps/drive.yml). That rule has no `var`, so
 # core.recover.recover_shared cannot recover it; this reconstructs the plain
 # domain from the core's own already-recovered WOPI_COLLABORA_DISCOVERY_URL.
 _COLLABORA_URL_RE = re.compile(r"^https://(?P<domain>.+)/hosting/discovery$")
@@ -137,15 +108,13 @@ _JINJA_EXPR_RE = re.compile(r"\{\{(.*?)\}\}")
 
 
 def _jinja_literal(text: str) -> str:
-    """Quote ``text`` as a single-quoted Jinja string literal."""
     return "'" + text.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
 def valid_s3_endpoint(text: str) -> bool | str:
     """questionary validator: a literal endpoint must carry its scheme.
 
-    boto3 rejects an ``endpoint_url`` without a scheme, and the caddy edge
-    needs the scheme and the host as two values. A Jinja value passes as is.
+    boto3 rejects an ``endpoint_url`` without one. A Jinja value passes as is.
     """
     text = (text or "").strip()
     if "{{" in text or text.startswith(("http://", "https://")):
@@ -156,11 +125,8 @@ def valid_s3_endpoint(text: str) -> bool | str:
 def caddy_s3_parts(endpoint: str) -> tuple[str, str]:
     """Return the ``(CADDY_S3_PROTOCOL, CADDY_S3_HOST)`` pair for ``endpoint``.
 
-    A plain endpoint is split here. An endpoint that embeds a Jinja
-    expression (a hashi_vault lookup ref, for example) cannot be split before
-    Ansible resolves it, so the pair becomes two Jinja expressions that apply
-    the ``urlsplit`` filter to the endpoint at render time. The endpoint must
-    carry its scheme: see :func:`valid_s3_endpoint`.
+    An endpoint embedding a Jinja expression cannot be split before Ansible
+    resolves it, so the pair becomes two Jinja ``urlsplit`` expressions instead.
     """
     if "{{" not in endpoint:
         parts = urlsplit(endpoint)
@@ -181,25 +147,11 @@ def caddy_s3_parts(endpoint: str) -> tuple[str, str]:
     )
 
 
-# --------------------------------------------------------------------------- #
-# rebootstrap helpers
-# --------------------------------------------------------------------------- #
 def _recall(answers: dict, key: str, fallback: str = "") -> str:
-    """The pre-fill (``default=``) for an ordinary text prompt.
+    """The pre-fill for a text prompt: ``_ask(label, _recall(answers, key))``.
 
-    Use as ``_ask("DB_HOST", _recall(answers, "DB_HOST"))``. When a call site
-    used to pass a first-run default (``_ask("DB_PORT", "5432")``), pass that
-    same value as ``fallback`` (``_recall(answers, "DB_PORT", "5432")``) so a
-    recovered value still wins over it. When a call site used a ``placeholder=``
-    instead, leave ``fallback`` empty and pass the placeholder through
-    unchanged: :func:`core.prompts._text_question` already ignores
-    ``placeholder`` whenever ``default`` is non-empty, so a recovered value
-    silently drops the ghost hint on its own (see ``core/prompts.py:36-45``) —
-    nothing extra to do here.
-
-    Returns a :class:`~st_cli.core.prompts.Recovered` marker when ``key`` is
-    in ``answers`` (a silent replay auto-accepts it), the plain ``fallback``
-    otherwise (a silent replay still asks it — a genuinely new question).
+    Returns a `Recovered` marker when `key` is in `answers` (a silent replay
+    auto-accepts it); otherwise the plain `fallback`, which still gets asked.
     """
     if key in answers:
         return Recovered(str(answers[key]))
@@ -207,19 +159,14 @@ def _recall(answers: dict, key: str, fallback: str = "") -> str:
 
 
 def _recall_bool(answers: dict, key: str, fallback: bool) -> bool:
-    """Tolerant boolean pre-fill for a ``_confirm`` gate's ``default=``.
-
-    Mirrors :func:`core.recover.recover_cadvisor`'s tolerant string parsing
-    (a recovered value may be a real bool, or a string like ``"1"``/``"true"``
-    from an env blob or a hand-edited ``vars.yml``). Absence degrades to
-    ``fallback`` — the historical first-run default — not ``False``.
-    """
+    """Tolerant boolean pre-fill for a `_confirm` gate. An absent key returns
+    `fallback`."""
     value = answers.get(key)
     if value is None:
         return fallback
     if isinstance(value, bool):
         return value
-    return str(value).strip().lower() in ("true", "yes", "on", "1")
+    return bool(recover.parse_bool(str(value)))
 
 
 def _ask_secret(
@@ -227,43 +174,27 @@ def _ask_secret(
     backend: SecretBackend,
     key: str,
     component: str,
-    label: str | None = None,
     gen=None,
 ) -> None:
-    """Prompt for (or generate) a secret and route it through the backend —
-    unless ``answers`` already holds a value for ``key``, in which case this
-    is a no-op.
+    """Prompt for (or generate) a secret and route it through the backend.
 
-    This is the single place enforcing "never re-prompt, never rotate an
-    already-decided secret": a recovered secret is the literal ``{{ vault_x
-    }}`` ref (or a hashi lookup ref) parsed verbatim out of the committed env
-    blob by :func:`core.recover.recover` — exactly the string the next render
-    needs. Returning immediately here leaves it untouched in ``answers`` AND
-    leaves the backend's per-component vault buffer empty for this key, so
-    :func:`core.writer.write_vault` merges over the existing ``vault.yml``
-    instead of clobbering it (see that function's docstring) — a secret field
-    has no editable ``default=`` (unlike a text prompt) precisely because it is
-    hidden input, so "skip the prompt entirely" is the only way to avoid
-    re-asking it.
+    A no-op when ``answers`` already holds a value for ``key``: never
+    re-prompt or rotate an already-decided secret.
     """
     if key in answers:
         return
     if gen is not None:
         value = gen() if backend.prompts_values() else None
     else:
-        value = _password(label or key) if backend.prompts_values() else None
+        value = _password(key) if backend.prompts_values() else None
     backend.env_secret(answers, key, component=component, value=value)
 
 
 def _ask_optional(answers: dict, key: str, label: str) -> None:
-    """Ask an optional text field; a blank answer over a recovered value pops
-    the key instead of silently keeping the stale committed line.
+    """Ask an optional text field.
 
-    ``envblob.merge`` never deletes a line (see the module docstring), so
-    clearing ``key`` from ``answers`` alone leaves the old committed
-    ``KEY=value`` line in place — warn the operator to remove it by hand,
-    matching the DB-mode / outbound-mode switch convention used elsewhere in
-    this module.
+    A blank answer over a recovered value pops the key and warns to remove
+    the stale committed line by hand (``envblob.merge`` never deletes one).
     """
     value = _ask(label, _recall(answers, key), required=False)
     if value:
@@ -275,14 +206,26 @@ def _ask_optional(answers: dict, key: str, label: str) -> None:
         )
 
 
-def _seed_drive_legacy_s3(seed: dict, data) -> None:
-    """Replace the pre-0.4.0 S3 indirection of a drive seed with literal values.
+def _warn_cleared_password(backend: SecretBackend, key: str) -> None:
+    """Warn that clearing a username also cleared its paired password.
 
-    Before 0.4.0 the drive backend blob held ``{{ st_drive_s3_* }}`` strings
-    and the real endpoint and bucket lived in the ``st_drive_s3_*`` vars.
-    ``recover.recover`` returns the strings verbatim. This function reads the
-    real values from ``data``, the committed core ``vars.yml``. When a legacy
-    var is absent, it drops the key and warns, so the prompt asks again.
+    ``envblob.merge`` never deletes a line, so the operator must remove the
+    stale ``KEY=`` line (and, under ansible-vault, its vault entry) by hand.
+    """
+    vault_hint = (
+        f" and the vault_{key.lower()} entry from vault.yml"
+        if backend.prompts_values()
+        else ""
+    )
+    ui.warn(
+        f"{key} cleared with the username: remove the {key}= "
+        f"line from vars.yml{vault_hint} by hand."
+    )
+
+
+def _seed_drive_legacy_s3(seed: dict, data) -> None:
+    """Replace a pre-0.4.0 drive seed's ``{{ st_drive_s3_* }}`` refs with the
+    literal values read from ``data``, the committed core ``vars.yml``.
     """
     endpoint = str(seed.get("AWS_S3_ENDPOINT_URL", ""))
     if "{{ st_drive_s3_" in endpoint:
@@ -309,15 +252,12 @@ def _seed_drive_legacy_s3(seed: dict, data) -> None:
 
 
 def _cadvisor_default(app: str, env: str, component: str) -> bool:
-    """``recover.recover_cadvisor``'s ``None`` (absent/never bootstrapped) falls
-    back to the historical first-run default of ``True``."""
+    """Return the recovered cadvisor flag, or the first-run default `True` when
+    absent."""
     recovered = recover.recover_cadvisor(app, env, component)
     return True if recovered is None else recovered
 
 
-# --------------------------------------------------------------------------- #
-# manifest + local bootstrap
-# --------------------------------------------------------------------------- #
 def _ensure_manifest() -> StCliManifest:
     """Load ``.st-cli.yml`` or create a fresh one pinned to this CLI version."""
     if paths.manifest_path().exists():
@@ -328,17 +268,11 @@ def _ensure_manifest() -> StCliManifest:
     )
 
 
-# --------------------------------------------------------------------------- #
-# identity provider / OIDC + core Django answers
-# --------------------------------------------------------------------------- #
 def _ask_oidc(answers: dict, backend: SecretBackend, component: str) -> None:
-    """Choose an identity provider; fill OIDC answers (client secret → backend).
+    """Choose an identity provider; fill OIDC answers (client secret routed to backend).
 
-    The provider itself is never stored anywhere in the tree — the committed
-    ``OIDC_OP_*`` endpoints (already recovered into ``answers`` by the time
-    this runs) ARE the provider choice, so ``core.recover.recover_oidc``
-    infers it back from them and pre-selects the same choice (and pre-fills
-    the keycloak base-url/realm follow-ups) on a rebootstrap.
+    The provider itself is never stored: ``core.recover.recover_oidc`` infers
+    it back from the recovered ``OIDC_OP_*`` endpoints on a rebootstrap.
     """
     recovered_provider, recovered_base, recovered_realm = recover.recover_oidc(answers)
     provider = _ask_select(
@@ -347,10 +281,10 @@ def _ask_oidc(answers: dict, backend: SecretBackend, component: str) -> None:
     base_url = realm = None
     answers["OIDC_PROVIDER"] = provider
     # The recovered base-url/realm only apply when the operator kept the SAME
-    # provider as before — if they picked a different one this run, prefilling
+    # provider as before. If they picked a different one this run, prefilling
     # them would silently mix state from an unrelated provider.
     same_provider = provider == recovered_provider
-    # Recovered() only around the recovered value itself — "master" below is a
+    # Recovered() wraps only the recovered value itself. "master" below is a
     # first-run fallback, not a recovered realm, so it must still be asked.
     base_default = Recovered(recovered_base) if same_provider and recovered_base else ""
     realm_default = (
@@ -360,7 +294,7 @@ def _ask_oidc(answers: dict, backend: SecretBackend, component: str) -> None:
         base_url = _ask(
             "Keycloak base URL",
             base_default,
-            placeholder="https://idp.example.org",
+            placeholder=_IDP_PLACEHOLDER,
         )
         realm = _ask("Keycloak realm", realm_default)
     elif provider == "custom":
@@ -403,19 +337,9 @@ def _ask_oidc(answers: dict, backend: SecretBackend, component: str) -> None:
 def _ask_email(answers: dict, backend: SecretBackend, component: str, app: str) -> None:
     """Prompt Django transactional email (SMTP) settings for drive / meet / docs.
 
-    Skipped entirely for ``messages`` (no ``DJANGO_EMAIL_*`` upstream). The SMTP
-    password is a secret routed through the backend like the other env secrets;
-    optional fields are only written into ``answers`` when filled in so template
-    guards stay clean.
-
-    The confirm gate's default is derived from whether SMTP was already
-    configured (``DJANGO_EMAIL_HOST`` recovered) — hardcoding ``default=False``
-    here would mean an Enter-through rebootstrap silently DROPS a working SMTP
-    configuration (the confirm declines, none of the fields below are asked,
-    and the whole block is omitted from the next render). When SMTP is already
-    configured, the prompt text says so ("review its settings?") instead of
-    asking "Configure … settings?" as if nothing were set up yet — an honest
-    gate, not just an honest default.
+    Skipped for ``messages`` (no ``DJANGO_EMAIL_*`` upstream). The confirm
+    gate defaults to whether SMTP is already configured, so an Enter-through
+    rebootstrap never silently drops a working configuration.
     """
     if app not in _EMAIL_APPS:
         return
@@ -430,7 +354,7 @@ def _ask_email(answers: dict, backend: SecretBackend, component: str, app: str) 
     answers["DJANGO_EMAIL_HOST"] = _ask(
         "DJANGO_EMAIL_HOST",
         _recall(answers, "DJANGO_EMAIL_HOST"),
-        placeholder="smtp.example.org",
+        placeholder=_SMTP_PLACEHOLDER,
     )
     answers["DJANGO_EMAIL_PORT"] = _ask(
         "DJANGO_EMAIL_PORT", _recall(answers, "DJANGO_EMAIL_PORT", "587")
@@ -468,10 +392,8 @@ def _ask_email(answers: dict, backend: SecretBackend, component: str, app: str) 
 def _ask_cadvisor(label: str, default: bool = True) -> bool:
     """Prompt whether to enable the cadvisor monitoring sidecar for a component.
 
-    ``default`` is the historical first-run default (``True``) unless the
-    caller passes a recovered value (see :func:`_cadvisor_default`) — a
-    rebootstrap must offer the operator's CURRENT choice, not silently flip a
-    disabled monitor back on (or vice versa) on every Enter-through rerun.
+    Pass the recovered value as ``default`` so a rebootstrap offers the
+    current choice, not the first-run default ``True``.
     """
     return _confirm(
         f"Enable cadvisor container monitoring for {label}?", default=default
@@ -481,17 +403,9 @@ def _ask_cadvisor(label: str, default: bool = True) -> bool:
 def _ask_db(answers: dict, backend: SecretBackend, component: str, app: str) -> None:
     """Prompt database connection: a DATABASE_URL or discrete DB_* vars.
 
-    The mode select's default is derived from which shape was actually
-    recovered (``DB_HOST`` present ⇒ discrete; otherwise "DATABASE_URL") — a
-    rebootstrap must not silently flip an operator from discrete DB_* vars to
-    DATABASE_URL (or back). "DATABASE_URL" is given explicitly (not left as
-    "no default") so a silent replay can auto-accept it too; interactively it
-    was already the first, pre-highlighted choice, so this changes nothing.
-
-    Switching mode here does not clean up the shape left behind: ``envblob.merge``
-    never deletes a line, so the old mode's committed lines (and, for a switch
-    away from DATABASE_URL, its vault entry) stay in the tree. Warn about that
-    in both directions instead of leaving two conflicting DB configs in place.
+    The mode select defaults to the shape actually recovered. Switching mode
+    does not clean up the old shape: ``envblob.merge`` never deletes a line,
+    so this warns the operator to remove the stale lines by hand.
     """
     had_discrete = "DB_HOST" in answers
     had_url = "DATABASE_URL" in answers
@@ -501,7 +415,7 @@ def _ask_db(answers: dict, backend: SecretBackend, component: str, app: str) -> 
         ["DATABASE_URL", "discrete (DB_*)"],
         default=default_mode,
         # A total recovery gap (neither shape recovered) is a genuine new
-        # question, not a mode switch — silent mode must not auto-pick
+        # question, not a mode switch. Silent mode must not auto-pick
         # "DATABASE_URL" for it (see the docstring above for why that default
         # exists at all).
         auto=had_url or had_discrete,
@@ -513,7 +427,7 @@ def _ask_db(answers: dict, backend: SecretBackend, component: str, app: str) -> 
                 "The committed DB_HOST, DB_PORT, DB_NAME, DB_USER, and "
                 "DB_PASSWORD lines stay in the env blob. Remove them by hand."
             )
-        # DATABASE_URL is itself the secret (it may embed a password) — never
+        # DATABASE_URL is itself the secret (it may embed a password), so never
         # re-prompt it once recovered: unlike DB_PASSWORD, there is no separate
         # plaintext field to recall a default from, so re-prompting would mean
         # retyping the whole URL, and pre-filling with the recovered
@@ -539,23 +453,11 @@ def _ask_db(answers: dict, backend: SecretBackend, component: str, app: str) -> 
 
 
 def _ask_keycloak(meta, backend: SecretBackend, answers: dict | None = None) -> dict:
-    """Collect the keycloak core answers → the ``st_keycloak_env`` blob.
+    """Collect the keycloak core answers into the ``st_keycloak_env`` blob.
 
-    Keycloak is not a Django app: its role consumes a single free-form
-    ``st_keycloak_env`` blob (no DOMAIN/Redis/S3/OIDC/email questionnaire). The
-    ``messages-keycloak`` image bakes in ``KC_DB=postgres`` + features/metrics/health
-    at build time, so we only prompt for what the operator must supply at runtime:
-    the DB connection, the public hostname, and the admin bootstrap credentials.
-    Passwords route through the secret backend exactly like the Django apps'
-    ``DB_PASSWORD`` (``{{ vault_* }}`` ref in the blob, real value in vault.yml).
-
-    ``answers`` (rebootstrap) is the dict recovered by
-    :func:`core.recover.recover` for the keycloak core unit — every prompt
-    below pre-fills from it. ``KC_DB_URL`` is recovered as a single composed
-    string (``jdbc:postgresql://host:port/name``); it is decomposed back into
-    the 3 separate prompts by :data:`_KC_DB_URL_RE` (the exact inverse of the
-    f-string composition below) since there is no other single source for the
-    individual host/port/name values.
+    Keycloak is not a Django app: no DOMAIN/Redis/S3/OIDC/email questionnaire.
+    ``KC_DB_URL`` is recovered as one composed string and decomposed back into
+    the 3 DB prompts by `_KC_DB_URL_RE`.
     """
     core_key = meta.core().key
     answers = dict(answers) if answers else {}
@@ -611,15 +513,9 @@ _PROJECTS_OIDC_DEFAULTS = {
 def _ask_projects_oidc(answers: dict, backend: SecretBackend, component: str) -> None:
     """Choose an identity provider and derive projects' single ``OIDC_ISSUER``.
 
-    Same provider switch as the Django apps (:func:`_ask_oidc`), but projects is
-    a Sails app: it takes one issuer URL and discovers the endpoints itself,
-    instead of the explicit ``OIDC_RP_*``/``OIDC_OP_*`` set. The ProConnect
-    issuers are bundled, so those providers need no URL prompt at all.
-
-    On a rebootstrap the provider is inferred back from the recovered
-    ``OIDC_ISSUER`` (a bundled ProConnect issuer, a ``/realms/<realm>`` keycloak
-    issuer, or anything else = custom) and the follow-up URL prompts are
-    pre-filled from it when the operator keeps the same provider.
+    Unlike the Django apps' explicit ``OIDC_RP_*``/``OIDC_OP_*`` set, projects
+    takes one issuer URL and discovers the endpoints itself; the bundled
+    ProConnect issuers need no URL prompt.
     """
     recovered_issuer = str(answers.get("OIDC_ISSUER") or "")
     recovered_provider, recovered_base, recovered_realm = _projects_oidc_from_issuer(
@@ -636,9 +532,7 @@ def _ask_projects_oidc(answers: dict, backend: SecretBackend, component: str) ->
     )
     base_url = realm = None
     if provider == "keycloak":
-        base_url = _ask(
-            "Keycloak base URL", base_default, placeholder="https://idp.example.org"
-        )
+        base_url = _ask("Keycloak base URL", base_default, placeholder=_IDP_PLACEHOLDER)
         realm = _ask("Keycloak realm", realm_default)
     elif provider == "custom":
         # Required here (unlike the Django flow, which can fall back to explicit
@@ -646,13 +540,13 @@ def _ask_projects_oidc(answers: dict, backend: SecretBackend, component: str) ->
         base_url = _ask(
             "OIDC issuer URL (discovery base)",
             base_default,
-            placeholder="https://idp.example.org/realms/main",
+            placeholder=f"{_IDP_PLACEHOLDER}/realms/main",
         )
     answers["OIDC_ISSUER"] = envrender.oidc_issuer(provider, base_url, realm)
     if provider.startswith("proconnect"):
         # ProConnect specifics (override the generic keycloak-ish defaults set in
         # _ask_projects): it returns the userinfo as a signed JWT (RS256, not JSON),
-        # and exposes given_name/usual_name/email/siret via per-claim scopes — there
+        # and exposes given_name/usual_name/email/siret via per-claim scopes. There
         # is no `profile` scope nor a `name` claim. Without these, login loops back
         # to the landing page (userinfo parse error, then the fullname check fails).
         answers["OIDC_SCOPES"] = "openid given_name usual_name email siret"
@@ -678,7 +572,7 @@ def _ask_projects_oidc(answers: dict, backend: SecretBackend, component: str) ->
 
 
 def _projects_oidc_from_issuer(issuer: str) -> tuple[str, str, str]:
-    """Invert :func:`core.envrender.oidc_issuer` for the projects questionnaire.
+    """Invert `envrender.oidc_issuer` for the projects questionnaire.
 
     Returns ``(provider, base_url, realm)``; an empty issuer (first run) gives
     ``("", "", "")`` so the select falls back to its first entry.
@@ -704,18 +598,8 @@ def _ask_projects_storage(
 ) -> None:
     """Prompt S3 object storage for projects uploads (the recommended target).
 
-    S3 is where avatars / project backgrounds / attachments should live in
-    production; the role still bind-mounts local dirs as a fallback. The secret
-    access key routes through the secret backend like every other credential;
-    the access key id stays plaintext (matches the Django S3 questionnaire).
-    With ``scaling=True`` (horizontal scaling accepted) the opt-out confirm is
-    skipped: uploads on local disk are not shared between instances, so S3 is
-    mandatory as soon as more than one instance runs. Declining still warns
-    that local storage rules out going multi-instance later.
-
-    ``default`` is the opt-in gate's pre-fill: ``True`` on a first run, and
-    "already configured" (``S3_ENDPOINT`` recovered) on a rebootstrap, so an
-    Enter-through replay keeps the committed choice either way.
+    ``scaling=True`` skips the opt-out confirm: uploads on local disk are not
+    shared between instances, so S3 is mandatory once more than one runs.
     """
     if scaling:
         ui.info(
@@ -733,7 +617,7 @@ def _ask_projects_storage(
     answers["S3_ENDPOINT"] = _ask(
         "S3_ENDPOINT",
         _recall(answers, "S3_ENDPOINT"),
-        placeholder="https://s3.fr-par.scw.cloud",
+        placeholder=_S3_ENDPOINT_PLACEHOLDER,
     )
     _ask_optional(answers, "S3_REGION", "S3_REGION (optional)")
     answers["S3_ACCESS_KEY_ID"] = _ask(
@@ -756,18 +640,8 @@ def _ask_projects_scaling(
 ) -> bool:
     """Prompt the optional Redis wiring for horizontal scaling.
 
-    Upstream enables its Redis adapters (``@sailshq/connect-redis`` for sessions,
-    ``@sailshq/socket.io-redis`` for realtime broadcasts) only when ``REDIS_URL``
-    is set — required as soon as more than one instance runs behind a load
-    balancer, useless for a single instance, hence opt-in and default-declined.
-    The URL can embed a password (``redis://user:password@host``) so it routes
-    through the secret backend whole, like ``DATABASE_URL``. Replicas already
-    share SECRET_KEY/DATABASE_URL (one env blob for every host of the unit).
-    Returns whether scaling was accepted, so the caller can make the remaining
-    prerequisite — S3, local uploads are not visible across instances — required.
-
-    A recovered ``REDIS_URL`` flips the gate's default to accepted, and the
-    secret itself is then kept as-is (never re-prompted, never rotated).
+    Returns whether scaling was accepted, so the caller can make the S3
+    prompt mandatory (local uploads are not shared across instances).
     """
     if not _confirm(
         "Configure Redis for horizontal scaling (multiple instances)?",
@@ -793,7 +667,7 @@ def _ask_projects_email(answers: dict, backend: SecretBackend, component: str) -
     projects uses nodemailer's ``SMTP_*`` keys (not Django's ``DJANGO_EMAIL_*``).
     The password is a secret routed through the backend; optional fields land in
     ``answers`` only when filled in so the template guards stay clean. Same
-    honest gate as :func:`_ask_email`: a recovered ``SMTP_HOST`` means the
+    gate as `_ask_email`: a recovered ``SMTP_HOST`` means the
     confirm defaults to "review", never to silently dropping the block.
     """
     smtp_configured = bool(_recall(answers, "SMTP_HOST"))
@@ -805,7 +679,7 @@ def _ask_projects_email(answers: dict, backend: SecretBackend, component: str) -
     if not _confirm(prompt, default=smtp_configured):
         return
     answers["SMTP_HOST"] = _ask(
-        "SMTP_HOST", _recall(answers, "SMTP_HOST"), placeholder="smtp.example.org"
+        "SMTP_HOST", _recall(answers, "SMTP_HOST"), placeholder=_SMTP_PLACEHOLDER
     )
     answers["SMTP_PORT"] = _ask("SMTP_PORT", _recall(answers, "SMTP_PORT", "587"))
     answers["SMTP_SECURE"] = (
@@ -821,15 +695,7 @@ def _ask_projects_email(answers: dict, backend: SecretBackend, component: str) -
     if "SMTP_USER" in answers:
         _ask_secret(answers, backend, "SMTP_PASSWORD", component)
     elif had_user and answers.pop("SMTP_PASSWORD", None):
-        vault_hint = (
-            " and the vault_smtp_password entry from vault.yml"
-            if backend.prompts_values()
-            else ""
-        )
-        ui.warn(
-            "SMTP_PASSWORD cleared with the username: remove the SMTP_PASSWORD= "
-            f"line from vars.yml{vault_hint} by hand."
-        )
+        _warn_cleared_password(backend, "SMTP_PASSWORD")
     answers["SMTP_FROM"] = _ask(
         "SMTP_FROM",
         _recall(answers, "SMTP_FROM"),
@@ -838,19 +704,10 @@ def _ask_projects_email(answers: dict, backend: SecretBackend, component: str) -
 
 
 def _ask_projects(meta, backend: SecretBackend, answers: dict | None = None) -> dict:
-    """Collect the projects core answers → the ``st_projects_env`` blob.
+    """Collect the projects core answers into the ``st_projects_env`` blob.
 
-    projects (a Planka fork) is a Sails.js app, not Django: its role consumes a
-    single free-form ``st_projects_env`` blob (no DJANGO_*/Celery; Redis appears
-    only as the optional horizontal-scaling ``REDIS_URL``). Login is
-    OIDC-enforced (SSO only, no local accounts) and uploads target S3. Secrets
-    (DATABASE_URL, SECRET_KEY, the OIDC client secret, S3/SMTP credentials) route
-    through the secret backend exactly like the Django apps' DB_PASSWORD.
-
-    ``answers`` (rebootstrap) is the dict recovered by
-    :func:`core.recover.recover` for the core unit, copied and used to
-    pre-fill every prompt below via :func:`_recall`/:func:`_ask_secret` —
-    the same contract as :func:`_ask_core`.
+    projects (a Planka fork) is a Sails.js app, not Django: a single free-form
+    ``st_projects_env`` blob, OIDC-enforced login (no local accounts).
     """
     core_key = meta.core().key
     seeded = bool(answers)
@@ -872,7 +729,7 @@ def _ask_projects(meta, backend: SecretBackend, answers: dict | None = None) -> 
     # SECRET_KEY: generated like the Django apps' DJANGO_SECRET_KEY.
     _ask_secret(answers, backend, "SECRET_KEY", core_key, gen=secrets.gen_secret)
 
-    # DATABASE_URL embeds the DB password → routed through the secret backend.
+    # DATABASE_URL embeds the DB password, so it is routed through the secret backend.
     if "DATABASE_URL" not in answers:
         value = (
             _ask(
@@ -884,7 +741,7 @@ def _ask_projects(meta, backend: SecretBackend, answers: dict | None = None) -> 
         )
         backend.env_secret(answers, "DATABASE_URL", component=core_key, value=value)
 
-    # OpenID Connect — required (login has no local fallback when OIDC_ENFORCED).
+    # OpenID Connect is required: login has no local fallback when OIDC_ENFORCED.
     _ask_projects_oidc(answers, backend, core_key)
     _ask_optional(
         answers,
@@ -909,24 +766,16 @@ def _ask_projects(meta, backend: SecretBackend, answers: dict | None = None) -> 
 def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict:
     """Collect the core component answers (domain, db, redis, s3, secrets, OIDC).
 
-    ``answers`` (rebootstrap) is the dict recovered by
-    :func:`core.recover.recover` for the core unit — copied (never mutated in
-    place, the caller's dict is disposable but this keeps the function pure)
-    and used to pre-fill every prompt below via :func:`_recall`/:func:`_ask_secret`.
+    ``answers`` is copied, never mutated in place: the caller's dict stays
+    disposable.
     """
     app = meta.app
     core_key = meta.core().key
     answers = dict(answers) if answers else {}
-    # DOMAIN itself is only a committed `st_*` var for meet/drive (see
-    # apps/*.yml's `st_<app>_public_host: "{DOMAIN}"`) — recover() recovers it
-    # directly for those two via the component-var inversion. messages has no
-    # such var, so DOMAIN never comes back that way; it falls back to
-    # DJANGO_ALLOWED_HOSTS, which for every app EXCEPT meet (which overrides it
-    # to the "{{ st_meet_public_host }}" indirection) is emitted as the literal
-    # domain string — exactly what was typed here originally. A comma in the
-    # recalled value means an operator hand-edited DJANGO_ALLOWED_HOSTS into a
-    # multi-host list — pre-filling DOMAIN with that list would poison every
-    # derived value (DJANGO_CSRF_TRUSTED_ORIGINS, etc.), so drop the fallback.
+    # DOMAIN recovers directly for meet/drive via the component-var inversion;
+    # other apps fall back to DJANGO_ALLOWED_HOSTS. A comma there means an
+    # operator hand-edited it into a multi-host list. Pre-filling DOMAIN with
+    # that list would poison every derived value, so drop the fallback.
     allowed_hosts = _recall(answers, "DJANGO_ALLOWED_HOSTS")
     domain_fallback = "" if "," in allowed_hosts else allowed_hosts
     recovered_domain = _recall(answers, "DOMAIN") or domain_fallback
@@ -944,14 +793,10 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
         }
     )
     if app == "meet":
-        # single source of truth: every public-domain env var references the
-        # st_meet_public_host ansible var (written into the core vars.yml from
-        # DOMAIN), so the operator changes the domain in one place. Mirrors drive's
-        # st_drive_public_host redirect-url override. The answer VALUE is the literal
-        # "https://{{ st_meet_public_host }}" string — the env template emits it
-        # via answers.SOMEKEY so the {{ }} lands verbatim in the env file and ANSIBLE
-        # resolves it at deploy (do NOT put {{ st_meet_public_host }} directly in a
-        # jinja env template line — jinja2 would resolve it and emit empty).
+        # Single source of truth: every public-domain var references
+        # st_meet_public_host so the operator changes the domain in one place.
+        # The value is the literal "{{ st_meet_public_host }}" string,
+        # resolved by Ansible at deploy; resolving it here would emit empty.
         host = "{{ st_meet_public_host }}"
         derived = {
             "DJANGO_ALLOWED_HOSTS": host,
@@ -976,10 +821,9 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             "LOGOUT_REDIRECT_URL": f"https://{host}/",
         }
     elif app == "drive":
-        # public-facing URLs (incl. MEDIA_BASE_URL) point at st_drive_public_host
-        # (resolved at deploy), matching the role's healthcheck Host var rather
-        # than the raw domain — mirrors meet's st_meet_public_host override above.
-        # DJANGO_ALLOWED_HOSTS/CSRF/CORS keep the literal domain (no indirection).
+        # Public-facing URLs point at st_drive_public_host (resolved at
+        # deploy), like meet above. DJANGO_ALLOWED_HOSTS/CSRF/CORS keep the
+        # literal domain.
         host = "{{ st_drive_public_host }}"
         derived = {
             "DJANGO_ALLOWED_HOSTS": domain,
@@ -999,12 +843,8 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             "LOGIN_REDIRECT_URL_FAILURE": f"https://{domain}/",
             "LOGOUT_REDIRECT_URL": f"https://{domain}/",
         }
-    # An operator who changed DOMAIN this run wants every derived key rebuilt;
-    # otherwise a recovered hand-edit (e.g. a custom DJANGO_CORS_ALLOWED_ORIGINS)
-    # wins over the recomputed default. `recovered_domain` also guards the
-    # messages multi-host case (a comma in DJANGO_ALLOWED_HOSTS empties the
-    # DOMAIN pre-fill, see above) — an unrecoverable DOMAIN never forces a
-    # recompute, so the recovered multi-host DJANGO_ALLOWED_HOSTS survives.
+    # A changed DOMAIN rebuilds every derived key; otherwise a recovered
+    # hand-edit wins over the recomputed default.
     if recovered_domain and domain != recovered_domain:
         answers.update(derived)
     else:
@@ -1020,13 +860,9 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
 
     _ask_db(answers, backend, core_key, app)
 
-    # REDIS_URL can embed a password (redis://user:password@host) so it is
-    # routed through the secret backend like DATABASE_URL — and, like
-    # DATABASE_URL, must never be re-prompted once recovered (see _ask_db's
-    # comment: pre-filling a `default=` from the recovered `{{ vault_x }}` ref
-    # would store that ref string AS the secret value, corrupting vault.yml).
-    # CELERY_BROKER_URL mirrors the same broker, so it references the same
-    # secret (one vault entry / one OpenBao lookup) rather than prompting again.
+    # REDIS_URL can embed a password, so it routes through the secret backend
+    # like DATABASE_URL. CELERY_BROKER_URL references the same secret rather
+    # than prompting again.
     if "REDIS_URL" not in answers:
         redis_url = (
             _ask(
@@ -1039,7 +875,7 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
         backend.env_secret(answers, "REDIS_URL", component=core_key, value=redis_url)
     answers["CELERY_BROKER_URL"] = answers["REDIS_URL"]
 
-    # messages does NOT use the django-lasuite default S3 storage (AWS_S3_*) — it
+    # messages does NOT use the django-lasuite default S3 storage (AWS_S3_*). It
     # uses STORAGE_MESSAGE_* instead (see _ask_messages_storage), so skip the S3
     # questionnaire entirely for it.
     if app != "messages":
@@ -1047,7 +883,7 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
         endpoint = _ask(
             "AWS_S3_ENDPOINT_URL",
             _recall(answers, "AWS_S3_ENDPOINT_URL"),
-            placeholder="https://s3.fr-par.scw.cloud",
+            placeholder=_S3_ENDPOINT_PLACEHOLDER,
             validate=valid_s3_endpoint,
         )
         answers["AWS_S3_ACCESS_KEY_ID"] = _ask(
@@ -1057,11 +893,7 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
         bucket = _ask(
             "AWS_STORAGE_BUCKET_NAME", _recall(answers, "AWS_STORAGE_BUCKET_NAME")
         )
-        answers["AWS_S3_REGION_NAME"] = _ask(
-            "AWS_S3_REGION_NAME (optional)",
-            _recall(answers, "AWS_S3_REGION_NAME"),
-            required=False,
-        )
+        _ask_optional(answers, "AWS_S3_REGION_NAME", "AWS_S3_REGION_NAME (optional)")
         answers["AWS_S3_ENDPOINT_URL"] = endpoint
         answers["AWS_STORAGE_BUCKET_NAME"] = bucket
 
@@ -1074,16 +906,11 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             answers["CADDY_S3_BUCKET"] = bucket
 
         if app == "drive":
-            # WOPI (collabora) wiring — WOPI_SRC_BASE_URL points at the same
-            # st_drive_public_host var the role already sets (resolved at deploy).
             answers["WOPI_CLIENTS"] = "collabora"
             answers["WOPI_SRC_BASE_URL"] = "https://{{ st_drive_public_host }}"
-            # The collabora dependency's shared "domain" prompt rule has no
-            # `var` (see apps/drive.yml), so core.recover.recover_shared cannot
-            # recover it — the deps loop instead falls back to
-            # answers.get(rule["answer_key"]) (COLLABORA_DOMAIN). Reconstruct
-            # it here from the already-recovered WOPI_COLLABORA_DISCOVERY_URL
-            # (the inverse of the rule's consumer_format).
+            # The collabora shared rule has no `var`, so recover_shared cannot
+            # recover COLLABORA_DOMAIN. Reconstruct it from the already
+            # recovered WOPI_COLLABORA_DISCOVERY_URL instead.
             m = _COLLABORA_URL_RE.match(
                 _recall(answers, "WOPI_COLLABORA_DISCOVERY_URL")
             )
@@ -1093,7 +920,7 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             answers["MEDIA_BASE_URL"] = "https://{{ st_docs_public_host }}"
 
     if app == "docs":
-        # derived answers — never prompted, single source of truth via
+        # derived answers, never prompted; single source of truth via
         # st_docs_public_host (the {{ }} resolves at deploy from the core vars.yml).
         answers["OIDC_REDIRECT_ALLOWED_HOSTS"] = '["https://{{ st_docs_public_host }}"]'
         answers["COLLABORATION_WS_URL"] = (
@@ -1102,14 +929,14 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
         answers["COLLABORATION_API_URL"] = (
             "https://{{ st_docs_public_host }}/collaboration/api/"
         )
-        # the docspec conversion service ships in the core compose by default —
+        # the docspec conversion service ships in the core compose by default, so
         # enable the upload/import feature and point the backend at it over the
         # compose network (backend-only, like Y_PROVIDER_API_BASE_URL).
         answers["CONVERSION_UPLOAD_ENABLED"] = "true"
         answers["DOCSPEC_API_URL"] = "http://docspec:4000/conversion"
         # COLLABORATION_SERVER_SECRET / Y_PROVIDER_API_KEY are owned by the docs
-        # core and mirrored into yprovider's vault at deploy (see
-        # _ask_docs_yprovider) — the messages MDA_API_SECRET pattern.
+        # core and mirrored into yprovider's vault at deploy, the same pattern
+        # as messages' MDA_API_SECRET (see _ask_docs_yprovider).
         _ask_secret(
             answers,
             backend,
@@ -1123,13 +950,13 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
 
     if app == "messages":
         # MDA_API_SECRET is a messages-core secret (mta-in is only a consumer).
-        # Generate it here so it exists whenever messages is bootstrapped —
-        # independent of whether mta-in is deployed / skipped / external.
+        # Generate it here so it exists whenever messages is bootstrapped,
+        # independent of whether mta-in is deployed, skipped, or external.
         _ask_secret(
             answers, backend, "MDA_API_SECRET", core_key, gen=secrets.gen_secret
         )
         # SALT_KEY: django-fernet-encrypted-fields key (DKIM keys, channel secrets).
-        # Required in practice — an empty value makes encrypted-field writes raise.
+        # Required in practice: an empty value makes encrypted-field writes raise.
         _ask_secret(answers, backend, "SALT_KEY", core_key, gen=secrets.gen_secret)
         _ask_messages_storage(answers, backend, core_key)
         # OPENSEARCH_URL is mandatory: the in-app default points at a non-existent
@@ -1166,19 +993,17 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
 def _ask_messages_provider(
     provider_key, answers, backend, hosts, core_key, app, env, pvars
 ):
-    """messages mta-in / socks-proxy / mpa: collect provider-local env values + route
-    their secrets so apply_component_vars can render the st_messages_<comp>_env blob,
-    (socks-proxy) build the computed MTA_OUT_DIRECT_PROXIES consumer value, and
-    (mpa) build the computed SPAM_CONFIG consumer JSON — always constructed, never
-    prompted: the auth bearer is a {{ vault_mpa_auth_bearer }} ref (mirrored into the
-    messages vault) under ansible-vault, or the self-contained OpenBao lookup ref
-    taken from pvars under hashi_vault."""
+    """messages mta-in / socks-proxy / mpa: collect provider-local env values,
+    route their secrets, and build each provider's computed consumer value
+    (MTA_OUT_DIRECT_PROXIES, SPAM_CONFIG), never prompted.
+    """
     # setdefault: a core-recovered or this-run answer wins over the provider's own
-    # recovery — covers both a full run and a standalone `-c <provider>` run.
+    # recovery. This covers both a full run and a standalone `-c <provider>` run.
     for k, v in recover.recover(app, env, provider_key).items():
         answers.setdefault(k, v)
     if provider_key == "mta-in":
-        # DOMAIN feeds MDA_API_BASE_URL; present in full bootstrap, prompt if standalone.
+        # DOMAIN feeds MDA_API_BASE_URL; present in full bootstrap, prompt if
+        # standalone.
         if not answers.get("DOMAIN"):
             answers["DOMAIN"] = _ask(
                 "Public domain for messages (for MDA_API_BASE_URL)",
@@ -1189,13 +1014,9 @@ def _ask_messages_provider(
             _recall(answers, "MYHOSTNAME"),
             placeholder="mx.example.org",
         )
-        # MDA_API_SECRET is owned by the messages core (generated in _ask_core). Mirror
-        # the core-owned value into mta-in's own vault so its env blob ref resolves. In a
-        # full run the core buffer holds it; for a standalone `bootstrap -c mta-in` read it
-        # from the messages vault on disk. If neither is available (standalone run BEFORE
-        # the core is bootstrapped), prompt the operator for the core's existing value —
-        # skipping it would leave answers[MDA_API_SECRET] unset and apply_component_vars
-        # would emit a literal '{MDA_API_SECRET}' placeholder into the committed vars.yml.
+        # MDA_API_SECRET is owned by the messages core (generated in
+        # _ask_core). Mirror it into mta-in's own vault: the live core
+        # buffer, else the on-disk messages vault, else prompt the operator.
         if backend.prompts_values():
             v = backend.component_secrets(core_key).get("vault_mda_api_secret")
             if v is None:
@@ -1210,11 +1031,12 @@ def _ask_messages_provider(
                 answers, "MDA_API_SECRET", component=provider_key, value=v
             )
         elif not answers.get("MDA_API_SECRET"):
-            # hashi standalone: no core-set ref in answers → prompt a lookup term.
+            # hashi standalone: no core-set ref in answers, so prompt a lookup term.
             backend.env_secret(
                 answers, "MDA_API_SECRET", component=provider_key, value=None
             )
-        # hashi full run: answers[MDA_API_SECRET] already holds the lookup ref → reuse.
+        # hashi full run: answers[MDA_API_SECRET] already holds the lookup ref,
+        # so reuse it.
     elif provider_key == "socks-proxy":
         answers["PROXY_EXTERNAL"] = _ask(
             "PROXY_EXTERNAL (socks-proxy egress interface)",
@@ -1225,11 +1047,8 @@ def _ask_messages_provider(
         )
         answers["PROXY_INTERNAL_PORT"] = port
         if "PROXY_USERS" in answers:
-            # Never rotate a recovered credential. The {{ vault_proxy_users }} ref
-            # is also embedded in the core's MTA_OUT_DIRECT_PROXIES, and a mint on
-            # a standalone run never flushed the core mirror. Re-buffer the on-disk
-            # provider value so a full run writes it into the core vault;
-            # write_vault skips the write when the value is already there.
+            # Never rotate a recovered credential; re-buffer the on-disk
+            # provider value so a full run also mirrors it into the core vault.
             if backend.prompts_values():
                 pvp = paths.vault_path(app, env, provider_key)
                 if pvp.exists():
@@ -1248,16 +1067,15 @@ def _ask_messages_provider(
             backend.env_secret(
                 answers, "PROXY_USERS", component=provider_key, value=None
             )
-        # MTA_OUT_DIRECT_PROXIES is a messages-core value computed from the proxy
-        # hosts + port, embedding whatever PROXY_USERS ref the backend produced (a
-        # {{ vault_proxy_users }} ref under ansible-vault, a self-contained OpenBao
-        # lookup under hashi_vault). Never prompted.
+        # A messages-core value computed from the proxy hosts + port + the
+        # PROXY_USERS ref the backend produced. Never prompted.
         answers["MTA_OUT_DIRECT_PROXIES"] = ",".join(
             "socks5s://" + answers["PROXY_USERS"] + "@" + h + ":" + port for h in hosts
         )
     elif provider_key == "mpa":
-        # rspamd_url: a single mpa host → derive it from the host + caddy port; a
-        # load-balanced (multi-host) mpa → prompt the LB URL. Shared by both backends.
+        # rspamd_url: a single mpa host derives it from the host + caddy port; a
+        # load-balanced (multi-host) mpa prompts for the LB URL. Shared by both
+        # backends.
         if len(hosts) == 1:
             rspamd_url = "http://" + hosts[0] + ":{{ st_messages_mpa_caddy_port }}"
         else:
@@ -1265,18 +1083,12 @@ def _ask_messages_provider(
                 "rspamd URL for SPAM_CONFIG (mpa load balancer)",
                 placeholder="https://mpa.example.org",
             )
-        # SPAM_CONFIG is a messages-core env var (mpa is only its provider): always
-        # CONSTRUCTED, never prompted. Only the rspamd auth bearer is a secret, and it
-        # is already stored as st_messages_mpa_auth_bearer in the mpa pvars. The two
-        # backends differ only in how that bearer is referenced.
+        # SPAM_CONFIG is a messages-core env var (mpa is only its provider):
+        # always constructed, never prompted.
         if backend.prompts_values():  # ansible-vault: a {{ vault_* }} ref
-            # This run's buffer holds the bearer only on a FRESH mint (the
-            # shared-rule loop's "already decided" fast path re-injects a
-            # `consumer_env_key`/`answer_key` only — mpa's rule has neither).
-            # A REPLAY must fall back to mpa's own on-disk vault, or an
-            # OVERRIDE (`write_vault(replace=True)`, no merge with the old
-            # file) would drop `vault_mpa_auth_bearer` from the core vault
-            # entirely, leaving SPAM_CONFIG's ref dangling.
+            # A replay's buffer misses the bearer (mpa's shared rule has no
+            # consumer_env_key/answer_key), so fall back to mpa's own vault.
+            # Without it an override drops the bearer from the core vault.
             token = backend.component_secrets(provider_key).get("vault_mpa_auth_bearer")
             if token is None:
                 mvp = paths.vault_path(app, env, provider_key)
@@ -1284,7 +1096,8 @@ def _ask_messages_provider(
                     token = vault.decrypt_to_dict(mvp).get("vault_mpa_auth_bearer")
             if token is not None:
                 # mirror the bearer into the messages vault under the same vault_mpa_*
-                # name so the {{ vault_mpa_auth_bearer }} ref in SPAM_CONFIG resolves there.
+                # name so the {{ vault_mpa_auth_bearer }} ref in SPAM_CONFIG resolves
+                # there.
                 backend.var_secret(
                     CommentedMap(), "vault_mpa_auth_bearer", token, component=core_key
                 )
@@ -1313,28 +1126,14 @@ def _ask_messages_provider(
 def _ask_messages_storage(answers: dict, backend: SecretBackend, core_key: str) -> None:
     """messages-only S3: the imports bucket (always) + optional blobs offload bucket.
 
-    messages does not use the django-lasuite generic AWS_S3_* default storage at all
-    (those are not prompted for it) — STORAGE_MESSAGE_* is its only object storage.
-    Secret keys route through the backend; the blobs encrypt key is generated
-    (ansible-vault) or looked up (hashi) and embedded into the
-    MESSAGES_BLOBS_ENCRYPT_KEYS JSON.
-
-    The blobs-offload confirm's default is derived from the recovered
-    ``MESSAGES_BLOBS_OFFLOAD_ENABLED`` flag — hardcoding ``default=False`` would
-    silently drop a configured offload bucket on an Enter-through rebootstrap.
-    When it is already enabled, the prompt text says so ("review its
-    settings?") instead of asking as if offload were still off.
-    ``MESSAGES_BLOBS_ENCRYPT_KEYS`` is recovered verbatim from the committed env
-    blob (it can carry more than one encryption slot, e.g. after an operator
-    rotated the key by hand) — mint the secret and compose the JSON only when
-    it is not already in ``answers``, so a rebootstrap never overwrites a
-    hand-added rotation slot with a freshly minted single-slot JSON.
+    messages does not use the generic AWS_S3_* storage; STORAGE_MESSAGE_* is
+    its only object storage. The blobs-offload confirm defaults to the
+    recovered ``MESSAGES_BLOBS_OFFLOAD_ENABLED`` flag.
     """
-    # --- imports bucket (always) ---
     answers["STORAGE_MESSAGE_IMPORTS_ENDPOINT_URL"] = _ask(
         "STORAGE_MESSAGE_IMPORTS_ENDPOINT_URL",
         _recall(answers, "STORAGE_MESSAGE_IMPORTS_ENDPOINT_URL"),
-        placeholder="https://s3.fr-par.scw.cloud",
+        placeholder=_S3_ENDPOINT_PLACEHOLDER,
     )
     answers["STORAGE_MESSAGE_IMPORTS_BUCKET_NAME"] = _ask(
         "STORAGE_MESSAGE_IMPORTS_BUCKET_NAME",
@@ -1356,7 +1155,6 @@ def _ask_messages_storage(answers: dict, backend: SecretBackend, core_key: str) 
         _recall(answers, "STORAGE_MESSAGE_IMPORTS_EXPIRE_POLICY", "3600"),
     )
 
-    # --- blobs offload bucket (optional) ---
     blobs_enabled = _recall_bool(answers, "MESSAGES_BLOBS_OFFLOAD_ENABLED", False)
     blobs_prompt = (
         "Blobs offloading is enabled — review its settings?"
@@ -1369,7 +1167,7 @@ def _ask_messages_storage(answers: dict, backend: SecretBackend, core_key: str) 
     answers["STORAGE_MESSAGE_BLOBS_ENDPOINT_URL"] = _ask(
         "STORAGE_MESSAGE_BLOBS_ENDPOINT_URL",
         _recall(answers, "STORAGE_MESSAGE_BLOBS_ENDPOINT_URL"),
-        placeholder="https://s3.fr-par.scw.cloud",
+        placeholder=_S3_ENDPOINT_PLACEHOLDER,
     )
     answers["STORAGE_MESSAGE_BLOBS_BUCKET_NAME"] = _ask(
         "STORAGE_MESSAGE_BLOBS_BUCKET_NAME",
@@ -1387,7 +1185,7 @@ def _ask_messages_storage(answers: dict, backend: SecretBackend, core_key: str) 
         "STORAGE_MESSAGE_BLOBS_REGION_NAME (optional)",
     )
     # MESSAGES_BLOBS_ENCRYPT_KEYS is recovered verbatim from the blob (it may
-    # carry operator-added rotation slots) — mint the secret and compose the
+    # carry operator-added rotation slots). Mint the secret and compose the
     # JSON only on first setup.
     if "MESSAGES_BLOBS_ENCRYPT_KEYS" not in answers:
         _ask_secret(
@@ -1408,22 +1206,8 @@ def _ask_messages_outbound(
     answers: dict, backend: SecretBackend, core_key: str
 ) -> None:
     """messages outbound mode: DIRECT (send from messages host / socks-proxy) or
-    RELAY (external SMTP smarthost). Direct leaves MTA_OUT_MODE unset (the app
-    default) and lets the socks-proxy dependency prompt handle egress; relay
-    collects the smarthost host + optional credentials (password routed through
-    the secret backend) and suppresses the socks-proxy prompt (see the deps loop).
-
-    ``MTA_OUT_MODE`` is only ever recovered as ``"relay"`` (direct mode never
-    sets it — see the ``return`` below): so the default is "direct" unless
-    relay was recovered. "direct" is given explicitly (not left as "no
-    default") so a silent replay can auto-accept it too; interactively it was
-    already the first, pre-highlighted choice, so this changes nothing.
-
-    Switching FROM relay TO direct here does not by itself clean up the
-    committed tree: ``envblob.merge`` never deletes a line, so the relay
-    settings stay in the ``st_messages_env`` blob until an operator removes
-    them by hand. Warn about that instead of leaving a half-switched config
-    that silently still says relay.
+    RELAY (external SMTP smarthost). Direct leaves MTA_OUT_MODE unset and lets
+    the socks-proxy dependency prompt handle egress.
     """
     choices = [
         "direct: send from the messages host / socks-proxy",
@@ -1448,7 +1232,7 @@ def _ask_messages_outbound(
     answers["MTA_OUT_RELAY_HOST"] = _ask(
         "MTA_OUT_RELAY_HOST",
         _recall(answers, "MTA_OUT_RELAY_HOST"),
-        placeholder="smtp.example.org:587",
+        placeholder=f"{_SMTP_PLACEHOLDER}:587",
     )
     had_relay_user = "MTA_OUT_RELAY_USERNAME" in answers
     _ask_optional(
@@ -1460,19 +1244,11 @@ def _ask_messages_outbound(
         _ask_secret(answers, backend, "MTA_OUT_RELAY_PASSWORD", core_key)
     elif had_relay_user and answers.pop("MTA_OUT_RELAY_PASSWORD", None):
         # A cleared username must not leave a half-active auth config behind.
-        vault_hint = (
-            " and the vault_mta_out_relay_password entry from vault.yml"
-            if backend.prompts_values()
-            else ""
-        )
-        ui.warn(
-            "MTA_OUT_RELAY_PASSWORD cleared with the username: remove the "
-            f"MTA_OUT_RELAY_PASSWORD= line from vars.yml{vault_hint} by hand."
-        )
+        _warn_cleared_password(backend, "MTA_OUT_RELAY_PASSWORD")
 
 
 # yprovider's published port is a role contract constant (st_docs_yprovider_port
-# default), not an operator choice — no precedent in this file for prompting a
+# default), not an operator choice. No precedent in this file for prompting a
 # fixed port, so it is hardcoded.
 _DOCS_YPROVIDER_PORT = "50601"
 
@@ -1482,13 +1258,10 @@ def _docs_yprovider_endpoints(
 ) -> str:
     """The CADDY_YPROVIDER_ENDPOINTS value for the core caddy_env blob.
 
-    A single host shared by the core and yprovider → ``host.containers.internal``
-    (the podman host alias): the caddy container cannot always hairpin the
-    host's public IP. Any other topology keeps the real ``host:port`` list —
-    every caddy must share one identical list so the room hash stays
-    consistent across core hosts. Core hosts come from the run's stash
-    (``_core_hosts``, a full bootstrap) or the core hosts file on disk
-    (standalone/reuse); an empty list (no core yet) keeps the real hosts."""
+    A single host shared by the core and yprovider uses
+    ``host.containers.internal`` (the podman host alias); any other topology
+    keeps the real ``host:port`` list.
+    """
     if not yp_hosts:
         raise StCliError(
             "yprovider hosts list is empty — check the yprovider hosts file."
@@ -1499,18 +1272,17 @@ def _docs_yprovider_endpoints(
     return " ".join(f"{h}:{_DOCS_YPROVIDER_PORT}" for h in yp_hosts)
 
 
-def _ensure_docs_domain(answers: dict, recovered_domain: str = "") -> None:
-    """docs/yprovider: COLLABORATION_SERVER_ORIGIN needs DOMAIN. A full bootstrap
-    already collected it; a standalone `bootstrap -c yprovider` run has an empty
-    answers, so prompt it — pre-filled with ``recovered_domain`` (the docs
-    core's committed ``st_docs_public_host``) on a rebootstrap, mirroring
-    :func:`_ensure_meet_domain`."""
+def _ensure_domain(
+    answers: dict, prompt: str, placeholder: str, recovered_domain: str = ""
+) -> None:
+    """Prompt DOMAIN when a standalone provider run has none yet.
+
+    A full bootstrap already collects DOMAIN on the core; a standalone
+    ``bootstrap -c <provider>`` run has an empty ``answers``, so this fills
+    the gap, pre-filled with ``recovered_domain`` on a rebootstrap.
+    """
     if not answers.get("DOMAIN"):
-        answers["DOMAIN"] = _ask(
-            "Public domain for docs (for the collaboration server origin)",
-            recovered_domain,
-            placeholder="docs.example.org",
-        )
+        answers["DOMAIN"] = _ask(prompt, recovered_domain, placeholder=placeholder)
 
 
 def _mirror_docs_secret(
@@ -1522,11 +1294,11 @@ def _mirror_docs_secret(
     env: str,
     env_key: str,
 ) -> None:
-    """Mirror one docs-core-owned secret (COLLABORATION_SERVER_SECRET or
-    Y_PROVIDER_API_KEY, generated in ``_ask_core``) into ``target_component``'s
-    own vault, exactly like messages mirrors MDA_API_SECRET into mta-in: a full
-    run reads the live core buffer, a standalone/kept-core run reads the core
-    vault on disk, and if neither exists yet the operator is prompted."""
+    """Mirror one docs-core-owned secret into ``target_component``'s own vault.
+
+    A full run reads the live core buffer, a standalone/kept-core run reads
+    the core vault on disk, else the operator is prompted.
+    """
     vault_key = "vault_" + env_key.lower()
     if backend.prompts_values():
         v = backend.component_secrets(core_key).get(vault_key)
@@ -1538,9 +1310,9 @@ def _mirror_docs_secret(
             v = _password(f"{env_key} (shared with the docs core — must match it)")
         backend.env_secret(answers, env_key, component=target_component, value=v)
     elif not answers.get(env_key):
-        # hashi standalone: no core-set ref in answers → prompt a lookup term.
+        # hashi standalone: no core-set ref in answers, so prompt a lookup term.
         backend.env_secret(answers, env_key, component=target_component, value=None)
-    # hashi full run: answers[env_key] already holds the lookup ref → reuse.
+    # hashi full run: answers[env_key] already holds the lookup ref, so reuse it.
 
 
 def _ask_docs_yprovider(
@@ -1552,15 +1324,17 @@ def _ask_docs_yprovider(
     env: str,
 ) -> None:
     """docs/yprovider: ensure DOMAIN, mirror the two core-owned collaboration
-    secrets into yprovider's own vault, and derive ``CADDY_YPROVIDER_ENDPOINTS``
-    (a space-separated host:port list for the core caddy_env blob; caddy expands
-    it into upstreams at parse time, and the co-located single-host case uses
-    the podman host alias). ``Y_PROVIDER_API_BASE_URL`` is backend-only
-    (server-to-server conversion calls, never the browser) and points at the
-    first endpoint — the co-located podman host alias included."""
+    secrets into yprovider's own vault, and derive ``CADDY_YPROVIDER_ENDPOINTS``.
+    ``Y_PROVIDER_API_BASE_URL`` is backend-only and points at the first endpoint.
+    """
     core_domain = recover.recover(app, env, core_key).get("DOMAIN", "")
-    _ensure_docs_domain(answers, Recovered(core_domain) if core_domain else "")
-    for env_key in ("COLLABORATION_SERVER_SECRET", "Y_PROVIDER_API_KEY"):
+    _ensure_domain(
+        answers,
+        "Public domain for docs (for the collaboration server origin)",
+        "docs.example.org",
+        Recovered(core_domain) if core_domain else "",
+    )
+    for env_key in _DOCS_CORE_SECRETS:
         _mirror_docs_secret(answers, backend, core_key, "yprovider", app, env, env_key)
     endpoints = _docs_yprovider_endpoints(answers, app, env, core_key, hosts)
     answers["CADDY_YPROVIDER_ENDPOINTS"] = endpoints
@@ -1568,46 +1342,30 @@ def _ask_docs_yprovider(
 
 
 def _ensure_meet_domain(answers: dict, recovered_domain: str = "") -> None:
-    """meet/livekit: the livekit unit's st_meet_public_host component var is
-    built from DOMAIN in apply_component_vars. DOMAIN is already collected in a
-    full bootstrap; for a standalone `bootstrap -c livekit` run answers is empty,
-    so prompt it — pre-filled with ``recovered_domain`` (the livekit unit's OWN
-    committed DOMAIN, via ``recover.recover(app, env, "livekit")``'s
-    component-var inversion of its ``st_meet_public_host: "{DOMAIN}"``) on a
-    standalone rebootstrap, so re-running `-c livekit` doesn't force the
-    operator to retype the domain every single time."""
-    if not answers.get("DOMAIN"):
-        answers["DOMAIN"] = _ask(
-            "Public domain for meet (for the LiveKit recording webhook)",
-            recovered_domain,
-            placeholder="meet.example.org",
-        )
+    """meet/livekit: prompt DOMAIN for a standalone `bootstrap -c livekit` run.
+
+    ``recovered_domain`` is the livekit unit's OWN committed DOMAIN
+    (``recover.recover(app, env, "livekit")``'s component-var inversion),
+    not the core's.
+    """
+    _ensure_domain(
+        answers,
+        "Public domain for meet (for the LiveKit recording webhook)",
+        "meet.example.org",
+        recovered_domain,
+    )
 
 
 def _set_meet_recording(answers: dict) -> None:
-    """meet-only: always enable LiveKit egress recording (uploads to the backend's
-    existing AWS_S3_* bucket; completion is signalled via the LiveKit webhook) —
-    never prompted.
+    """meet-only: always enable LiveKit egress recording, never prompted.
 
-    This used to be a confirm (default No). It isn't one anymore because the
-    egress recorder is bundled into the livekit bootstrap step UNCONDITIONALLY
-    (see ``_bundle_egress`` / ``_standalone_egress`` / ``_reuse_egress`` below,
-    none of which check a recording flag): the recorder's infrastructure is
-    deployed either way. A confirm here would only let the operator switch OFF
-    an *app-level* feature (whether the meet backend advertises/serves
-    recordings) while the process that produces them keeps running regardless —
-    that's not a meaningful choice, just a footgun (a deployed-but-unused
-    recorder, or worse, a silently confusing half-wired stack). So recording is
-    unconditionally on.
-
-    RECORDING_OUTPUT_FOLDER is fixed at "recordings" — the value the old prompt
-    defaulted to. It's an S3 key prefix, not something most operators need to
-    change; one who does can edit RECORDING_OUTPUT_FOLDER directly in the core
-    <app>/<env>/<core>/vars.yml after bootstrap.
+    Not a confirm: the egress recorder is bundled into the livekit bootstrap
+    step unconditionally, so declining here would only disable the backend's
+    display of recordings while the recorder kept running, not a real choice.
     """
     answers["RECORDING_ENABLE"] = "True"
     answers["RECORDING_OUTPUT_FOLDER"] = "recordings"
-    # SINGULAR /recording — matches the meet frontend SPA route (upstream default
+    # SINGULAR /recording matches the meet frontend SPA route (upstream default
     # is RECORDING_DOWNLOAD_BASE_URL=http://localhost:3000/recording). Do not
     # pluralize: that would 404 the emailed recording-ready link. Unrelated to
     # RECORDING_OUTPUT_FOLDER above, which is legitimately plural (an S3 folder
@@ -1617,15 +1375,14 @@ def _set_meet_recording(answers: dict) -> None:
     )
 
 
-# --------------------------------------------------------------------------- #
-# egress component (bundled into the livekit bootstrap step, or standalone -c egress)
-# --------------------------------------------------------------------------- #
 def _redis_topology(
     livekit_hosts: list[str], egress_hosts: list[str]
 ) -> tuple[bool, str | None]:
-    """(valkey_enabled, redis_address|None). Single co-located node → local valkey
-    (``127.0.0.1:6379``); otherwise the operator must supply a shared redis url —
-    the caller prompts it (NO format validation: any non-empty string is accepted)."""
+    """(valkey_enabled, redis_address|None). A single co-located node uses local
+    valkey (``127.0.0.1:6379``); otherwise the operator must supply a shared
+    redis url. The caller prompts it (no format validation: any non-empty
+    string is accepted).
+    """
     single = sorted(livekit_hosts) == sorted(egress_hosts) and len(livekit_hosts) == 1
     return (True, "127.0.0.1:6379") if single else (False, None)
 
@@ -1636,18 +1393,12 @@ def _ask_egress_hosts(
     livekit_hosts: list[str],
     prior_livekit_hosts: list[str] | None = None,
 ) -> tuple[list[str], bool]:
-    """meet/livekit: ask the egress hosts (blank ⇒ co-locate on the livekit hosts)
-    right after the livekit hosts prompt (Q2 — BEFORE the LiveKit domain/TURN
-    prompts) and decide the livekit↔egress redis topology up front so the redis
-    prompt (if any) can be asked later, after the livekit cadvisor confirm.
-    Returns (egress_hosts, valkey_enabled).
+    """Ask the egress hosts (blank co-locates on livekit's) and decide the
+    redis topology up front. Returns (egress_hosts, valkey_enabled).
 
-    The pre-fill is egress's own recovered hosts. When those equal
-    ``prior_livekit_hosts``, the unit was co-located and the default stays
-    blank: Enter then follows livekit to its CURRENT hosts through the ``or
-    list(livekit_hosts)`` fallback, instead of pinning egress to a host
-    livekit just moved away from. A genuinely standalone egress keeps its
-    recovered pre-fill."""
+    A recovered co-located egress keeps a blank default, so Enter follows
+    livekit to its CURRENT hosts instead of pinning egress to an old one.
+    """
     recovered = recover.recover_hosts(meta.app, env, "egress")
     was_colocated = prior_livekit_hosts is not None and sorted(recovered) == sorted(
         prior_livekit_hosts
@@ -1670,14 +1421,11 @@ def _mirror_livekit_creds_to_egress(
     names=("st_meet_livekit_api_key", "st_meet_livekit_api_secret"),
 ) -> None:
     """Mirror livekit's already-decided secrets in ``names`` into egress's own
-    vault, raw under the same ``st_meet_livekit_*`` var names egress reuses.
+    vault, under the same ``st_meet_livekit_*`` var names egress reuses.
 
-    ansible-vault: read the live buffer first, then livekit's on-disk vault
-    (a standalone ``-c egress`` run has no buffer). hashi: reuse livekit's
-    decided lookup refs from ``lk_vars`` directly in ``ev`` — never prompt a
-    fresh term. Both branches fail fast (``StCliError``) on a missing
-    secret/ref; a silent skip would surface much later at deploy time as an
-    undefined variable."""
+    Fails fast (``StCliError``) on a missing secret/ref instead of silently
+    surfacing it much later at deploy time as an undefined variable.
+    """
     if (
         backend.prompts_values()
     ):  # ansible-vault: copy raw values into egress vault buffer
@@ -1687,8 +1435,7 @@ def _mirror_livekit_creds_to_egress(
             val = src.get(name)
             if val is None:
                 if disk is None:
-                    lvp = paths.vault_path(meta.app, env, "livekit")
-                    disk = vault.decrypt_to_dict(lvp) if lvp.exists() else {}
+                    disk = _livekit_vault_snapshot(meta, env)
                 val = disk.get(name)
             if val is None:
                 raise StCliError(
@@ -1696,7 +1443,8 @@ def _mirror_livekit_creds_to_egress(
                     "re-bootstrap livekit."
                 )
             backend.var_secret(CommentedMap(), name, val, component="egress")
-    else:  # hashi: reuse livekit's lookup refs directly in egress vars.yml (NO re-prompt)
+    else:
+        # hashi: reuse livekit's lookup refs directly in egress vars.yml (NO re-prompt).
         for name in names:
             ref = lk_vars.get(name)
             if ref is None:
@@ -1708,8 +1456,10 @@ def _mirror_livekit_creds_to_egress(
 
 
 def _livekit_vault_snapshot(meta, env) -> dict:
-    """The on-disk livekit vault, decrypted, or ``{}`` when none exists yet — lets
-    a caller check for an already-decided secret with no live buffer to read."""
+    """The on-disk livekit vault, decrypted, or ``{}`` when none exists yet.
+
+    Lets a caller check for an already-decided secret with no live buffer to read.
+    """
     lvp = paths.vault_path(meta.app, env, "livekit")
     return vault.decrypt_to_dict(lvp) if lvp.exists() else {}
 
@@ -1718,9 +1468,8 @@ def _resolve_egress_redis_password(meta, env, backend, reuse_disk: bool) -> str:
     """Never re-prompt a decided secret: the live buffer wins first, then the
     on-disk livekit vault, and only then a fresh prompt.
 
-    ``reuse_disk`` is False when the operator typed a new redis address — the
-    old server's password must not silently follow it. An empty stored value
-    (an old blank-auth store) counts as absent, so the prompt stays reachable.
+    ``reuse_disk`` is False on a new redis address, so an old password never
+    silently follows it.
     """
     decided = backend.component_secrets("livekit").get("st_meet_livekit_redis_password")
     if decided:
@@ -1738,18 +1487,12 @@ def _resolve_egress_redis_password(meta, env, backend, reuse_disk: bool) -> str:
 def _bundle_egress(
     meta, lk_pvars, answers, backend, env, egress_hosts, valkey_enabled
 ) -> None:
-    """Called from the livekit deploy tail, AFTER ``apply_component_vars``/the
-    livekit cadvisor confirm but BEFORE livekit's tail writes its vars.yml (so the
-    redis vars set here on ``lk_pvars`` are persisted with the livekit unit).
-    Egress hosts + the livekit↔egress redis topology were already decided
-    (``_ask_egress_hosts``, right after the livekit hosts prompt) — this only
-    prompts the redis address/username/password when NOT co-located, sets the
-    livekit unit's valkey/redis vars, mirrors livekit's generated api creds (+ the
-    redis password when external) into egress's own vault, and writes the
-    egress's own unit (vars.yml/vault.yml/hosts) — egress is bundled into the
-    livekit bootstrap step so the core env stays the only meet component that
-    references livekit. Records ``answers["_egress_bundled"]`` so the deps loop
-    registers the egress unit."""
+    """Called from the livekit deploy tail, before livekit writes its vars.yml.
+
+    Prompts the redis address/username/password when NOT co-located, mirrors
+    livekit's creds into egress's own vault, and writes the egress unit.
+    It records ``answers["_egress_bundled"]`` so the deps loop registers the unit.
+    """
     if valkey_enabled:
         addr, username, pw = "127.0.0.1:6379", "", None
         if lk_pvars.get("st_meet_livekit_valkey_enabled") is False:
@@ -1768,7 +1511,7 @@ def _bundle_egress(
                 )
     else:
         # pre-fill from lk_pvars (the on-disk load at the top of this dep run)
-        # ONLY when the recovered topology was already external — a fresh or
+        # ONLY when the recovered topology was already external. A fresh or
         # previously co-located unit has nothing worth pre-filling.
         prev_external = lk_pvars.get("st_meet_livekit_valkey_enabled") is False
         addr_default = (
@@ -1804,12 +1547,12 @@ def _bundle_egress(
         if username:
             lk_pvars["st_meet_livekit_redis_username"] = username
         else:
-            # "leave blank if none" is an explicit no-auth answer — drop the
+            # "leave blank if none" is an explicit no-auth answer. Drop the
             # tool-owned key instead of keeping a stale username line.
             lk_pvars.pop("st_meet_livekit_redis_username", None)
         if backend.prompts_values():
             # a blank password stores + mirrors nothing (an unauthenticated
-            # external redis); a decided one re-stores unchanged — write_vault's
+            # external redis); a decided one re-stores unchanged, and write_vault's
             # no-change check makes that a byte no-op.
             if pw:
                 backend.var_secret(
@@ -1853,7 +1596,7 @@ def _bundle_egress(
         "egress", _cadvisor_default(meta.app, env, "egress")
     )
     if not ev.ca.comment:
-        # Only stamp the header when the file has no start comment already — a
+        # Only stamp the header when the file has no start comment already: a
         # rebootstrap over an existing header must not stack a duplicate one
         # (mirrors write_core's same guard).
         ev.yaml_set_start_comment(
@@ -1864,17 +1607,15 @@ def _bundle_egress(
     tree.write_hosts(
         meta.app, env, "egress", meta.component("egress").app_name, egress_hosts
     )
-    answers["_egress_bundled"] = "managed"
+    answers["_egress_bundled"] = MODE_MANAGED
 
 
-def _standalone_egress(meta, ev_pvars, answers, backend, env) -> None:
+def _standalone_egress(meta, ev_pvars, backend, env) -> None:
     """Adopt livekit's decided domain + redis topology for a standalone
     ``bootstrap -c egress`` run; the generic dep tail then writes the unit.
 
-    This never re-prompts the topology — egress must share the redis the
-    livekit unit was bootstrapped with. The redis password is mirrored only
-    when the livekit unit uses an external redis AND a password was decided;
-    an unauthenticated external redis stays adoptable with no password.
+    Never re-prompts the topology: egress must share livekit's redis. The redis
+    password is mirrored only when livekit's redis is external and has one.
     """
     lvp = paths.vars_path(meta.app, env, "livekit")
     if not lvp.exists():
@@ -1907,15 +1648,16 @@ def _standalone_egress(meta, ev_pvars, answers, backend, env) -> None:
 
 
 def _reuse_egress(meta, answers, backend, env) -> None:
-    """livekit REUSE: keep egress in the deployment. If the egress tree already
-    exists (bundled when livekit was first deployed), just re-register it. If it is
-    missing (livekit predates egress bundling), create it from livekit's on-disk
-    redis topology + ws domain, co-located on the livekit hosts."""
+    """livekit REUSE: keep egress in the deployment.
+
+    Re-registers an existing egress tree, or creates one co-located on the
+    livekit hosts when livekit predates egress bundling.
+    """
     if paths.vars_path(meta.app, env, "egress").exists():
-        answers["_egress_bundled"] = "managed"  # keep as-is, re-register
+        answers["_egress_bundled"] = MODE_MANAGED  # keep as-is, re-register
         return
     ev = CommentedMap()
-    _standalone_egress(meta, ev, answers, backend, env)
+    _standalone_egress(meta, ev, backend, env)
     writer.apply_component_vars(ev, meta, meta.component("egress"), answers)
     writer.expand_var_markers(ev, backend)
     ev[writer.cadvisor_var(meta.app)] = _ask_cadvisor("egress")
@@ -1928,21 +1670,14 @@ def _reuse_egress(meta, answers, backend, env) -> None:
     tree.write_hosts(
         meta.app, env, "egress", meta.component("egress").app_name, egress_hosts
     )
-    answers["_egress_bundled"] = "managed"
+    answers["_egress_bundled"] = MODE_MANAGED
 
 
-# --------------------------------------------------------------------------- #
-# dependency handling
-# --------------------------------------------------------------------------- #
 def _prompt_shared(rule: dict, default: str = "") -> str:
     """Prompt for a shared value described by ``rule``.
 
-    ``default`` pre-fills a NON-secret prompt (a secret field has no editable
-    default — see :func:`_ask_secret`'s docstring for why). Callers pass
-    ``answers.get(rule["answer_key"], "")`` when the rule has an ``answer_key``
-    — the only recovery path available for a rule with no ``var`` (e.g.
-    drive's collabora domain), since :func:`core.recover.recover_shared` can
-    only recover rules that declare one.
+    ``default`` pre-fills a NON-secret prompt only; a secret field has no
+    editable default.
     """
     if writer.rule_is_secret(rule):
         return _password(writer.rule_label(rule))
@@ -1950,8 +1685,10 @@ def _prompt_shared(rule: dict, default: str = "") -> str:
 
 
 def _shared_default(answers: dict, rule: dict) -> str:
-    """The best pre-fill available for a shared-rule prompt with no ``var``
-    (see :func:`_prompt_shared`)."""
+    """Return the best pre-fill for a shared-rule prompt with no ``var``.
+
+    `_prompt_shared` wraps a recovered value in `Recovered` for the silent replay.
+    """
     key = rule.get("answer_key")
     if not key:
         return ""
@@ -1974,72 +1711,21 @@ def _handle_dependency(
 ) -> str:
     """Run the dependency prompt for one dependency; wire shared vars. Returns mode.
 
-    A FRESH provider (no committed ``vars.yml``) keeps today's menu: "Yes —
-    bootstrap now" (omitted under ``wire_only``), "No — bootstrap later"
-    (returns "skip" — registers no unit), and "Already deployed (enter URL +
-    keys)" (external). A skipped dependency registers no unit and an external
-    one is intercepted below, so no recorded mode can reach this fresh menu.
+    A FRESH provider offers deploy / skip / external (deploy omitted under
+    ``wire_only``; a long-ago-declined optional dep with no ``offer`` skips
+    quietly in a silent replay instead). A unit recorded ``external`` wins
+    over the tree state and, outside ``wire_only``, offers keep / re-enter /
+    deploy-now.
 
-    In a :func:`~st_cli.core.prompts.silent_replay`, a fresh dependency with no
-    matching ``offer`` (see ``core/upgrades.new_component_offers``) is a
-    long-ago-declined optional dep — it skips quietly, with no select at all
-    (``fresh_silent`` below). A fresh dependency WITH an offer prints it, then
-    runs the normal fresh menu inside :func:`~st_cli.core.prompts.suspend_silent`
-    (a fresh provider has nothing recovered, so its questionnaire must really
-    ask, and the answers it produces are a new component, not a "new setting"
-    of the replayed unit — they must not count in the silent-replay stats).
+    An EXISTING, non-external provider never offers skip/external again. It
+    forces a replay (no select) when ``override_core`` or ``flagged`` (unless
+    ``wire_only``, which can never deploy a provider and only warns);
+    otherwise it offers reuse/modify, defaulting to reuse, or takes reuse
+    directly under ``wire_only``. An override rebuilds the core from an empty
+    tree, so a reuse would drop the constructed consumer values.
 
-    A unit recorded ``external`` in ``.st-cli.yml`` (``recorded_external``)
-    wins over whatever the tree looks like — checked BEFORE ``has_existing``,
-    so a leftover local tree from before the unit was marked external can
-    never smuggle it into the reuse/modify or fresh-provider branches below.
-    Under ``wire_only`` it takes ``"external"`` with no select at all
-    (core-only runs never deploy a provider). Otherwise it offers a 3-option
-    select: "Keep external (recorded)" (default; skips every already-answered
-    prompt, see the external branch below), "Re-enter external values (URL +
-    keys)" (re-asks all of them), or "Bootstrap now (manage locally)"
-    (deploys — same as ``choice = "deploy"``).
-
-    An EXISTING, non-external provider (``vars.yml`` already committed) never
-    offers "skip"/"external" any more — those would abandon or disown a unit
-    that is already live. It offers at most a plain reuse/modify choice, and
-    sometimes no choice at all:
-
-    * ``override_core`` (the CORE run is an ``OVERRIDE``) forces a replay —
-      no select, straight to the deploy branch, regardless of ``wire_only`` —
-      before either check below. An Override rebuilds the core from an empty
-      tree, so a "Reuse" here would silently drop the wiring a fresh core
-      buffer needs (the consumer-side secrets/refs a plain reuse only
-      re-injects for a ``shared`` rule with a ``consumer_env_key``, missing
-      e.g. messages' ``SPAM_CONFIG``/``MTA_OUT_DIRECT_PROXIES``, which
-      ``_ask_messages_provider`` only constructs on this deploy branch). The
-      provider's OWN committed tree is untouched by a core override, so its
-      recovered secrets are re-injected here, never rotated.
-    * ``flagged`` (this component has an outstanding rebootstrap need, see
-      ``core/upgrades.needed``) forces a replay — no select, straight to
-      the deploy branch — UNLESS ``wire_only``, which can never deploy a
-      provider; there it only warns that the flag stays pending. This closes
-      the bug the whole rework exists for: the old "Reuse" choice replayed no
-      provider questionnaire yet still restamped the unit, silently clearing
-      the flag.
-    * Otherwise (unflagged, or ``wire_only``): "Reuse existing in the repo" /
-      "Modify (replay the questionnaire)", defaulting to Reuse. Under
-      ``wire_only`` even that pair is moot — "Modify" would deploy a provider
-      in a core-only run — so the select is skipped and "reuse" is taken
-      directly.
-
-    With ``assume_deploy=True`` (direct provider-target bootstrap, e.g.
-    ``bootstrap -c livekit``) every select above is skipped and
-    ``choice = "deploy"`` is assumed — the user explicitly asked to bootstrap
-    that provider. This is the one path where the deploy branch's own
-    rebootstrap machinery actually matters (there is no "Reuse" fallback to
-    fall back on): hosts, cadvisor, and every ``shared`` rule with a ``var``
-    are pre-filled/recovered via :func:`core.recover.recover_hosts`/
-    :func:`_cadvisor_default`/:func:`core.recover.recover_shared`.
-
-    Restamping a reused unit (the deps loop, unchanged) is harmless now:
-    "reuse" is only reachable when the unit is unflagged, so there is no
-    pending need left to clear.
+    ``assume_deploy=True`` skips every select above and assumes deploy, since the
+    operator explicitly targeted this provider (e.g. ``bootstrap -c livekit``).
     """
     provider = meta.component(dep.on)
     core = meta.core()
@@ -2058,13 +1744,11 @@ def _handle_dependency(
         ),
         None,
     )
-    # upgrades.needed skips units with mode == "external", so `flagged`
-    # never contains one. No flag/external interaction exists to handle here.
-    recorded_external = unit is not None and unit.mode == "external"
-    # A fresh dependency reached during a silent replay: nothing recovered for
-    # it, so it needs its own menu handling below rather than falling into the
-    # ordinary fresh-provider select (which would ask a question the operator
-    # never opted into during an unattended upgrade).
+    recorded_external = unit is not None and unit.mode == MODE_EXTERNAL
+    # upgrades.needed skips an external unit, so flagged never holds one.
+    # A fresh dependency reached during a silent replay has nothing recovered,
+    # so it needs its own menu handling instead of the ordinary fresh-provider
+    # select (which would ask a question the operator never opted into).
     fresh_silent = (
         not assume_deploy
         and not recorded_external
@@ -2081,10 +1765,10 @@ def _handle_dependency(
         choice = "deploy"
     elif recorded_external:
         if wire_only:
-            choice = "external"
+            choice = MODE_EXTERNAL
         else:
             external_menu = {
-                "Keep external (recorded)": "external",
+                "Keep external (recorded)": MODE_EXTERNAL,
                 "Re-enter external values (URL + keys)": "external-redo",
                 "Bootstrap now (manage locally)": "deploy",
             }
@@ -2129,10 +1813,8 @@ def _handle_dependency(
             )
         ]
     elif fresh_silent and offer is None:
-        # A long-ago-declined optional dep (or one never offered at all) stays
-        # quiet on every silent replay — nagging about it forever is exactly
-        # what the offer mechanism (core/upgrades.new_component_offers) exists
-        # to avoid.
+        # A long-ago-declined optional dep stays quiet on every silent replay;
+        # the offer mechanism exists to avoid nagging about it forever.
         ui.info(
             f"{dep.on}: not bootstrapped — skipped (add it with "
             f"`st-cli bootstrap {meta.app} {env} -c {dep.on}`)."
@@ -2140,7 +1822,6 @@ def _handle_dependency(
         return "skip"
     else:
         if fresh_silent:
-            # offer is not None here (the branch above catches offer is None).
             msg = f"{dep.on}: newly available since {offer.version} — {offer.reason}"
             if offer.link:
                 msg += f" See {offer.link}."
@@ -2156,16 +1837,14 @@ def _handle_dependency(
             if not wire_only:
                 options["Yes — bootstrap now"] = "deploy"
             options["No — bootstrap later"] = "skip"
-        options["Already deployed (enter URL + keys)"] = "external"
+        options["Already deployed (enter URL + keys)"] = MODE_EXTERNAL
         # suspend_silent no-ops outside silent mode; inside it, a fresh menu
         # for a genuinely new component must ask, not auto-accept.
         with suspend_silent():
             choice = options[_ask_select(f"Bootstrap {dep.on} now?", list(options))]
 
-    # A fresh dependency reached during a silent replay has nothing recovered
-    # for it, so its whole post-menu handling (skip/external/deploy) must ask
-    # for real, not auto-accept a Recovered default meant for the outer
-    # replay's own recovered answers.
+    # The post-menu handling of a fresh dependency must ask for real, not
+    # auto-accept a Recovered default meant for the outer replay's answers.
     with suspend_silent() if fresh_silent else nullcontext():
         if choice == "skip":
             ui.info(
@@ -2174,18 +1853,18 @@ def _handle_dependency(
             )
             return "skip"
 
-        if choice in ("external", "external-redo"):
-            # "external" (kept/fresh) skips a rule already recovered into `answers`
-            # — re-prompting it would rotate a secret or clobber a committed value.
+        if choice in (MODE_EXTERNAL, "external-redo"):
+            # "external" (kept/fresh) skips a rule already recovered into `answers`:
+            # re-prompting it would rotate a secret or clobber a committed value.
             # "external-redo" re-asks every rule regardless (the operator chose to
             # retype the external endpoint).
-            only_missing = choice == "external"
+            only_missing = choice == MODE_EXTERNAL
             for rule in dep.shared:
                 key = rule.get("consumer_env_key")
                 if not key:
                     continue
                 # Truthy check: a prior "bootstrap later" run commits the consumer
-                # keys as empty lines, and recover() brings them back as "" — an
+                # keys as empty lines, and recover() brings them back as "". An
                 # empty value is an unanswered prompt, not a decided one.
                 if only_missing and answers.get(key):
                     continue
@@ -2247,21 +1926,20 @@ def _handle_dependency(
                     _recall(answers, "Y_PROVIDER_API_BASE_URL"),
                     placeholder="http://yprovider.internal:50601/api/",
                 )
-                for env_key in ("COLLABORATION_SERVER_SECRET", "Y_PROVIDER_API_KEY"):
+                for env_key in _DOCS_CORE_SECRETS:
                     value = _password(env_key) if backend.prompts_values() else None
                     backend.env_secret(
                         answers, env_key, component=core.key, value=value
                     )
             ui.info(f"{dep.on}: external — values prompted, not deployed.")
-            return "external"
+            return MODE_EXTERNAL
 
         if choice == "reuse":
-            # reuse is a bootstrap behaviour (keep the existing unit as-is) — the unit
-            # is still *managed*, so it deploys with the app. The provider's stored
-            # values are reused; only the consumer ref is re-injected.
+            # The unit is still managed (deploys with the app); only the
+            # consumer ref is re-injected, the provider's own values stay.
             pvars = tree.load_vars(meta.app, env, provider.key)
-            # decrypt the existing vault ONLY in ansible-vault mode (hashi_vault
-            # mode prompts a fresh lookup term for each consumer ref instead).
+            # Decrypt the vault only in ansible-vault mode: hashi_vault
+            # prompts a fresh lookup term for each consumer ref instead.
             pvault = (
                 vault.decrypt_to_dict(paths.vault_path(meta.app, env, provider.key))
                 if backend.prompts_values()
@@ -2271,11 +1949,9 @@ def _handle_dependency(
                 consumer_key = rule.get("consumer_env_key")
                 if not consumer_key:
                     continue
-                # Already recovered (mirrors the external branch's only-missing
-                # check): re-injecting a secret rule would be a byte no-op under
-                # ansible-vault (write_vault's merge already no-ops on it), but
-                # under hashi_vault env_secret ALWAYS prompts a fresh lookup term —
-                # skipping here is what keeps a silent replay from asking one.
+                # Already recovered: under hashi_vault env_secret always
+                # prompts a fresh lookup term, so skip it to keep a silent
+                # replay from asking one (a no-op under ansible-vault anyway).
                 if writer.rule_is_secret(rule) and answers.get(consumer_key):
                     continue
                 var = rule.get("var")
@@ -2286,7 +1962,7 @@ def _handle_dependency(
                             str(value) if value is not None else _prompt_shared(rule)
                         )
                     else:
-                        # hashi_vault: value is not needed — env_secret prompts a
+                        # hashi_vault: value is not needed; env_secret prompts a
                         # fresh lookup term for the consumer ref.
                         value = None
                 else:
@@ -2302,9 +1978,8 @@ def _handle_dependency(
             if meta.app == "meet" and provider.key == "livekit" and not wire_only:
                 _reuse_egress(meta, answers, backend, env)
             if meta.app == "docs" and provider.key == "yprovider":
-                # rebuild the core-side caddy upstream list and the backend-only
-                # conversion base URL from the reused unit's hosts file
-                # (co-location detection included).
+                # Rebuild the caddy upstream list and conversion base URL
+                # from the reused unit's hosts file.
                 yp_hosts = tree.read_hosts(meta.app, env, provider.key)
                 endpoints = _docs_yprovider_endpoints(
                     answers, meta.app, env, core.key, yp_hosts
@@ -2313,17 +1988,11 @@ def _handle_dependency(
                 answers["Y_PROVIDER_API_BASE_URL"] = (
                     f"http://{endpoints.split()[0]}/api/"
                 )
-                # the CORE must adopt the REUSED unit's secrets: _ask_core just
-                # generated fresh values, which would diverge from the kept unit's
-                # vault and break the backend↔yprovider auth. env_secret overwrites
-                # the core buffer with the values read from pvault above; hashi mode
-                # keeps the lookup refs _ask_core already collected (reference-only,
-                # nothing to adopt).
+                # The core must adopt the REUSED unit's secrets: _ask_core just
+                # generated fresh values, which would break the backend/yprovider
+                # auth. hashi mode keeps the lookup refs already collected.
                 if backend.prompts_values():
-                    for env_key in (
-                        "COLLABORATION_SERVER_SECRET",
-                        "Y_PROVIDER_API_KEY",
-                    ):
+                    for env_key in _DOCS_CORE_SECRETS:
                         v = pvault.get("vault_" + env_key.lower())
                         if v is None:
                             v = _password(
@@ -2333,11 +2002,10 @@ def _handle_dependency(
                             answers, env_key, component=core.key, value=str(v)
                         )
             ui.info(f"{dep.on}: reuse — kept existing unit (still deployed).")
-            return "managed"
+            return MODE_MANAGED
 
-        # deploy: create + manage this unit as part of the deployment. A rebootstrap
-        # (has_existing) supersedes the old overwrite-confirm — every prompt below
-        # pre-fills from what is already on disk instead.
+        # deploy: create + manage this unit. A rebootstrap pre-fills every
+        # prompt below from what is already on disk.
         existing_hosts = recover.recover_hosts(meta.app, env, provider.key)
         hosts = _ask_hosts(dep.on, default=existing_hosts)
         egress_hosts = valkey_enabled = None
@@ -2345,9 +2013,8 @@ def _handle_dependency(
             egress_hosts, valkey_enabled = _ask_egress_hosts(
                 meta, env, hosts, existing_hosts
             )  # Q2
-        # Merge, not replace (mirrors write_core's rationale): loading the existing
-        # vars.yml means a hand-edited/custom key on this provider survives, and a
-        # shared-rule var recovered below (never re-set) is simply left as-is.
+        # Merge, not replace: loading the existing vars.yml means a
+        # hand-edited/custom key on this provider survives.
         pvars = tree.load_vars(meta.app, env, provider.key)
         existing_shared = recover.recover_shared(
             meta.app, env, provider.key, dep.shared
@@ -2359,27 +2026,17 @@ def _handle_dependency(
             recovered = existing_shared.get(var) if var else None
 
             if is_secret and recovered is not None:
-                # Already decided on a previous run — NEVER regenerate/re-prompt a
-                # secret (the guard against rotating a live LiveKit api key/secret
-                # on a standalone `-c livekit` rebootstrap; a secret field has no
-                # editable default — see _ask_secret's docstring for why that
-                # means "skip the prompt entirely" rather than "pre-fill it").
-                # `pvars` already holds the provider-side value verbatim (loaded
-                # from disk above), so only the CONSUMER side (this run's
-                # `answers`, which for a standalone provider-only rerun may not
-                # have it yet) needs re-injecting, using the raw value
-                # `recover_shared` resolved for us.
+                # Already decided: never regenerate/re-prompt. `pvars` already
+                # holds the provider-side value, so only the consumer side
+                # (this run's `answers`) needs re-injecting.
                 if consumer_key:
                     if backend.prompts_values():
                         backend.env_secret(
                             answers, consumer_key, component=core.key, value=recovered
                         )
                     else:
-                        # hashi_vault: `recovered` is the committed rendered lookup
-                        # ref from the provider's vars.yml. Reuse it verbatim — it
-                        # reproduces what shared_provider_secret wrote on the first
-                        # run. env_secret ignores `value` and would re-prompt a
-                        # fresh term, repointing the committed ref.
+                        # hashi_vault: reuse the committed lookup ref verbatim;
+                        # env_secret ignores `value` and would repoint it.
                         answers[consumer_key] = recovered
                 if rule.get("answer_key"):
                     answers[rule["answer_key"]] = recovered
@@ -2395,14 +2052,12 @@ def _handle_dependency(
                     else:  # hashi_vault references an existing secret
                         value = None
                 else:
-                    # prompted secret — only prompt the value in ansible-vault mode
+                    # prompted secret: only prompt the value in ansible-vault mode
                     # (hashi_vault mode prompts a lookup term in var_secret/env_secret).
                     value = _prompt_shared(rule) if backend.prompts_values() else None
             else:
-                # non-secret: unlike a secret, this DOES get re-asked every time —
-                # just pre-filled from the recovered value (or the answer_key
-                # fallback for a rule with no `var`, e.g. drive's collabora
-                # domain) so accepting it is a no-op and editing it still works.
+                # non-secret: re-asked every time, pre-filled from the
+                # recovered value so accepting it is a no-op.
                 default = (
                     Recovered(str(recovered))
                     if recovered is not None
@@ -2410,9 +2065,7 @@ def _handle_dependency(
                 )
                 value = _prompt_shared(rule, default)
             if is_secret and var and consumer_key:
-                # same secret on both sides — store once, ref it from both (in
-                # hashi_vault mode a single OpenBao location; ansible-vault keeps its
-                # historical two-vault behaviour via the default implementation).
+                # Same secret on both sides: store once, ref it from both.
                 backend.shared_provider_secret(
                     pvars,
                     answers,
@@ -2451,7 +2104,7 @@ def _handle_dependency(
             # egress hosts already asked (Q2); redis+egress write happens AFTER the
             # livekit cadvisor confirm below.
         elif meta.app == "meet" and provider.key == "egress":
-            _standalone_egress(meta, pvars, answers, backend, env)
+            _standalone_egress(meta, pvars, backend, env)
         writer.apply_component_vars(pvars, meta, provider, answers)
         writer.expand_var_markers(pvars, backend)
         pvars[writer.cadvisor_var(meta.app)] = _ask_cadvisor(
@@ -2464,7 +2117,7 @@ def _handle_dependency(
                 meta, pvars, answers, backend, env, egress_hosts, valkey_enabled
             )
         if not pvars.ca.comment:
-            # Only stamp the header when the file has no start comment already — a
+            # Only stamp the header when the file has no start comment already: a
             # rebootstrap over an existing header must not stack a duplicate one
             # (mirrors write_core's same guard).
             pvars.yaml_set_start_comment(
@@ -2473,19 +2126,17 @@ def _handle_dependency(
         tree.save_vars(meta.app, env, provider.key, pvars)
         writer.write_vault(meta.app, env, provider.key, backend)
         tree.write_hosts(meta.app, env, provider.key, provider.app_name, hosts)
-        # hashi_vault mode buffers no secrets and writes no vault.yml, so don't claim it.
+        # hashi_vault mode buffers no secrets and writes no vault.yml, so don't
+        # claim it.
         files = (
             "vars.yml + vault.yml + hosts"
             if backend.component_secrets(provider.key)
             else "vars.yml + hosts"
         )
         ui.success(f"{dep.on}: managed — wrote {files}.")
-        return "managed"
+        return MODE_MANAGED
 
 
-# --------------------------------------------------------------------------- #
-# summary (hosts read from the ini, not the manifest)
-# --------------------------------------------------------------------------- #
 def _print_summary(
     app: str,
     env: str,
@@ -2497,7 +2148,7 @@ def _print_summary(
     meta = appmeta.load_app(app)
     core_key = meta.core().key
     # When a single non-core component was bootstrapped, the core was not
-    # (re)written — answers is empty — so skip the domain/provider lines and
+    # (re)written, so answers is empty. Skip the domain/provider lines and
     # narrow the listed units + the "Next" hint to that component.
     scoped = component is not None and component != core_key
     if not scoped:
@@ -2512,7 +2163,7 @@ def _print_summary(
         hosts = ", ".join(tree.read_hosts(app, env, files_key, group=group)) or "(none)"
         ui.info(f"  - {u.component:12s} [{u.mode:8s}] hosts={hosts}")
     # "Next steps" panel (reuses ui.note's boxed style). The .vault-pass backup
-    # and `st-cli secrets` steps are ansible-vault only — skipped for hashi_vault
+    # and `st-cli secrets` steps are ansible-vault only; skipped for hashi_vault
     # (no .vault-pass; secrets live in OpenBao).
     if scoped:
         review_root = f"{app}/{env}/{meta.files_component(component).key}"
@@ -2524,7 +2175,7 @@ def _print_summary(
         secrets_cmd = f"st-cli secrets {app} {env}"
 
     m = manifest.load_manifest()
-    is_vault = manifest.secret_config_for(m, app, env).backend == "ansible-vault"
+    is_vault = manifest.secret_config_for(m, app, env).backend == BACKEND_ANSIBLE_VAULT
 
     steps: list[str] = []
     if is_vault:
@@ -2540,9 +2191,6 @@ def _print_summary(
     ui.note(body, title="Next steps")
 
 
-# --------------------------------------------------------------------------- #
-# entry point
-# --------------------------------------------------------------------------- #
 def _print_bootstrap_intro(meta) -> None:
     """Pre-questionnaire guidance for a full/core/workers bootstrap: an
     architecture-docs pointer + a requirements checklist gated behind a
@@ -2576,16 +2224,9 @@ def _ask_rebootstrap_action(
     """Print every pending rebootstrap flag for ``(app, env)``, then offer the
     3-way Modify / Reuse / Override select (Modify is the default).
 
-    Prints ALL of ``flagged`` (already scoped to this ``(app, env)`` by the
-    caller), not only the run's own targeted component(s) — a dependency
-    provider's pending flag must be visible here too, so the operator sees it
-    BEFORE picking Reuse (which leaves every unit, core and dependencies
-    alike, exactly as-is).
-
-    ``allow_override=False`` (a wire-only ``-c <core>`` run) drops the
-    Override choice: an Override must force-replay every kept provider to
-    rebuild the core-side wiring, and a wire-only run by contract never
-    touches a provider.
+    Prints every flag, not only the run's own targeted component, so the
+    operator sees a dependency's pending flag before picking Reuse.
+    ``allow_override=False`` drops the Override choice for a wire-only run.
     """
     for comp in sorted(flagged):
         need = flagged[comp]
@@ -2613,9 +2254,9 @@ def _ask_rebootstrap_action(
 
 
 def _confirm_override(app: str, env: str) -> None:
-    """Hard destructive gate for :attr:`ReplayAction.OVERRIDE`; raises on decline.
+    """Hard destructive gate for `ReplayAction.OVERRIDE`; raises on decline.
 
-    Names every consequence up front — OVERRIDE rebuilds the core from an
+    Names every consequence up front. OVERRIDE rebuilds the core from an
     empty tree, so nothing here is a soft warning the operator can shrug off.
     """
     if not _confirm(
@@ -2644,48 +2285,8 @@ def bootstrap(
 ) -> None:
     """Run the interactive bootstrap questionnaire for ``(app, env)``.
 
-    With ``component`` set, scaffold only that component's unit so a provider
-    can be rolled out before the core:
-
-    * a dependency provider (e.g. ``livekit``) — bootstrap it standalone via
-      ``_handle_dependency`` with ``assume_deploy=True``: the "Bootstrap <provider>
-      now?" select is skipped and the deploy path is taken directly (the user
-      explicitly asked to bootstrap it);
-    * the core (e.g. ``meet``) — run the core questionnaire + ``writer.write_core``,
-      wiring deps WITHOUT deploying any provider (wire-only: each dep offers
-      Reuse / deploy-later / external, never "Yes — bootstrap now"); provider units
-      are NOT registered in this mode;
-    * a worker (only if implemented) — just register the worker unit; the core
-      must already exist (workers reuse its vars/vault/hosts).
-
-    No flag (``component=None``) runs today's full bootstrap: all deps
-    (deploy/reuse/external) + the core + an optional worker.
-
-    ``replay`` picks what happens when the targeted unit already exists.
-    ``ASK`` (the CLI default) offers a 3-way Modify / Reuse / Override select;
-    the other members are the programmatic entry point used by ``st-cli
-    upgrade`` and by tests to skip that select. See :class:`ReplayAction`.
-
-    **Rebootstrap.** Whether the core (or the single targeted component) ALREADY
-    has a committed ``vars.yml`` is detected up front (``core_exists`` /
-    ``has_existing`` inside ``_handle_dependency``) and drives three things,
-    every one of them BEFORE any prompt is shown:
-
-    1. ``writer.ensure_vault_readable`` is called against every unit already
-       registered for ``(app, env)`` — an unreadable ``vault.yml`` aborts here,
-       not 40 questions into the questionnaire.
-    2. The pre-questionnaire intro + readiness gate (``_print_bootstrap_intro``)
-       is replaced by the 3-way select (``_ask_rebootstrap_action``) or, for a
-       non-``ASK`` replay, straight to the matching notice.
-    3. ``recover.recover(...)`` seeds the core's ``answers`` (and
-       ``recover.recover_hosts``/``_cadvisor_default`` seed the hosts/cadvisor
-       prompts) so the questionnaire that follows is a REPLAY, not a
-       from-scratch rebuild — the old "Re-bootstrap the '<core>' component?"
-       overwrite-confirm is gone; a rebootstrap supersedes it outright. Every
-       unit upserted below is stamped ``bootstrapped_with=__version__``
-       (``core/models.UnitState``) regardless of whether this run was a fresh
-       bootstrap or a rebootstrap — it records that THIS questionnaire ran for
-       that unit, on this CLI version.
+    ``component`` scaffolds only that unit: a provider, the core, or a worker.
+    A wire-only core run shows no dependency select and registers no provider unit.
     """
     meta = appmeta.load_app(app)
     core = meta.core()
@@ -2706,18 +2307,13 @@ def bootstrap(
     core_or_worker = {core.key} | (
         {worker.key} if worker and worker.implemented else set()
     )
-    # Computed early (no backend/manifest dependency) so both the 3-way
-    # select gating below and the deps-loop scoping further down share one
-    # definition.
+    # Shared by the 3-way select gating below and the deps-loop scoping.
     target_core = component in (None, core.key)
 
     m = _ensure_manifest()
-    # Pending rebootstrap flags, newest per component only — mirrors
-    # drift.check_app's pick-newest loop (kept local here rather than shared,
-    # so this module doesn't reach into drift.py). Drives _handle_dependency's
-    # forced-replay branch below: a flagged existing provider must not offer
-    # "Reuse" (that would restamp it without ever replaying its questionnaire,
-    # silently clearing the pending flag).
+    # Pending rebootstrap flags, newest per component only. Drives
+    # _handle_dependency's forced-replay branch: a flagged existing provider
+    # must not offer "Reuse", which would clear the flag without a replay.
     flagged: dict[str, UpgradeNeed] = {}
     for need in upgrades.needed(m, app, env):
         current = flagged.get(need.component)
@@ -2726,9 +2322,8 @@ def bootstrap(
         ) > upgrades.parse_version(current.version):
             flagged[need.component] = need
 
-    # Newly declared components a flag makes available for this (app, env) —
-    # only matters on the SILENT path (_handle_dependency's fresh_silent
-    # branch), but harmless (and cheap) to compute unconditionally.
+    # Newly declared components a flag makes available; only matters on the
+    # SILENT path, but cheap to compute unconditionally.
     offers_by_component: dict[str, NewComponentOffer] = {
         o.component: o for o in upgrades.new_component_offers(m, app, env)
     }
@@ -2739,7 +2334,7 @@ def bootstrap(
     core_exists = paths.vars_path(app, env, core.key).exists()
     is_rebootstrap = core_exists and (component is None or component in core_or_worker)
 
-    # SILENT recovers its answers from a committed unit — there must be one.
+    # SILENT recovers its answers from a committed unit: there must be one.
     if replay is ReplayAction.SILENT:
         if component is None or component in core_or_worker:
             if not core_exists:
@@ -2753,35 +2348,24 @@ def bootstrap(
                 f"{app}/{env}/{component} does not exist yet."
             )
 
-    # Fail fast: an unreadable vault.yml must abort BEFORE the (potentially
-    # 40+ question) questionnaire runs, not partway through it. Checked
-    # against every unit already registered for this (app, env) regardless of
-    # which ones this particular invocation will touch — ensure_vault_readable
-    # is a no-op for a component with no vault.yml (fresh unit, hashi_vault).
+    # Fail fast: an unreadable vault.yml must abort before the questionnaire
+    # runs, not partway through it. Checked against every registered unit.
     writer.ensure_vault_readable(
         app, env, [u.component for u in manifest.units_for(m, app, env)]
     )
 
-    # Pre-questionnaire guidance for a full/core/workers bootstrap: an
-    # architecture-docs pointer + a requirements checklist on a fresh unit;
-    # the 3-way Modify/Reuse/Override select (or a silent-replay notice) when
-    # the CORE already exists — a workers-only run gets a plain MODIFY/SILENT
-    # note instead (see `target_core` below). Provider-only runs
-    # (`-c <provider>`) skip all of it, except a programmatic SILENT replay
-    # (`st-cli upgrade`'s per-component call on a provider-only repo).
+    # Pre-questionnaire guidance for a full/core/workers bootstrap: the intro
+    # on a fresh unit, or the 3-way Modify/Reuse/Override select (or a
+    # silent-replay notice) when the core already exists. Provider-only runs
+    # skip all of it except a programmatic SILENT replay.
     action = ReplayAction.MODIFY
     if component is None or component in core_or_worker:
         if not is_rebootstrap:
             _print_bootstrap_intro(meta)
         elif not target_core:
             # workers-only (`-c <workers>`): no 3-way select. Workers own no
-            # files of their own (CLAUDE.md "Workers own no files" — they
-            # only flip a flag in the CORE's committed vars.yml), so an
-            # Override here would confirm destructively but destroy nothing,
-            # and a Reuse would return before ever registering the unit.
-            # REUSE/OVERRIDE stay core-only; keep today's plain MODIFY
-            # replay (SILENT still applies — `st-cli upgrade` targets a
-            # flagged workers unit the same way as a provider).
+            # files of their own, so REUSE/OVERRIDE stay core-only; keep the
+            # plain MODIFY replay (SILENT still applies).
             if replay in (ReplayAction.REUSE, ReplayAction.OVERRIDE):
                 raise StCliError(
                     f"replay={replay.value} applies to the core path only — "
@@ -2804,10 +2388,8 @@ def bootstrap(
                     title="Rebootstrap",
                 )
         else:
-            # A wire-only run (`-c <core>`) never touches a provider, so it
-            # cannot force-replay the kept providers that rebuild the
-            # core-side wiring (constructed values, mirrored vault keys) —
-            # an Override there would silently drop them.
+            # A wire-only run never touches a provider, so an Override there
+            # would silently drop the core-side wiring it rebuilds.
             wire_only_run = component == core.key
             if wire_only_run and replay is ReplayAction.OVERRIDE:
                 raise StCliError(
@@ -2824,10 +2406,8 @@ def bootstrap(
             )
 
             if action is ReplayAction.REUSE:
-                # No manifest write, no upsert_unit — the stamp cannot move, so
-                # a pending flag stays pending (structurally, not by
-                # convention). Warns for EVERY flagged component of (app,
-                # env), not only the targeted ones — Reuse leaves core AND
+                # No manifest write, so a pending flag stays pending. Warns
+                # for every flagged component: Reuse leaves core and
                 # dependency providers untouched alike.
                 for comp in sorted(flagged):
                     need = flagged[comp]
@@ -2879,26 +2459,21 @@ def bootstrap(
             "the questionnaire, then edit the generated files directly under "
             "<app>/<env>/<component>/."
         )
-    # Choose the secret backend (ansible-vault | hashi_vault) per (app, env).
-    # The choice is persisted into .st-cli.yml; connection details for
-    # hashi_vault go into <app>/<env>/common.yml.
-    #
-    # SILENT wraps setup through the manifest save: core/prompts.py's
-    # primitives auto-accept a recovered default inside this context (a
-    # rerun's setup_backend/vault-password calls are themselves no-ops, since
-    # both are already persisted by the time a silent replay is reachable).
+    # Choose the secret backend per (app, env); persisted into .st-cli.yml.
+    # SILENT wraps setup through the manifest save so prompts.py's primitives
+    # auto-accept a recovered default inside this context.
     override_core = action is ReplayAction.OVERRIDE
     ctx = silent_replay() if action is ReplayAction.SILENT else nullcontext()
     with ctx as silent_stats:
         backend = setup_backend(m, app, env)
-        if backend.kind == "ansible-vault":
+        if backend.kind == BACKEND_ANSIBLE_VAULT:
             vault.ensure_vault_password(create=True)
         tree.ensure_common(app, env)
         tree.ensure_ssh_scaffold()
 
         ui.info(f"Bootstrapping {app}/{env}.")
 
-        # Scope flags — gate the sections below so the no-flag path is unchanged.
+        # Scope flags gate the sections below so the no-flag path is unchanged.
         target_worker = bool(
             worker and worker.implemented and component in (None, worker.key)
         )
@@ -2925,10 +2500,8 @@ def bootstrap(
         worker_hosts: list[str] = []
         core_cadvisor = True
 
-        # Core: always runs the questionnaire when targeted — fresh (nothing to
-        # recover), a rebootstrap (every prompt pre-filled from
-        # `recover.recover`), or an OVERRIDE (no seed at all: `write_core`
-        # rebuilds vars.yml/vault.yml from an empty tree).
+        # Core: always runs the questionnaire when targeted: fresh, a
+        # rebootstrap (pre-filled), or an OVERRIDE (no seed: rebuilt empty).
         if target_core:
             recoverable = core_exists and not override_core
             seed = recover.recover(app, env, core.key) if recoverable else {}
@@ -2951,7 +2524,7 @@ def bootstrap(
                     allow_empty=True,
                     default=worker_hosts_default,
                 )
-            # keycloak and projects are not Django apps — each takes its own
+            # keycloak and projects are not Django apps; each takes its own
             # (raw-env) questionnaire instead of the shared Django core one.
             if app == "keycloak":
                 answers = _ask_keycloak(meta, backend, seed)
@@ -2959,7 +2532,7 @@ def bootstrap(
                 answers = _ask_projects(meta, backend, seed)
             else:
                 answers = _ask_core(meta, backend, seed)
-            # a fresh run has no core hosts file on disk yet — stash the hosts
+            # a fresh run has no core hosts file on disk yet, so stash the hosts
             # so dependency hooks can detect co-location (_docs_yprovider_endpoints).
             answers["_core_hosts"] = core_hosts
             core_cadvisor = _ask_cadvisor(
@@ -2987,7 +2560,8 @@ def bootstrap(
             ):
                 continue
             if app == "meet" and dep.on == "egress" and component != "egress":
-                continue  # egress is bundled into the livekit step, not a separate iteration
+                # egress is bundled into the livekit step, not a separate iteration.
+                continue
             mode = _handle_dependency(
                 meta,
                 dep,
@@ -3045,15 +2619,12 @@ def bootstrap(
                     app=app,
                     env=env,
                     component=core.key,
-                    mode="managed",
+                    mode=MODE_MANAGED,
                     bootstrapped_with=__version__,
                 ),
             )
-        # workers own no files — they reuse the core unit's vars/vault and only flip
-        # st_<app>_workers_enabled. A [workers] inventory group is written (in the
-        # core's hosts file) only when worker IPs were entered; otherwise the worker
-        # falls back to the core group. Meet has no workers implementation, so it is
-        # neither prompted nor registered.
+        # Workers own no files; they reuse the core unit's vars/vault and
+        # only flip st_<app>_workers_enabled.
         if target_worker:
             manifest.upsert_unit(
                 m,
@@ -3061,7 +2632,7 @@ def bootstrap(
                     app=app,
                     env=env,
                     component=worker.key,
-                    mode="managed",
+                    mode=MODE_MANAGED,
                     bootstrapped_with=__version__,
                 ),
             )

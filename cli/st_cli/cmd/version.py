@@ -1,10 +1,10 @@
-"""`st-cli version` — print the installed and pinned versions."""
+"""`st-cli version`: print the installed and pinned versions."""
 
 from __future__ import annotations
 
+from .. import __version__ as CLI_VERSION
 from ..core import manifest, ui
 from ..core.errors import StCliError
-from .. import __version__ as CLI_VERSION
 
 
 def show_version() -> None:

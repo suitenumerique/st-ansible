@@ -1,8 +1,7 @@
 """Tests for st_cli.core.upstream — the best-effort, warn-only upstream-version check.
 
-The autouse conftest fixture disables the check for all tests by default; these
-re-enable it (``monkeypatch.delenv``) and mock git + the cache path so they stay
-offline-safe.
+The autouse fixture disables the check by default; these tests re-enable it and mock
+network calls.
 """
 
 from __future__ import annotations
@@ -18,23 +17,20 @@ from st_cli.core.models import StCliManifest
 
 
 def _enable_upstream(tmp_path, monkeypatch):
-    """Re-enable the check and point the cache at tmp_path (no real ~/.cache)."""
+    """Re-enable the check and point the cache at tmp_path, so no test touches the real
+    cache."""
     monkeypatch.delenv("ST_CLI_NO_UPSTREAM_CHECK")
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
 
 
 def _newer(version: str) -> str:
-    """A version string strictly greater than `version` (bump the major).
+    """A version string strictly greater than `version`, bumping the major version.
 
-    Derived from the installed version so the "behind" test never goes stale
-    when the real version is bumped (a hardcoded sentinel below the current
-    version would silently flip the CLI to "ahead" and break the test).
+    A hardcoded sentinel below the current version would flip the CLI to "ahead" and
+    break the test.
     """
     major = int(version.split(".")[0])
     return f"{major + 1}.0.0"
-
-
-# --------------------------------------------------------------------------- version parsing / query
 
 
 def test_parse_version_numeric_and_garbage():
@@ -48,13 +44,13 @@ def test_parse_version_numeric_and_garbage():
 
 
 def test_latest_upstream_version_picks_max(tmp_path, mocker):
-    """Given fake git ls-remote stdout (incl. peeled lines), returns the max tag."""
+    """Given fake git ls-remote output, returns the max tag, ignoring peeled lines."""
     fake_stdout = (
         "abc123\trefs/tags/0.0.19\n"
         "def456\trefs/tags/0.0.21\n"
-        "abc123\trefs/tags/0.0.21^{}\n"  # peeled line — ignored
+        "abc123\trefs/tags/0.0.21^{}\n"  # peeled line, ignored
         "ghi789\trefs/tags/0.0.20\n"
-        "jkl012\trefs/tags/main\n"  # non-numeric — ignored
+        "jkl012\trefs/tags/main\n"  # non-numeric, ignored
     )
     completed = types.SimpleNamespace(returncode=0, stdout=fake_stdout, stderr="")
     mocker.patch.object(upstream.subprocess, "run", return_value=completed)
@@ -68,22 +64,19 @@ def test_latest_upstream_version_nonzero_returns_none(tmp_path, mocker):
 
 
 def test_latest_upstream_version_filenotfound_returns_none(tmp_path, mocker):
-    """git missing (FileNotFoundError) → None, no raise."""
+    """A missing git binary returns None instead of raising FileNotFoundError."""
     mocker.patch.object(upstream.subprocess, "run", side_effect=FileNotFoundError)
     assert upstream.latest_upstream_version() is None
 
 
 def test_latest_upstream_version_timeout_returns_none(tmp_path, mocker):
-    """git timeout → None, no raise."""
+    """A git timeout returns None instead of raising."""
     mocker.patch.object(
         upstream.subprocess,
         "run",
         side_effect=subprocess.TimeoutExpired(cmd="git", timeout=3),
     )
     assert upstream.latest_upstream_version() is None
-
-
-# --------------------------------------------------------------------------- is_behind
 
 
 def test_is_behind_newer_latest_is_true():
@@ -107,9 +100,6 @@ def test_is_behind_none_latest_is_none():
     assert upstream.is_behind(None) is None
 
 
-# --------------------------------------------------------------------------- owning_pipx
-
-
 def test_owning_pipx_metadata_present_returns_path(tmp_path, mocker, monkeypatch):
     """A pipx_metadata.json at the venv root marks pipx ownership."""
     (tmp_path / "pipx_metadata.json").write_text("{}", encoding="utf-8")
@@ -125,14 +115,10 @@ def test_owning_pipx_no_metadata_returns_none(tmp_path, mocker, monkeypatch):
     assert upstream.owning_pipx() is None
 
 
-# --------------------------------------------------------------------------- maybe_warn_upgrade
-
-
 def test_maybe_warn_upgrade_behind_no_pipx_warns_docker_pull(
     tmp_path, mocker, monkeypatch
 ):
-    """Behind, no pipx → ui.warn names only `docker pull …:latest`; no
-    questionary prompt, no upgrade call, no raise (fires regardless of isatty)."""
+    """Behind upstream with no pipx, warns with only the docker pull command."""
     _enable_upstream(tmp_path, monkeypatch)
     newer = _newer(st_cli.__version__)  # always strictly greater than installed
     mocker.patch.object(upstream, "get_latest_cached", return_value=newer)
@@ -158,8 +144,7 @@ def test_maybe_warn_upgrade_behind_no_pipx_warns_docker_pull(
 def test_maybe_warn_upgrade_behind_with_pipx_warns_pipx_upgrade_only(
     tmp_path, mocker, monkeypatch
 ):
-    """Behind, pipx present → ui.warn names only the concrete self-upgrade
-    (`pipx upgrade st-cli`); no docker-pull mention, no `st-cli upgrade` hint."""
+    """Behind upstream with pipx present, warns with only the pipx upgrade command."""
     _enable_upstream(tmp_path, monkeypatch)
     newer = _newer(st_cli.__version__)
     mocker.patch.object(upstream, "get_latest_cached", return_value=newer)
@@ -178,7 +163,7 @@ def test_maybe_warn_upgrade_behind_with_pipx_warns_pipx_upgrade_only(
 
 
 def test_maybe_warn_upgrade_uptodate_no_warn(tmp_path, mocker, monkeypatch):
-    """latest <= installed → no warn."""
+    """Warns nothing when the latest version is not newer than the installed one."""
     _enable_upstream(tmp_path, monkeypatch)
     mocker.patch.object(upstream, "get_latest_cached", return_value="0.0.20")
     warn_spy = mocker.patch.object(upstream.ui, "warn")
@@ -189,7 +174,7 @@ def test_maybe_warn_upgrade_uptodate_no_warn(tmp_path, mocker, monkeypatch):
 
 
 def test_maybe_warn_upgrade_latest_none_no_warn(tmp_path, mocker, monkeypatch):
-    """latest is None (offline) → no warn, no raise."""
+    """Warns nothing and does not raise when the latest version is unknown."""
     _enable_upstream(tmp_path, monkeypatch)
     mocker.patch.object(upstream, "get_latest_cached", return_value=None)
     warn_spy = mocker.patch.object(upstream.ui, "warn")
@@ -200,7 +185,7 @@ def test_maybe_warn_upgrade_latest_none_no_warn(tmp_path, mocker, monkeypatch):
 
 
 def test_maybe_warn_upgrade_env_disabled_short_circuits(tmp_path, mocker, monkeypatch):
-    """ST_CLI_NO_UPSTREAM_CHECK=1 (set by the autouse fixture) → no network."""
+    """ST_CLI_NO_UPSTREAM_CHECK=1 skips the network call."""
     # Intentionally do NOT delenv: the autouse conftest fixture keeps it set.
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     spy = mocker.patch.object(upstream, "get_latest_cached")
@@ -211,7 +196,7 @@ def test_maybe_warn_upgrade_env_disabled_short_circuits(tmp_path, mocker, monkey
 
 
 def test_maybe_warn_upgrade_upgrade_subcommand_skips(tmp_path, mocker, monkeypatch):
-    """invoked_subcommand == 'upgrade' → returns immediately (no nag)."""
+    """The upgrade subcommand itself returns immediately without a warning."""
     _enable_upstream(tmp_path, monkeypatch)
     spy = mocker.patch.object(upstream, "get_latest_cached")
 
@@ -221,16 +206,13 @@ def test_maybe_warn_upgrade_upgrade_subcommand_skips(tmp_path, mocker, monkeypat
 
 
 def test_maybe_warn_upgrade_help_subcommand_skips(tmp_path, mocker, monkeypatch):
-    """invoked_subcommand is None (bare st-cli / help) → returns immediately."""
+    """A bare st-cli call, with no subcommand, returns immediately."""
     _enable_upstream(tmp_path, monkeypatch)
     spy = mocker.patch.object(upstream, "get_latest_cached")
 
     upstream.maybe_warn_upgrade(None)
 
     spy.assert_not_called()
-
-
-# --------------------------------------------------------------------------- pin cases (maybe_warn_upgrade)
 
 
 def _save_pin(cli_version: str) -> None:
@@ -241,8 +223,7 @@ def test_maybe_warn_upgrade_pin_aligned_upstream_newer_warns_once(
     repo, mocker, monkeypatch
 ):
     """Pin aligned with the installed CLI, upstream newer: one warning that
-    names only the pull command. The `st-cli upgrade` hint follows on the
-    next command, once the pull makes the CLI newer than the pin."""
+    names only the pull command."""
     _enable_upstream(repo, monkeypatch)
     _save_pin(st_cli.__version__)
     upstream_latest = _newer(st_cli.__version__)
@@ -286,9 +267,8 @@ def test_maybe_warn_upgrade_cli_older_than_pin_warns_pull_hint_only(
 def test_maybe_warn_upgrade_cli_newer_than_pin_and_behind_upstream_warns_upstream_only(
     repo, mocker, monkeypatch
 ):
-    """CLI newer than the pin but also behind upstream: only the upstream
-    message fires — the CLI_NEWER `st-cli upgrade` hint would be dead
-    (`upgrade` refuses to run while behind upstream), so it is skipped."""
+    """CLI newer than the pin but also behind upstream: only the upstream warning
+    fires."""
     _enable_upstream(repo, monkeypatch)
     _save_pin("0.0.1")  # well below the installed version
     upstream_latest = _newer(st_cli.__version__)
@@ -359,11 +339,8 @@ def test_maybe_warn_upgrade_manifest_load_failure_never_raises(
     warn_spy.assert_not_called()
 
 
-# --------------------------------------------------------------------------- cache + callback
-
-
 def test_upstream_cache_ttl_skips_network(tmp_path, mocker, monkeypatch):
-    """A fresh cache (within TTL) is returned without hitting the network."""
+    """A fresh cache within the TTL is returned without hitting the network."""
     _enable_upstream(tmp_path, monkeypatch)
     upstream._write_cache({"checked_at": time.time(), "latest": "0.0.20"})
     run_spy = mocker.patch.object(upstream.subprocess, "run")
@@ -373,13 +350,13 @@ def test_upstream_cache_ttl_skips_network(tmp_path, mocker, monkeypatch):
 
 
 def test_upstream_callback_never_breaks_command(tmp_path, mocker, monkeypatch):
-    """The main.py callback swallows every exception (best-effort)."""
+    """The main.py callback swallows every exception."""
     from typer.testing import CliRunner
 
     from st_cli import main as main_mod
 
     _enable_upstream(tmp_path, monkeypatch)
-    # Force the check to blow up internally — the callback must swallow it.
+    # Force the check to blow up internally; the callback must swallow it.
     mocker.patch.object(
         upstream, "maybe_warn_upgrade", side_effect=RuntimeError("boom")
     )

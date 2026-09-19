@@ -2,20 +2,16 @@
 
 from __future__ import annotations
 
+from helpers import seed_creds, seed_drive_unit, seed_meet_unit
 from ruamel.yaml.scalarstring import LiteralScalarString
 
 from st_cli.core import generate, manifest, paths, tree
 from st_cli.core.models import SecretConfig, StCliManifest, UnitState
 
-from helpers import seed_creds, seed_meet_unit
-
-
-# --------------------------------------------------------------------------- playbook + vars_files
-
 
 def test_generate_two_phase_playbook_and_vault_in_vars_files(repo):
     seed_meet_unit(repo)
-    # a vault.yml exists for this unit → must be added to vars_files
+    # a vault.yml exists for this unit, so it must be added to vars_files
     vp = paths.vault_path("meet", "prod", "meet")
     vp.write_text("$ANSIBLE_VAULT;1.1;AES256\n3030\n")
 
@@ -105,12 +101,9 @@ def test_generate_keycloak_two_phase_playbook(repo):
 
 
 def test_generate_egress_two_phase_playbook(repo):
-    """A meet/prod/egress unit renders a two-phase playbook importing the meet role
-    (same role + user as livekit/meet core), targets `hosts: egress` (the egress
-    inventory group), loads meet/prod/egress/vars.yml, and sets
-    `st_meet_egress_enabled: true` ONLY on the deploy (app-user) task — so the base
-    task stays base-only. egress is its own unit (NOT a worker → it owns its own
-    vars/hosts, unlike the workers component which reuses the core's files)."""
+    """A meet/prod/egress unit renders a two-phase playbook importing the meet
+    role, targets `hosts: egress`, loads meet/prod/egress/vars.yml, and sets
+    `st_meet_egress_enabled: true` only on the deploy task."""
     seed_creds(repo)
     manifest.save_manifest(
         StCliManifest(
@@ -136,18 +129,16 @@ def test_generate_egress_two_phase_playbook(repo):
     assert "hosts: egress" in pb
     # loads the egress unit's vars.yml
     assert str(paths.vars_path("meet", "prod", "egress").resolve()) in pb
-    # enabled flag injected ONLY on the deploy task — base stays base-only
+    # enabled flag injected ONLY on the deploy task; base stays base-only
     assert "st_meet_egress_enabled: true" in pb
     assert (
         "st_meet_egress_enabled" not in (repo / "meet/prod/egress/vars.yml").read_text()
     )
 
 
-# --------------------------------------------------------------------------- galaxy-requirements overrides
-
-
 def test_generate_galaxy_requirements_tarball_override(repo, monkeypatch):
-    """A local tarball via ST_CLI_COLLECTION_SOURCE replaces the git pin (name only, no type)."""
+    """A local tarball via ST_CLI_COLLECTION_SOURCE replaces the git pin (name only, no
+    type)."""
     seed_meet_unit(repo)
     tarball = repo / "foo.tar.gz"
     tarball.write_bytes(b"")
@@ -174,12 +165,8 @@ def test_generate_galaxy_requirements_dir_override(repo, monkeypatch):
     assert "type: git" not in req
 
 
-# --------------------------------------------------------------------------- ansible.cfg (remote_user + vault_password_file)
-
-
 def test_generate_ansible_cfg_remote_user_from_env(repo, monkeypatch):
-    """ST_CLI_SSH_USER set → the generated ansible.cfg remote_user comes from it
-    (the deploy path)."""
+    """ST_CLI_SSH_USER set means the generated ansible.cfg remote_user comes from it."""
     seed_meet_unit(repo)
     monkeypatch.setenv("ST_CLI_SSH_USER", "deployer")
 
@@ -189,8 +176,7 @@ def test_generate_ansible_cfg_remote_user_from_env(repo, monkeypatch):
 
 
 def test_generate_ansible_cfg_uses_repo_root_vault_pass_by_default(repo):
-    """The generated ansible.cfg points at the repo-root ``.vault-pass``
-    (the default, now unconditional — not ``.st-cli/.vault-pass``)."""
+    """The generated ansible.cfg points at the repo-root `.vault-pass` by default."""
     manifest.save_manifest(
         StCliManifest(
             "0.0.19", "0.0.19", [UnitState("meet", "prod", "meet", "managed")]
@@ -222,10 +208,9 @@ def test_generate_ansible_cfg_uses_compact_callback(repo):
 
 
 def _seed_meet_unit_no_local(repo):
-    """Seed the meet/prod/meet manifest + vars + hosts with NO local config file.
+    """Seed the meet/prod/meet manifest, vars, and hosts, with no local config file.
 
-    Mirrors ``seed_meet_unit`` but skips ``seed_creds`` so no gitignored local
-    file is written — the CI scenario where the ssh user comes from the env var.
+    Skips `seed_creds`, for the CI scenario where the ssh user comes from the env var.
     """
     manifest.save_manifest(
         StCliManifest(
@@ -239,8 +224,8 @@ def _seed_meet_unit_no_local(repo):
 
 
 def test_generate_ok_without_local_file_omits_remote_user(repo, monkeypatch):
-    """No local config file + no ST_CLI_SSH_USER → generate succeeds and ansible.cfg
-    OMITS remote_user (ansible defers to the ssh config chain instead of root)."""
+    """No local config file and no ST_CLI_SSH_USER: generate succeeds and
+    ansible.cfg omits remote_user."""
     _seed_meet_unit_no_local(repo)
     monkeypatch.delenv("ST_CLI_SSH_USER", raising=False)
 
@@ -248,9 +233,6 @@ def test_generate_ok_without_local_file_omits_remote_user(repo, monkeypatch):
 
     cfg = (repo / ".st-cli/ansible.cfg").read_text()
     assert "remote_user" not in cfg
-
-
-# --------------------------------------------------------------------------- secret backend → scaffolding
 
 
 def test_generate_hashi_vault_backend_emits_collection_and_drops_vault_pw(repo):
@@ -281,7 +263,7 @@ def test_generate_hashi_vault_backend_emits_collection_and_drops_vault_pw(repo):
 
 def test_generate_ansible_vault_backend_keeps_vault_password_file(repo):
     """The default (no secrets: block) still emits vault_password_file."""
-    seed_meet_unit(repo)  # no secrets: block → ansible-vault
+    seed_meet_unit(repo)  # no secrets: block defaults to ansible-vault
     generate.generate_all("meet", "prod")
     cfg = (repo / ".st-cli/ansible.cfg").read_text()
     assert "vault_password_file" in cfg
@@ -289,32 +271,19 @@ def test_generate_ansible_vault_backend_keeps_vault_password_file(repo):
     assert "community.hashi_vault" not in req
 
 
-# --------------------------------------------------------------------------- workers
-
-
 def test_generate_workers_reuses_core_files(repo):
-    """The workers playbook reuses the core unit's vars/hosts and only flips the enabled flag.
+    """The workers playbook reuses the core unit's vars/hosts and only flips the enabled
+    flag.
 
     Workers own no vars.yml/vault.yml/hosts — only the core drive/prod/drive unit
     is seeded. The generated workers playbook must target the core group, load the
     core's vars.yml, and set st_drive_workers_enabled on its deploy task.
     """
-    seed_creds(repo)
-    manifest.save_manifest(
-        StCliManifest(
-            "0.0.19",
-            "0.0.19",
-            [
-                UnitState("drive", "prod", "drive", "managed"),
-                UnitState("drive", "prod", "workers", "managed"),
-            ],
-        )
-    )
     # seed ONLY the core unit's files (no drive/prod/workers/ dir)
+    seed_drive_unit(repo, components=("drive", "workers"))
     data = tree.load_vars("drive", "prod", "drive")
     data["st_drive_backend_env"] = LiteralScalarString("REDIS_URL=redis://r/0\n")
     tree.save_vars("drive", "prod", "drive", data)
-    tree.write_hosts("drive", "prod", "drive", "drive", ["10.0.0.1"])
 
     generate.generate_all("drive", "prod")
     pb = generate.playbook_path("drive", "prod", "workers").read_text()
@@ -331,30 +300,20 @@ def test_generate_workers_reuses_core_files(repo):
 
 def test_generate_workers_targets_workers_group_when_present(repo):
     """With a [workers] group seeded, the workers playbook targets `hosts: workers`;
-    without one it falls back to `hosts: drive` (the co-located case, also covered
-    by test_generate_workers_reuses_core_files). vars_files still point at the core."""
-    seed_creds(repo)
-    manifest.save_manifest(
-        StCliManifest(
-            "0.0.19",
-            "0.0.19",
-            [
-                UnitState("drive", "prod", "drive", "managed"),
-                UnitState("drive", "prod", "workers", "managed"),
-            ],
-        )
+    without one it falls back to `hosts: drive`."""
+    # split: core group + a dedicated [workers] group on a separate IP
+    seed_drive_unit(
+        repo,
+        components=("drive", "workers"),
+        groups={"drive": ["10.0.0.1"], "workers": ["10.0.0.2"]},
     )
     data = tree.load_vars("drive", "prod", "drive")
     data["st_drive_backend_env"] = LiteralScalarString("REDIS_URL=redis://r/0\n")
     tree.save_vars("drive", "prod", "drive", data)
-    # split: core group + a dedicated [workers] group on a separate IP
-    tree.write_groups(
-        "drive", "prod", "drive", {"drive": ["10.0.0.1"], "workers": ["10.0.0.2"]}
-    )
 
     generate.generate_all("drive", "prod")
     wpb = generate.playbook_path("drive", "prod", "workers").read_text()
-    assert "hosts: workers" in wpb  # worker → its own group
+    assert "hosts: workers" in wpb  # worker gets its own group
     assert "st_drive_workers_enabled: true" in wpb  # worker deploy flag
     assert (
         str(paths.vars_path("drive", "prod", "drive").resolve()) in wpb
@@ -367,19 +326,8 @@ def test_generate_workers_targets_workers_group_when_present(repo):
     ).exists()  # no workers dir written
 
 
-# --------------------------------------------------------------------------- stale-playbook cleanup
-
-
 def test_generate_stale_cleanup_preserves_sibling_env_playbook(repo):
-    """Stale-playbook cleanup only removes THIS (app, env)'s playbooks.
-
-    The ``{app}-{env}-*.yml`` glob spans dashes, so a bare unlink would also
-    clobber a sibling file whose name extends this env (e.g. env 'prod' glob
-    matching 'meet-prod-staging-backend.yml'). The derived component
-    ('staging-backend') is not a real meet component key, so it must survive a
-    generate for env 'prod' — while a stale real-component playbook is still
-    regenerated (cleaned up + rewritten).
-    """
+    """Stale-playbook cleanup only removes this (app, env)'s playbooks."""
     seed_meet_unit(repo)
     paths.playbooks_dir().mkdir(parents=True, exist_ok=True)
     sibling = paths.playbooks_dir() / "meet-prod-staging-backend.yml"

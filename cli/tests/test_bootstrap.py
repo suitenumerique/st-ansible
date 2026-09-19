@@ -1,8 +1,5 @@
-"""Tests for st_cli.cmd.bootstrap — host validation, the _ask prompt helpers, and
+"""Tests for st_cli.cmd.bootstrap: host validation, the _ask prompt helpers, and
 the `bootstrap APP ENV -c/--component COMP` staged-rollout path.
-
-`-c COMP` scaffolds ONLY component COMP's unit, so a provider can be rolled out
-before the core. No flag = the full interactive questionnaire.
 """
 
 from __future__ import annotations
@@ -10,6 +7,7 @@ from __future__ import annotations
 import pytest
 from helpers import (
     docs_first_run_script,
+    livekit_script,
     meet_first_run_script,
     messages_first_run_script,
     projects_first_run_script,
@@ -24,8 +22,6 @@ from st_cli.cmd import bootstrap
 from st_cli.core import appmeta, envrender, manifest, paths, prompts, tree, vault
 from st_cli.core.errors import StCliError
 from st_cli.core.secretbackend import AnsibleVaultBackend
-
-# --------------------------------------------------------------------------- host validation
 
 
 def test_host_validation():
@@ -44,12 +40,8 @@ def test_host_validation():
         assert not _is_valid_host(bad), bad
 
 
-# --------------------------------------------------------------------------- _ask / _text_question
-
-
 def test_ask_placeholder_smoke(monkeypatch):
-    """_ask(..., placeholder='hint') builds a questionary Question passing
-    placeholder= (not default=) and returns the typed value (no real TTY)."""
+    """`_ask(..., placeholder=...)` passes placeholder=, not default=."""
     captured: dict = {}
 
     class _FakeQuestion:
@@ -75,10 +67,8 @@ def test_ask_placeholder_smoke(monkeypatch):
 
 
 def test_ask_default_prefills_editable_value_enter_accepts(monkeypatch):
-    """default= renders as questionary's NATIVE editable pre-filled value (not a
-    grey ghost): ``default`` IS in the questionary kwargs, ``placeholder`` is NOT,
-    the required validator is applied, and pressing Enter (questionary returns the
-    prefilled default) yields that default. A typed value wins."""
+    """`_ask(..., default=...)` passes default=, applies the required
+    validator, and a typed value overrides the pre-filled default."""
     captured: dict = {}
 
     class _FakeQuestion:
@@ -96,9 +86,7 @@ def test_ask_default_prefills_editable_value_enter_accepts(monkeypatch):
 
     monkeypatch.setattr(prompts.questionary, "text", _fake_text)
 
-    # native prefill: default IS in kwargs, placeholder is NOT, validate is _require
-    # (the required path is applied). Pressing Enter on a prefilled field returns
-    # the default — simulated by having .ask() return the prefilled value.
+    # .ask() returning the prefilled value simulates pressing Enter to accept it.
     answer["v"] = "redis://redis:6379/0"
     assert bootstrap._ask("REDIS_URL", "redis://redis:6379/0") == "redis://redis:6379/0"
     assert captured["kwargs"]["default"] == "redis://redis:6379/0"
@@ -110,62 +98,29 @@ def test_ask_default_prefills_editable_value_enter_accepts(monkeypatch):
     assert bootstrap._ask("REDIS_URL", "redis://redis:6379/0") == "redis://other:6379/1"
 
 
-# --------------------------------------------------------------------------- bootstrap --component
-
-
 def test_bootstrap_component_livekit_deploys_provider_only(repo, monkeypatch):
-    """`bootstrap -c livekit` writes the livekit provider unit AND bundles the
-    egress unit into the livekit step (egress hosts co-located on the livekit host →
-    local valkey: ``st_meet_livekit_valkey_enabled=True`` and both redis addresses
-    ``127.0.0.1:6379``); the core meet/vars.yml is NOT written and no meet unit is
-    registered. The "Bootstrap livekit now?" select is NOT asked — the user
-    explicitly asked to bootstrap that provider, so the deploy path is taken directly.
-    Livekit's generated api key/secret are mirrored into egress's own vault (raw under
-    the ``st_meet_livekit_api_key``/``st_meet_livekit_api_secret`` var names, reusing
-    livekit's own names — the role reads them directly from vault.yml). Both livekit
-    and egress register as managed."""
-    seed_creds(repo)  # writes .vault-pass (skips the vault prompt)
+    """`bootstrap -c livekit` writes the livekit provider unit and bundles the
+    egress unit, without writing the core or asking to bootstrap livekit."""
+    seed_creds(repo)  # writes .vault-pass, so the vault-backend prompt does not fire
     sq = script_questionary(
         monkeypatch,
         [
             ("select", "Secret backend:", "ansible-vault"),
-            ("text", "livekit host(s)", "10.0.0.1"),
-            # egress hosts (bundled into the livekit step) are now asked right after
-            # the livekit hosts, BEFORE the LiveKit domain/TURN prompts: blank →
-            # co-locate on 10.0.0.1
-            ("text", "egress (leave blank", ""),
-            (
-                "text",
-                "LiveKit domain (e.g. livekit.example.org)",
-                "livekit.example.org",
-            ),
-            ("text", "LiveKit TURN domain (e.g. turn.example.org)", "turn.example.org"),
-            # standalone `bootstrap -c livekit` → answers is empty, so
-            # _ensure_meet_domain prompts DOMAIN for the livekit unit's vars.yml
-            # (single source of truth — the role derives the webhook URL from it).
-            (
-                "text",
-                "Public domain for meet (for the LiveKit recording webhook)",
-                "meet.example.org",
-            ),
-            ("confirm", "livekit", True),  # livekit cadvisor
-            ("confirm", "egress", True),  # egress cadvisor (single co-located → valkey)
+            *livekit_script(host="10.0.0.1", public_domain=True),
         ],
     )
 
     bootstrap.bootstrap("meet", "prod", component="livekit")
 
-    # livekit provider unit written
     assert paths.vars_path("meet", "prod", "livekit").exists()
     lv = tree.load_vars("meet", "prod", "livekit")
     assert lv["st_meet_livekit_domain"] == "livekit.example.org"
     assert lv["st_meet_livekit_turn_domain"] == "turn.example.org"
-    # the livekit unit's st_meet_public_host is derived from DOMAIN in
-    # apply_component_vars (single source of truth — the role derives the
-    # LiveKit recording webhook URL from it, no CLI-side webhook URL var).
+    # st_meet_public_host derives from DOMAIN in apply_component_vars, the single
+    # place the role reads it to build the LiveKit recording webhook URL.
     assert lv["st_meet_public_host"] == "meet.example.org"
-    assert lv["st_meet_cadvisor_enabled"] is True  # cadvisor prompt → real YAML bool
-    # bundled redis topology (single co-located node → local valkey)
+    assert lv["st_meet_cadvisor_enabled"] is True  # cadvisor prompt yields a real bool
+    # a single co-located node uses local valkey, not an external redis.
     assert lv["st_meet_livekit_valkey_enabled"] is True
     assert lv["st_meet_livekit_redis_address"] == "127.0.0.1:6379"
     assert vault.is_encrypted(paths.vault_path("meet", "prod", "livekit"))
@@ -174,24 +129,21 @@ def test_bootstrap_component_livekit_deploys_provider_only(repo, monkeypatch):
     assert "st_meet_livekit_api_secret" in lvault
     assert "10.0.0.1" in (repo / "meet/prod/livekit/hosts").read_text()
 
-    # egress unit written (bundled) — co-located on the livekit host
+    # egress bundles in, co-located on the livekit host
     assert paths.vars_path("meet", "prod", "egress").exists()
     ev = tree.load_vars("meet", "prod", "egress")
     assert ev["st_meet_livekit_domain"] == "livekit.example.org"
     assert ev["st_meet_livekit_redis_address"] == "127.0.0.1:6379"
     assert ev["st_meet_cadvisor_enabled"] is True
-    # co-located: egress hosts == livekit hosts
     assert "10.0.0.1" in (repo / "meet/prod/egress/hosts").read_text()
-    # creds mirrored from livekit's vault into egress's vault (EQUAL to livekit's)
     assert vault.is_encrypted(paths.vault_path("meet", "prod", "egress"))
     evault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "egress"))
     assert evault["st_meet_livekit_api_key"] == lvault["st_meet_livekit_api_key"]
     assert evault["st_meet_livekit_api_secret"] == lvault["st_meet_livekit_api_secret"]
 
-    # the "Bootstrap livekit now?" select was NOT asked (assume_deploy)
+    # component mode assumes deploy, so no dependency select fires.
     assert not any("Bootstrap livekit now?" in msg for msg, _ in sq.select_calls)
 
-    # core NOT written / NOT registered
     assert not paths.vars_path("meet", "prod", "meet").exists()
     m = manifest.load_manifest()
     by_comp = {u.component: u for u in m.units}
@@ -201,38 +153,20 @@ def test_bootstrap_component_livekit_deploys_provider_only(repo, monkeypatch):
 
 
 def test_bootstrap_livekit_external_redis(repo, monkeypatch):
-    """`bootstrap meet prod` (full) with livekit and egress on DIFFERENT hosts: the
-    single-co-located-node test fails (`sorted(livekit_hosts) != sorted(egress_hosts)`)
-    so ``st_meet_livekit_valkey_enabled=False`` and the "Redis address shared by
-    livekit and egress (host:port)" prompt fires, followed by the redis username +
-    password prompts. Any non-empty string is accepted VERBATIM with NO host:port
-    validation (per the topology rule), so a clearly non-host:port value
-    (``whatever-redis``) is stored VERBATIM in BOTH the livekit unit's and the
-    egress unit's ``st_meet_livekit_redis_address`` var (egress reuses the same
-    livekit var) — guaranteeing they share one redis. Egress hosts are prompted explicitly
-    (NOT blank) so the co-location short-circuit does not fire. The redis username is
-    adopted verbatim by egress (plaintext); the password is mirrored (encrypted)
-    into egress's own vault alongside the api key/secret."""
+    """livekit and egress on different hosts prompt one shared redis address,
+    accepted verbatim, and store it on both units."""
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
         meet_first_run_script(smtp=False, db_mode="url", livekit="Yes — bootstrap now")
+        # egress hosts are asked right after livekit hosts, before LiveKit
+        # domain/TURN, because a different host skips co-location.
+        # No "Public domain for meet" prompt: _ensure_meet_domain sees DOMAIN set.
+        + livekit_script(host="10.0.0.1", egress_host="10.0.0.2", confirm_egress=False)
         + [
-            ("text", "livekit host(s)", "10.0.0.1"),
-            # egress hosts asked right after livekit hosts, BEFORE LiveKit
-            # domain/TURN; on a DIFFERENT host → co-location does not fire
-            ("text", "egress (leave blank", "10.0.0.2"),
-            (
-                "text",
-                "LiveKit domain (e.g. livekit.example.org)",
-                "livekit.example.org",
-            ),
-            ("text", "LiveKit TURN domain (e.g. turn.example.org)", "turn.example.org"),
-            # NO "Public domain for meet" — _ensure_meet_domain sees DOMAIN set
-            ("confirm", "livekit", True),  # livekit cadvisor
-            # the topology check fails → the "Redis address …" prompt fires (after
-            # the livekit cadvisor confirm), followed by username + password; feed
-            # a non-host:port string to pin the no-validation rule (stored verbatim).
+            # the topology check fails, so the redis-address prompt fires after
+            # the livekit cadvisor confirm. A non-host:port value pins the
+            # no-validation rule.
             ("text", "Redis address shared by livekit and egress", "whatever-redis"),
             ("text", "Redis username shared by livekit and egress", "redisuser"),
             ("password", "Redis password shared by livekit and egress", "redispass123"),
@@ -242,25 +176,21 @@ def test_bootstrap_livekit_external_redis(repo, monkeypatch):
 
     bootstrap.bootstrap("meet", "prod")
 
-    # livekit: valkey DISABLED, the external redis address stored VERBATIM (no
-    # host:port validation — a clearly non-host:port string is accepted as-is);
-    # the redis username is stored in plaintext.
+    # valkey stays disabled, and a non-host:port address is accepted verbatim.
     lv = tree.load_vars("meet", "prod", "livekit")
     assert lv["st_meet_livekit_valkey_enabled"] is False
     assert lv["st_meet_livekit_redis_address"] == "whatever-redis"
     assert lv["st_meet_livekit_redis_username"] == "redisuser"
-    # egress: adopts the SAME redis address + username (guaranteed to share one
-    # redis with livekit)
+    # egress adopts the same redis address and username, so both units share one redis.
     ev = tree.load_vars("meet", "prod", "egress")
     assert ev["st_meet_livekit_redis_address"] == "whatever-redis"
     assert ev["st_meet_livekit_redis_username"] == "redisuser"
     assert ev["st_meet_livekit_domain"] == "livekit.example.org"
-    # egress NOT co-located: it has its own hosts file with 10.0.0.2
+    # egress is not co-located: it keeps its own hosts file with 10.0.0.2.
     assert "10.0.0.2" in (repo / "meet/prod/egress/hosts").read_text()
     assert "10.0.0.2" not in (repo / "meet/prod/livekit/hosts").read_text()
 
-    # the redis password is mirrored (encrypted) into egress's own vault, equal
-    # to the livekit-side value (livekit vault.yml holds it too).
+    # the redis password mirrors into egress's own vault, equal to livekit's value.
     lvault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "livekit"))
     evault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "egress"))
     assert lvault["st_meet_livekit_redis_password"] == "redispass123"
@@ -269,13 +199,9 @@ def test_bootstrap_livekit_external_redis(repo, monkeypatch):
         == lvault["st_meet_livekit_redis_password"]
     )
 
-    # every scripted answer was consumed — including the "Redis address …"
-    # prompt (the topology prompt fired; no leftover script means no extra prompt
-    # and no missing prompt). Regression guard for both the prompt-fires path
-    # and the no-validation rule (a non-host:port string was accepted as-is).
+    # no leftover script guards that the redis-address prompt fired exactly once.
     assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
 
-    # meet + livekit + egress all registered as managed
     m = manifest.load_manifest()
     by_comp = {u.component: u for u in m.units}
     assert by_comp["meet"].mode == "managed"
@@ -284,41 +210,22 @@ def test_bootstrap_livekit_external_redis(repo, monkeypatch):
 
 
 def test_bootstrap_component_livekit_external_redis_blank_auth(repo, monkeypatch):
-    """`bootstrap -c livekit` with egress on a DIFFERENT host (so the co-location
-    short-circuit does not fire, exactly like ``test_bootstrap_livekit_external_redis``)
-    but the redis username AND password left BLANK — legal for an unauthenticated
-    external redis (``_ask``/``_password`` are called with ``required=False`` for
-    both). A blank username is dropped entirely: ``if username:`` in
-    ``_bundle_egress`` is a truthiness check, so ``""`` never lands in either the
-    livekit or the egress vars.yml. A blank password is dropped the same way: it
-    is stored only when it is truthy, so an empty string is never written to
-    ``backend.var_secret`` and never mirrored into egress's vault — an
-    unauthenticated external redis carries no password key in either vault, only
-    the mirrored api key/secret."""
+    """A blank redis username/password is legal for an unauthenticated
+    external redis: both are dropped entirely, not stored as empty strings."""
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
         [
             ("select", "Secret backend:", "ansible-vault"),
-            ("text", "livekit host(s)", "10.0.0.1"),
-            # egress on a DIFFERENT host — co-location short-circuit does not
-            # fire, so the external-redis address/username/password prompts fire.
-            ("text", "egress (leave blank", "10.0.0.2"),
-            (
-                "text",
-                "LiveKit domain (e.g. livekit.example.org)",
-                "livekit.example.org",
+            # egress on a different host skips co-location, so the external-redis
+            # address, username, and password prompts fire.
+            *livekit_script(
+                host="10.0.0.1",
+                egress_host="10.0.0.2",
+                public_domain=True,
+                confirm_egress=False,
             ),
-            ("text", "LiveKit TURN domain (e.g. turn.example.org)", "turn.example.org"),
-            (
-                "text",
-                "Public domain for meet (for the LiveKit recording webhook)",
-                "meet.example.org",
-            ),
-            ("confirm", "livekit", True),  # livekit cadvisor
-            # the topology check fails → the "Redis address …" prompt fires
-            # (after the livekit cadvisor confirm), followed by a BLANK username
-            # and a BLANK password — both legal for an unauthenticated redis.
+            # a blank username and password are both legal for an unauthenticated redis.
             (
                 "text",
                 "Redis address shared by livekit and egress",
@@ -332,20 +239,18 @@ def test_bootstrap_component_livekit_external_redis_blank_auth(repo, monkeypatch
 
     bootstrap.bootstrap("meet", "prod", component="livekit")
 
-    # livekit: valkey DISABLED, the external redis address stored; the blank
-    # username omits the var entirely (truthiness check in _bundle_egress).
+    # valkey stays disabled, the external address stores verbatim, and the blank
+    # username omits the var entirely, per the truthiness check in _bundle_egress.
     lv = tree.load_vars("meet", "prod", "livekit")
     assert lv["st_meet_livekit_valkey_enabled"] is False
     assert lv["st_meet_livekit_redis_address"] == "redis.example.org:6379"
     assert "st_meet_livekit_redis_username" not in lv
 
-    # egress: same blank-username omission (it reuses the same truthiness check
-    # when building its own vars.yml).
+    # egress reuses the same truthiness check when it builds its own vars.yml.
     ev = tree.load_vars("meet", "prod", "egress")
     assert "st_meet_livekit_redis_username" not in ev
 
-    # the blank password is dropped entirely: no password key in either vault,
-    # only the mirrored api key/secret (both vaults still exist).
+    # the blank password is dropped entirely: no password key in either vault.
     lvault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "livekit"))
     assert "st_meet_livekit_redis_password" not in lvault
     evault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "egress"))
@@ -353,86 +258,68 @@ def test_bootstrap_component_livekit_external_redis_blank_auth(repo, monkeypatch
     assert evault["st_meet_livekit_api_key"] == lvault["st_meet_livekit_api_key"]
     assert evault["st_meet_livekit_api_secret"] == lvault["st_meet_livekit_api_secret"]
 
-    # every scripted answer was consumed — including both blank prompts.
     assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
 
 
 def test_bootstrap_component_egress_standalone(repo, monkeypatch):
-    """`bootstrap meet prod -c egress` with a livekit unit ALREADY on disk: egress
-    ADOPTS livekit's already-decided domain + redis address (it does NOT re-prompt or
-    re-decide topology — guaranteed to share the same redis the livekit unit was
-    bootstrapped with). Livekit's api key/secret are mirrored from livekit's ON-DISK
-    vault into egress's own vault (equal to livekit's). The "Bootstrap egress now?"
-    select is NOT asked (assume_deploy — the user explicitly asked to bootstrap
-    egress). ONLY egress is registered (livekit was already registered by the seed)."""
-    seed_livekit_provider(repo)  # seeds livekit vars (incl. redis addr) + vault + hosts
+    """`bootstrap meet prod -c egress` with a livekit unit already on disk adopts
+    livekit's domain and redis address instead of re-prompting for them."""
+    seed_livekit_provider(repo)  # seeds livekit vars, redis addr, vault, and hosts
     lk_vars_before = (repo / "meet/prod/livekit/vars.yml").read_text()
     lk_vault_before = (repo / "meet/prod/livekit/vault.yml").read_bytes()
 
     sq = script_questionary(
         monkeypatch,
         [
-            # setup_backend reuses the persisted ansible-vault choice silently
-            # (the seed registered a livekit unit) — no "Secret backend:" select.
+            # setup_backend reuses the persisted ansible-vault choice from the
+            # seeded livekit unit, so no "Secret backend:" select fires.
             ("text", "egress host(s)", "10.0.0.3"),
-            # egress db/db are never prompted — egress has no vars/env_render block
-            # NO "Redis address" prompt (topology is ADOPTED, not re-decided)
             ("confirm", "cadvisor", True),  # egress cadvisor
         ],
     )
 
     bootstrap.bootstrap("meet", "prod", component="egress")
 
-    # egress unit written, ADOPTING the on-disk livekit unit's domain + redis address
     assert paths.vars_path("meet", "prod", "egress").exists()
     ev = tree.load_vars("meet", "prod", "egress")
     assert ev["st_meet_livekit_domain"] == "livekit.example.org"
     assert ev["st_meet_livekit_redis_address"] == "livekit-redis.example:6379"
     assert ev["st_meet_cadvisor_enabled"] is True
-    # egress hosts written (not adopted — the deploy tail writes them from _ask_hosts)
     assert "10.0.0.3" in (repo / "meet/prod/egress/hosts").read_text()
 
-    # creds mirrored from livekit's ON-DISK vault into egress's own vault
     lvault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "livekit"))
     evault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "egress"))
     assert evault["st_meet_livekit_api_key"] == lvault["st_meet_livekit_api_key"]
     assert evault["st_meet_livekit_api_secret"] == lvault["st_meet_livekit_api_secret"]
     assert evault["st_meet_livekit_api_key"] == "real-token"
     assert evault["st_meet_livekit_api_secret"] == "real-secret"
-    # external redis (valkey disabled) → the redis password is mirrored too
+    # external redis means valkey is disabled, so the redis password mirrors too.
     assert evault["st_meet_livekit_redis_password"] == "real-redis-pass"
 
-    # the "Bootstrap egress now?" select was NOT asked (assume_deploy)
+    # component mode assumes deploy, so no dependency select fires.
     assert not any("Bootstrap egress now?" in msg for msg, _ in sq.select_calls)
-    # no "Redis address …" prompt (topology adopted, not re-decided)
+    # no leftover script guards that adoption skips the redis-address prompt.
     assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
 
-    # livekit unit/files NOT modified by the standalone egress run
     assert (repo / "meet/prod/livekit/vars.yml").read_text() == lk_vars_before
     assert (repo / "meet/prod/livekit/vault.yml").read_bytes() == lk_vault_before
 
-    # manifest: the livekit unit was ALREADY registered by the seed; egress is added.
-    # ONLY egress is registered by THIS bootstrap call (livekit's unit is preserved).
     m = manifest.load_manifest()
     by_comp = {u.component: u for u in m.units}
     assert "egress" in by_comp and by_comp["egress"].mode == "managed"
     assert "livekit" in by_comp and by_comp["livekit"].mode == "managed"
-    # the core was NOT bootstrapped in a standalone -c egress run
     assert "meet" not in by_comp
 
 
 def test_bootstrap_component_core_wires_deps_only(repo, monkeypatch):
-    """`bootstrap -c meet` (wire-only) after a livekit tree exists: writes the
-    core vars/vault/hosts with LIVEKIT_* refs pulled from livekit's vault (reuse);
-    the livekit unit/files are NOT modified; no "Yes — bootstrap now" path taken."""
+    """A wire-only `bootstrap -c meet` after a livekit tree exists pulls
+    LIVEKIT_* refs from livekit's vault without modifying livekit."""
     seed_livekit_provider(repo)
     livekit_vars_before = (repo / "meet/prod/livekit/vars.yml").read_text()
     livekit_vault_before = (repo / "meet/prod/livekit/vault.yml").read_bytes()
 
-    # no "Secret backend:" select — a livekit unit was seeded by
-    # seed_livekit_provider, so setup_backend reuses the persisted
-    # ansible-vault choice silently (no prompt). "meet" wire-only reuses the
-    # existing livekit dep automatically, so no trailing dep select either.
+    # setup_backend reuses the persisted choice from the seeded livekit unit,
+    # and wire-only reuses the dependency silently, so no select fires.
     sq = script_questionary(
         monkeypatch,
         meet_first_run_script(
@@ -441,14 +328,12 @@ def test_bootstrap_component_core_wires_deps_only(repo, monkeypatch):
     )
     bootstrap.bootstrap("meet", "prod", component="meet")
 
-    # core written with LIVEKIT refs (reuse from livekit's vault)
     assert paths.vars_path("meet", "prod", "meet").exists()
     assert tree.load_vars("meet", "prod", "meet")["st_meet_cadvisor_enabled"] is True
     core_vars = (repo / "meet/prod/meet/vars.yml").read_text()
     assert "LIVEKIT_API_KEY={{ vault_livekit_api_key }}" in core_vars
     assert "LIVEKIT_API_SECRET={{ vault_livekit_api_secret }}" in core_vars
     assert "LIVEKIT_API_URL=wss://livekit.example.org" in core_vars
-    # the real values pulled from livekit's vault land in the core's vault.yml
     assert vault.is_encrypted(paths.vault_path("meet", "prod", "meet"))
     cvault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "meet"))
     assert cvault["vault_livekit_api_key"] == "real-token"
@@ -456,20 +341,14 @@ def test_bootstrap_component_core_wires_deps_only(repo, monkeypatch):
     assert "REDIS_URL={{ vault_redis_url }}" in core_vars
     assert "CELERY_BROKER_URL={{ vault_redis_url }}" in core_vars
     assert cvault["vault_redis_url"] == "redis://redis:6379/0"
-
-    # recording is always on now (no confirm) → RECORDING_* lines are always
-    # present in the meet backend env
     assert "RECORDING_ENABLE=True" in core_vars
 
-    # livekit unit/files NOT modified
     assert (repo / "meet/prod/livekit/vars.yml").read_text() == livekit_vars_before
     assert (repo / "meet/prod/livekit/vault.yml").read_bytes() == livekit_vault_before
 
-    # wire-only + existing livekit: reused automatically, no dep select at all
     dep_offers = [c for msg, c in sq.select_calls if "Bootstrap livekit now?" in msg]
     assert not dep_offers, "wire-only must reuse an existing provider without a select"
 
-    # both units registered; livekit mode unchanged (managed)
     m = manifest.load_manifest()
     by_comp = {u.component: u for u in m.units}
     assert "meet" in by_comp and by_comp["meet"].mode == "managed"
@@ -477,11 +356,8 @@ def test_bootstrap_component_core_wires_deps_only(repo, monkeypatch):
 
 
 def test_bootstrap_meet_full_reuse_livekit_bundles_egress(repo, monkeypatch):
-    """Full `bootstrap meet prod` (no -c) where livekit ALREADY exists and the
-    operator picks "Reuse existing": the reused livekit keeps egress in the
-    deployment. Egress has no tree yet, so `_reuse_egress` creates it from
-    livekit's on-disk redis topology (external redis: valkey disabled), co-located
-    on the livekit hosts, and meet + livekit + egress all register as managed."""
+    """Reusing an existing livekit keeps egress in the deployment: `_reuse_egress`
+    creates its tree from livekit's on-disk redis topology."""
     seed_livekit_provider(repo)
     sq = script_questionary(
         monkeypatch,
@@ -492,29 +368,25 @@ def test_bootstrap_meet_full_reuse_livekit_bundles_egress(repo, monkeypatch):
             livekit="Reuse existing in the repo",
         )
         + [
-            ("confirm", "egress", True),  # egress cadvisor (created on reuse)
+            ("confirm", "egress", True),  # egress cadvisor, created on reuse
         ],
     )
 
     bootstrap.bootstrap("meet", "prod")
 
-    # egress unit created on the reuse path, adopting livekit's on-disk topology
     assert paths.vars_path("meet", "prod", "egress").exists()
     ev = tree.load_vars("meet", "prod", "egress")
     assert ev["st_meet_livekit_domain"] == "livekit.example.org"
     assert ev["st_meet_livekit_redis_address"] == "livekit-redis.example:6379"
     assert ev["st_meet_cadvisor_enabled"] is True
-    # co-located on the livekit hosts (no egress-hosts prompt on the reuse path)
+    # co-located on the livekit hosts, so the reuse path skips the egress-hosts prompt.
     assert "10.0.0.1" in (repo / "meet/prod/egress/hosts").read_text()
-    # livekit's creds mirrored (incl. the external-redis password) into egress vault
     evault = vault.decrypt_to_dict(paths.vault_path("meet", "prod", "egress"))
     assert evault["st_meet_livekit_api_key"] == "real-token"
     assert evault["st_meet_livekit_api_secret"] == "real-secret"
     assert evault["st_meet_livekit_redis_password"] == "real-redis-pass"
-    # no unconsumed scripts (reuse path prompts nothing beyond egress cadvisor)
     assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
 
-    # meet + livekit + egress all registered as managed
     m = manifest.load_manifest()
     by_comp = {u.component: u for u in m.units}
     assert by_comp["meet"].mode == "managed"
@@ -523,57 +395,30 @@ def test_bootstrap_meet_full_reuse_livekit_bundles_egress(repo, monkeypatch):
 
 
 def test_bootstrap_meet_full_deploys_livekit_with_public_host(repo, monkeypatch):
-    """Full `bootstrap meet prod` (no -c): `_ask_core` collects DOMAIN BEFORE the
-    deps loop, so the livekit dep's deploy path runs `_ensure_meet_domain`, sees
-    answers["DOMAIN"] already set, and does NOT re-prompt — ScriptedQuestionary
-    would error on any unscripted "Public domain for meet" prompt. The livekit
-    dep's deploy path BUNDLES egress (egress hosts co-located on the livekit host →
-    local valkey: ``st_meet_livekit_valkey_enabled=True`` and both redis addresses
-    ``127.0.0.1:6379``); livekit's generated api creds are mirrored into egress's
-    own vault. Only the livekit vars.yml (and the meet core env blob) carry
-    `st_meet_public_host == "meet.example.org"` (single source of truth — the role
-    derives every public-facing URL, incl. the LiveKit recording webhook, from it) —
-    egress has no `vars` block of its own, so its vars.yml carries no such key. The
-    core backend env blob carries the verbatim ``{{ st_meet_public_host }}`` ref for
-    DJANGO_ALLOWED_HOSTS / LOGIN_REDIRECT_URL, recording is always on (RECORDING_*
-    env is always emitted, never prompted), and meet + livekit + egress all
-    register as managed."""
+    """`_ask_core` collects DOMAIN before the deps loop, so `_ensure_meet_domain`
+    sees it already set and does not re-prompt "Public domain for meet"."""
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
         meet_first_run_script(smtp=False, db_mode="url", livekit="Yes — bootstrap now")
-        + [
-            ("text", "livekit host(s)", "10.0.0.1"),
-            # egress hosts (bundled into the livekit step) asked right after the
-            # livekit hosts, BEFORE LiveKit domain/TURN: blank → co-locate
-            ("text", "egress (leave blank", ""),
-            (
-                "text",
-                "LiveKit domain (e.g. livekit.example.org)",
-                "livekit.example.org",
-            ),
-            ("text", "LiveKit TURN domain (e.g. turn.example.org)", "turn.example.org"),
-            # NO "Public domain for meet" — _ensure_meet_domain sees DOMAIN set
-            ("confirm", "livekit", True),  # livekit cadvisor
-            ("confirm", "egress", True),  # egress cadvisor (single co-located → valkey)
-        ],
+        # egress hosts bundle into the livekit step, asked right after the
+        # livekit hosts and before LiveKit domain/TURN: blank means co-locate.
+        + livekit_script(host="10.0.0.1"),
     )
 
     bootstrap.bootstrap("meet", "prod")
 
-    # livekit vars.yml: st_meet_public_host derived from DOMAIN (no extra prompt)
     lv = tree.load_vars("meet", "prod", "livekit")
     assert lv["st_meet_livekit_domain"] == "livekit.example.org"
     assert lv["st_meet_livekit_turn_domain"] == "turn.example.org"
     assert lv["st_meet_public_host"] == "meet.example.org"
     assert lv["st_meet_cadvisor_enabled"] is True
-    # bundled redis topology (single co-located node → local valkey)
+    # a single co-located node uses local valkey.
     assert lv["st_meet_livekit_valkey_enabled"] is True
     assert lv["st_meet_livekit_redis_address"] == "127.0.0.1:6379"
 
-    # egress vars.yml + vault.yml written (bundled into the livekit step): egress
-    # adopts the livekit ws domain + the local valkey address (single co-located
-    # node); livekit's generated api creds are mirrored into egress's own vault.
+    # egress bundles into the livekit step: it adopts the livekit ws domain and
+    # local valkey address, and livekit's generated api creds mirror into its vault.
     assert paths.vars_path("meet", "prod", "egress").exists()
     ev = tree.load_vars("meet", "prod", "egress")
     assert ev["st_meet_livekit_domain"] == "livekit.example.org"
@@ -584,11 +429,10 @@ def test_bootstrap_meet_full_deploys_livekit_with_public_host(repo, monkeypatch)
     assert evault["st_meet_livekit_api_key"] == lvault["st_meet_livekit_api_key"]
     assert evault["st_meet_livekit_api_secret"] == lvault["st_meet_livekit_api_secret"]
 
-    # meet core: single source of truth (st_meet_public_host — written into the
-    # core vars.yml from DOMAIN) + LIVEKIT_* refs pulled from the livekit secrets;
-    # recording is unconditionally enabled (no prompt — see _set_meet_recording).
-    # The env blob carries the verbatim {{ st_meet_public_host }} ref (the {{ }}
-    # travels through the answer value; ANSIBLE resolves it at deploy).
+    # st_meet_public_host is the single source of truth, written into the core
+    # vars.yml from DOMAIN; recording is unconditionally enabled, with no prompt.
+    # The env blob carries the verbatim {{ st_meet_public_host }} ref: it travels
+    # through the answer value, and ansible resolves it at deploy.
     core_data = tree.load_vars("meet", "prod", "meet")
     assert core_data["st_meet_public_host"] == "meet.example.org"
     core_vars = (repo / "meet/prod/meet/vars.yml").read_text()
@@ -598,10 +442,9 @@ def test_bootstrap_meet_full_deploys_livekit_with_public_host(repo, monkeypatch)
     assert "LOGIN_REDIRECT_URL=https://{{ st_meet_public_host }}/" in core_vars
     assert "RECORDING_ENABLE=True" in core_vars
 
-    # the _ensure_meet_domain prompt did NOT fire (DOMAIN already set by _ask_core)
+    # DOMAIN is already set by _ask_core, so _ensure_meet_domain does not re-prompt.
     assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
 
-    # meet + livekit + egress all registered as managed
     m = manifest.load_manifest()
     by_comp = {u.component: u for u in m.units}
     assert by_comp["meet"].mode == "managed"
@@ -610,21 +453,8 @@ def test_bootstrap_meet_full_deploys_livekit_with_public_host(repo, monkeypatch)
 
 
 def test_ask_core_meet_always_sets_recording_env(monkeypatch):
-    """`_ask_core` for meet no longer asks anything about recording — it is always
-    on. This test's script contains NOTHING recording-related (no confirm, no
-    RECORDING_OUTPUT_FOLDER text prompt): if a recording prompt is ever
-    reintroduced, ``ScriptedQuestionary`` raises AssertionError on the unexpected
-    prompt and this test fails. That makes it the regression test for the whole
-    "remove both recording prompts" change.
-
-    The answers still carry RECORDING_ENABLE=True, RECORDING_OUTPUT_FOLDER=
-    recordings (now hardcoded, not asked) and RECORDING_DOWNLOAD_BASE_URL pointing
-    at the st_meet_public_host ansible var (single source of truth — same var
-    DJANGO_ALLOWED_HOSTS / the redirects reference; the {{ }} travels verbatim
-    through the answer into the env blob). The rendered meet backend env contains
-    the full RECORDING_* block — incl. RECORDING_STORAGE_EVENT_ENABLE=False
-    (pinning the LiveKit webhook completion path). S3 is reused from the existing
-    _ask_core prompts."""
+    """`_ask_core` for meet asks nothing about recording and always hardcodes
+    RECORDING_ENABLE, RECORDING_OUTPUT_FOLDER, and the RECORDING_* block."""
     script_questionary(
         monkeypatch,
         [
@@ -650,8 +480,9 @@ def test_ask_core_meet_always_sets_recording_env(monkeypatch):
 
     assert answers["RECORDING_ENABLE"] == "True"
     assert answers["RECORDING_OUTPUT_FOLDER"] == "recordings"
-    # the download base URL references the st_meet_public_host ansible var so the
-    # operator changes the domain in ONE place ({{ }} lands verbatim in the env blob).
+    # the download base URL references the st_meet_public_host ansible var, so the
+    # operator changes the domain in one place and the {{ }} lands verbatim in the
+    # env blob.
     assert (
         answers["RECORDING_DOWNLOAD_BASE_URL"]
         == "https://{{ st_meet_public_host }}/recording"
@@ -666,11 +497,42 @@ def test_ask_core_meet_always_sets_recording_env(monkeypatch):
     )
 
 
+def test_ask_core_region_blank_clears_recovered_value_and_warns(monkeypatch, mocker):
+    """A blank AWS_S3_REGION_NAME over a recovered value pops it and warns."""
+    script_questionary(
+        monkeypatch,
+        [
+            ("text", "Public domain for meet", "meet.example.org"),
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("text", "DATABASE_URL", "postgres://meet"),
+            ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.example.org"),
+            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
+            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
+            ("text", "AWS_STORAGE_BUCKET_NAME", "meet-media"),
+            ("text", "AWS_S3_REGION_NAME (optional)", ""),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "meet-client-id"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", False),
+        ],
+    )
+    meta = appmeta.load_app("meet")
+    warn_spy = mocker.patch.object(bootstrap.ui, "warn")
+
+    answers = bootstrap._ask_core(
+        meta, AnsibleVaultBackend(), {"AWS_S3_REGION_NAME": "fr-par"}
+    )
+
+    assert "AWS_S3_REGION_NAME" not in answers
+    assert any("AWS_S3_REGION_NAME" in c.args[0] for c in warn_spy.call_args_list)
+
+
 def test_bootstrap_keycloak_writes_env_blob_and_vault(repo, monkeypatch):
-    """Full `bootstrap keycloak prod` runs the keycloak-specific questionnaire
-    (no DOMAIN/Redis/S3/OIDC prompts): it writes the st_keycloak_env blob with
-    {{ vault_* }} refs for the two passwords, encrypts them into vault.yml,
-    writes the hosts, and registers the keycloak unit."""
+    """`bootstrap keycloak prod` writes the st_keycloak_env blob with
+    {{ vault_* }} refs for the two passwords and registers the unit."""
     seed_creds(repo)
     script_questionary(
         monkeypatch,
@@ -715,11 +577,8 @@ def test_bootstrap_keycloak_writes_env_blob_and_vault(repo, monkeypatch):
 
 
 def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
-    """Full `bootstrap projects prod` runs the projects-specific (non-Django)
-    questionnaire: it writes the st_projects_env blob with OIDC-enforced SSO
-    defaults + {{ vault_* }} refs for every secret (SECRET_KEY, DATABASE_URL, the
-    OIDC client secret, the S3 secret key), encrypts them into vault.yml, writes
-    the hosts, and registers the projects unit."""
+    """`bootstrap projects prod` writes the st_projects_env blob with
+    OIDC-enforced SSO defaults and {{ vault_* }} refs for every secret."""
     seed_creds(repo)
     sq = script_questionary(monkeypatch, projects_first_run_script())
 
@@ -735,8 +594,8 @@ def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
     assert "BASE_URL=https://projects.example.org" in body
     assert "OIDC_ISSUER=https://idp.example.org/realms/st" in body
     assert "OIDC_ENFORCED=true" in body  # SSO only, no local accounts
-    # keycloak keeps the generic OIDC defaults — the ProConnect-only overrides
-    # (signed userinfo, per-claim scopes) must NOT leak into a keycloak setup.
+    # keycloak keeps the generic OIDC defaults: the ProConnect-only overrides for
+    # signed userinfo and per-claim scopes must not leak into a keycloak setup.
     assert "OIDC_SCOPES=openid email profile" in body
     assert "OIDC_FULLNAME_ATTRIBUTES=name" in body
     assert "OIDC_USERINFO_SIGNED_RESPONSE_ALG" not in body
@@ -746,7 +605,7 @@ def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
     assert "OIDC_CLIENT_SECRET={{ vault_oidc_client_secret }}" in body
     assert "S3_SECRET_ACCESS_KEY={{ vault_s3_secret_access_key }}" in body
     assert "SMTP_HOST" not in body  # SMTP declined
-    assert "REDIS_URL" not in body  # scaling declined → single-instance default
+    assert "REDIS_URL" not in body  # scaling declined, single-instance default
     assert "st_projects_enabled" not in body  # enabled flag lives on the deploy task
 
     assert vault.is_encrypted(paths.vault_path("projects", "prod", "projects"))
@@ -778,8 +637,8 @@ def test_bootstrap_component_invalid_raises(repo, monkeypatch):
 
 
 def test_bootstrap_component_workers_not_implemented_raises(repo, monkeypatch):
-    """`--component workers` on meet (workers not implemented) → StCliError
-    listing the valid targets (workers is excluded from the set)."""
+    """`--component workers` on meet raises StCliError because workers is not
+    implemented."""
     seed_creds(repo)
     script_questionary(
         monkeypatch,
@@ -789,19 +648,13 @@ def test_bootstrap_component_workers_not_implemented_raises(repo, monkeypatch):
     )
     with pytest.raises(StCliError, match="valid targets") as exc:
         bootstrap.bootstrap("meet", "prod", component="workers")
-    # workers is not a valid target for meet (not implemented)
     assert "livekit" in str(exc.value)
     assert "meet" in str(exc.value)
 
 
-# --------------------------------------------------------------------------- post-run secrets hint
-
-
 def test_bootstrap_summary_mentions_secrets_for_ansible_vault(repo, monkeypatch, capfd):
-    """The end-of-bootstrap summary mentions `st-cli secrets` for an
-    ansible-vault (app, env) — both the back-up/share reminder and the
-    `st-cli secrets <app> <env>` hint. The intro ui.note is NOT part of the
-    summary, so we split the output at the "Bootstrapped" success line."""
+    """The end-of-bootstrap summary mentions `st-cli secrets` and the
+    .vault-pass reminder for an ansible-vault app and env."""
     seed_creds(repo)
     script_questionary(
         monkeypatch,
@@ -822,8 +675,8 @@ def test_bootstrap_summary_mentions_secrets_for_ansible_vault(repo, monkeypatch,
     bootstrap.bootstrap("keycloak", "prod")
 
     out = capfd.readouterr().out
-    # Isolate the _print_summary output (starts at "Bootstrapped <app>/<env>").
-    # Strip the "Next steps" panel's │ side-borders so wrapped lines rejoin.
+    # The summary starts after "Bootstrapped <app>/<env>.". Strip the panel
+    # side borders to rejoin the wrapped lines.
     summary = out.split("Bootstrapped keycloak/prod.", 1)[1]
     flat = " ".join(summary.replace("│", " ").split())
     assert "Next steps" in flat
@@ -833,10 +686,8 @@ def test_bootstrap_summary_mentions_secrets_for_ansible_vault(repo, monkeypatch,
 
 
 def test_bootstrap_summary_no_secrets_hint_for_hashi_vault(repo, monkeypatch, capfd):
-    """The end-of-bootstrap summary does NOT mention `st-cli secrets` for a
-    hashi_vault (app, env) — secrets live in OpenBao, not a local vault.yml.
-    The intro ui.note (which mentions `st-cli secrets` for all backends) is
-    NOT part of the summary, so we split at the "Bootstrapped" success line."""
+    """The end-of-bootstrap summary omits `st-cli secrets` and .vault-pass for
+    a hashi_vault app and env, because secrets live in OpenBao."""
     seed_creds(repo)
     script_questionary(
         monkeypatch,
@@ -867,54 +718,42 @@ def test_bootstrap_summary_no_secrets_hint_for_hashi_vault(repo, monkeypatch, ca
     bootstrap.bootstrap("keycloak", "prod")
 
     out = capfd.readouterr().out
-    # Isolate the _print_summary output (starts at "Bootstrapped <app>/<env>").
-    # Strip the "Next steps" panel's │ side-borders so wrapped lines rejoin.
+    # The summary starts after "Bootstrapped <app>/<env>.". Strip the panel
+    # side borders to rejoin the wrapped lines.
     summary = out.split("Bootstrapped keycloak/prod.", 1)[1]
     flat = " ".join(summary.replace("│", " ").split())
     assert "st-cli secrets" not in flat
-    # the .vault-pass backup/share step is also absent (no .vault-pass in hashi mode)
+    # hashi mode has no .vault-pass, so the backup/share step is absent too.
     assert ".vault-pass" not in flat
 
 
-# --------------------------------------------------------------------------- optional deps (messages)
-
-
 def test_bootstrap_messages_optional_deps_skippable(repo, monkeypatch):
-    """A full `bootstrap messages prod` lets the operator SKIP the optional
-    `mpa` and `socks-proxy` deps (answer No to the pre-gate confirm). Neither a
-    vars.yml nor a manifest unit is recorded for them; the required `mta-in` dep
-    and the `messages` core are bootstrapped as usual. The operator can add the
-    skipped deps later via `st-cli bootstrap -c <dep>`."""
+    """Declining the optional `mpa` and `socks-proxy` deps registers no
+    vars.yml or manifest unit for them; `mta-in` and the core still bootstrap."""
     seed_creds(repo)
     script_questionary(
         monkeypatch,
         messages_first_run_script()
         + [
-            # deps loop — mta-in (required): take the deploy path
             ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
             ("text", "mta-in host(s)", "10.0.0.7"),
-            # mta-in shared rule is `generate: secret` → auto-generated, no prompt;
-            # the helper now prompts MYHOSTNAME for the mta-in env blob
+            # mta-in's shared rule is `generate: secret`, so no prompt for it;
+            # the helper still prompts MYHOSTNAME for the mta-in env blob.
             ("text", "MYHOSTNAME", "mx.example.org"),
             ("confirm", "cadvisor", True),  # mta-in cadvisor
-            # deps loop — mpa (optional): skip
             ("select", "Bootstrap mpa now?", "No — bootstrap later"),
-            # deps loop — socks-proxy (optional): skip
             ("select", "Bootstrap socks-proxy now?", "No — bootstrap later"),
         ],
     )
 
     bootstrap.bootstrap("messages", "prod")
 
-    # optional deps skipped → no vars.yml written for them
     assert not paths.vars_path("messages", "prod", "mpa").exists()
     assert not paths.vars_path("messages", "prod", "socks-proxy").exists()
 
-    # required dep + core bootstrapped
     assert paths.vars_path("messages", "prod", "mta-in").exists()
     assert paths.vars_path("messages", "prod", "messages").exists()
 
-    # manifest: mta-in + messages registered; mpa / socks-proxy NOT registered
     m = manifest.load_manifest()
     by_comp = {u.component: u for u in m.units}
     assert "mta-in" in by_comp and by_comp["mta-in"].mode == "managed"
@@ -924,31 +763,24 @@ def test_bootstrap_messages_optional_deps_skippable(repo, monkeypatch):
 
 
 def test_bootstrap_messages_provider_vars_deploy(repo, monkeypatch):
-    """Full `bootstrap messages prod` deploying mta-in + mpa + socks-proxy: each
-    provider's st_messages_<comp>_env blob is rendered from the helper-collected
-    answers, the shared MDA_API_SECRET is mirrored into both mta-in's and messages'
-    vaults, mpa's rspamd controller password is generated, and the computed
-    MTA_OUT_DIRECT_PROXIES consumer value (with its vault_proxy_users ref) lands
-    in the messages backend env."""
+    """Deploying mta-in, mpa, and socks-proxy renders each provider's env blob
+    and mirrors its secrets into every vault."""
     seed_creds(repo)
     script_questionary(
         monkeypatch,
         messages_first_run_script()
         + [
-            # deps loop — mta-in (required): deploy
             ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
             ("text", "mta-in host(s)", "10.0.0.7"),
             ("text", "MYHOSTNAME", "mx.example.org"),
             ("confirm", "cadvisor", True),  # mta-in cadvisor
-            # deps loop — mpa (optional): deploy
             ("select", "Bootstrap mpa now?", "Yes — bootstrap now"),
             ("text", "mpa host(s)", "10.0.0.8"),
             (
                 "confirm",
                 "cadvisor",
                 True,
-            ),  # mpa cadvisor (secrets generated, not prompted)
-            # deps loop — socks-proxy (optional): deploy
+            ),  # mpa cadvisor, secrets generated not prompted
             ("select", "Bootstrap socks-proxy now?", "Yes — bootstrap now"),
             ("text", "socks-proxy host(s)", "10.0.0.6"),
             ("text", "PROXY_EXTERNAL", "eth0"),
@@ -959,21 +791,21 @@ def test_bootstrap_messages_provider_vars_deploy(repo, monkeypatch):
 
     bootstrap.bootstrap("messages", "prod")
 
-    # mta-in: env blob rendered from helper-collected answers
     mtain_env = tree.load_vars("messages", "prod", "mta-in")["st_messages_mta_in_env"]
     assert "MDA_API_SECRET={{ vault_mda_api_secret }}" in mtain_env
     assert "MDA_API_BASE_URL=https://messages.example.org/api/v1.0/" in mtain_env
     assert "MYHOSTNAME=mx.example.org" in mtain_env
 
-    # MDA_API_SECRET mirrored into both mta-in's and messages' vaults (same value)
+    # MDA_API_SECRET mirrors into both mta-in's and messages' vaults with the same
+    # value.
     mtain_vault = vault.decrypt_to_dict(paths.vault_path("messages", "prod", "mta-in"))
     msgs_vault = vault.decrypt_to_dict(paths.vault_path("messages", "prod", "messages"))
     assert "vault_mda_api_secret" in mtain_vault
     assert "vault_mda_api_secret" in msgs_vault
     assert mtain_vault["vault_mda_api_secret"] == msgs_vault["vault_mda_api_secret"]
 
-    # mpa: secrets follow the vault-ref split — vars.yml carries {{ vault_mpa_* }}
-    # refs, the real values live under vault_mpa_* in mpa's vault.yml.
+    # mpa secrets follow the vault-ref split: vars.yml carries {{ vault_mpa_* }}
+    # refs, and the real values live under vault_mpa_* in mpa's vault.yml.
     mpa_vars = tree.load_vars("messages", "prod", "mpa")
     assert mpa_vars["st_messages_mpa_auth_bearer"] == "{{ vault_mpa_auth_bearer }}"
     assert (
@@ -984,7 +816,6 @@ def test_bootstrap_messages_provider_vars_deploy(repo, monkeypatch):
     assert "vault_mpa_auth_bearer" in mpa_vault
     assert "vault_mpa_rspamd_controller_password" in mpa_vault
 
-    # socks-proxy: env blob rendered from helper-collected answers
     sp_env = tree.load_vars("messages", "prod", "socks-proxy")[
         "st_messages_socks_proxy_env"
     ]
@@ -997,7 +828,6 @@ def test_bootstrap_messages_provider_vars_deploy(repo, monkeypatch):
     assert "vault_proxy_users" in sp_vault
     assert sp_vault["vault_proxy_users"].startswith("messages:")
 
-    # messages backend: computed MTA_OUT_DIRECT_PROXIES with vault_proxy_users ref
     core_vars = (repo / "messages/prod/messages/vars.yml").read_text()
     assert (
         "MTA_OUT_DIRECT_PROXIES=socks5s://{{ vault_proxy_users }}@10.0.0.6:50405"
@@ -1005,40 +835,34 @@ def test_bootstrap_messages_provider_vars_deploy(repo, monkeypatch):
     )
     assert "vault_proxy_users" in msgs_vault
 
-    # messages backend: computed SPAM_CONFIG JSON (mpa deployed on a single host →
-    # no LB prompt; rspamd_url embeds the mpa host + the role-default caddy port ref,
-    # rspamd_auth embeds the mirrored bearer ref resolved from the messages vault).
+    # a single mpa host needs no LB prompt: rspamd_url embeds the mpa host and the
+    # role-default caddy port ref, and rspamd_auth embeds the mirrored bearer ref.
     assert (
         'SPAM_CONFIG={"rspamd_url": "http://10.0.0.8:{{ st_messages_mpa_caddy_port }}", '
         '"rspamd_auth": "Bearer {{ vault_mpa_auth_bearer }}", '
         '"inbound_auth": "rspamd"}' in core_vars
     )
 
-    # the auth bearer is mirrored into the messages vault under the same
-    # vault_mpa_auth_bearer name (so the {{ vault_mpa_auth_bearer }} ref in
-    # SPAM_CONFIG resolves there) and equals the value in the mpa vault.
+    # the auth bearer mirrors into the messages vault under the same name, so the
+    # SPAM_CONFIG ref resolves there and equals the value in the mpa vault.
     assert "vault_mpa_auth_bearer" in msgs_vault
     assert msgs_vault["vault_mpa_auth_bearer"] == mpa_vault["vault_mpa_auth_bearer"]
 
 
 def test_bootstrap_messages_mta_in_standalone_prompts_mda_api_secret(repo, monkeypatch):
-    """`bootstrap messages prod -c mta-in` with NO existing messages core vault
-    prompts the operator for MDA_API_SECRET (the core-owned secret is unavailable
-    before the core is bootstrapped) and routes it through the backend so the
-    resulting mta-in vars.yml carries a real {{ vault_mda_api_secret }} ref and
-    the mta-in vault.yml holds the prompted value — NOT a literal
-    'MDA_API_SECRET={MDA_API_SECRET}' placeholder leaking into the committed tree.
-    Regression guard for the silent-skip bug in the ansible-vault branch."""
+    """`-c mta-in` with no existing messages core vault prompts the operator
+    for MDA_API_SECRET instead of leaking a literal placeholder into vars.yml."""
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
         [
             ("select", "Secret backend:", "ansible-vault"),
             ("text", "mta-in host(s)", "10.0.0.7"),
-            # standalone -c mta-in → answers["DOMAIN"] unset → prompt for it
+            # standalone -c mta-in leaves answers["DOMAIN"] unset, so it prompts.
             ("text", "Public domain for messages", "messages.example.org"),
             ("text", "MYHOSTNAME", "mx.example.org"),
-            # NO core vault on disk → MDA_API_SECRET prompt (the fix)
+            # no core vault on disk, so MDA_API_SECRET is prompted, not leaked as a
+            # placeholder.
             ("password", "MDA_API_SECRET", "shared-secret-from-core"),
             ("confirm", "cadvisor", True),  # mta-in cadvisor
         ],
@@ -1046,28 +870,23 @@ def test_bootstrap_messages_mta_in_standalone_prompts_mda_api_secret(repo, monke
 
     bootstrap.bootstrap("messages", "prod", component="mta-in")
 
-    # mta-in vars.yml: env blob carries a real {{ vault_mda_api_secret }} ref
-    # (NOT the literal 'MDA_API_SECRET={MDA_API_SECRET}' placeholder that the
-    # silent-skip bug left behind when answers[MDA_API_SECRET] was never set).
+    # the env blob carries a real {{ vault_mda_api_secret }} ref, not the literal
+    # placeholder a silent-skip regression would leave behind.
     mtain_env = tree.load_vars("messages", "prod", "mta-in")["st_messages_mta_in_env"]
     assert "MDA_API_SECRET={{ vault_mda_api_secret }}" in mtain_env
     assert "{MDA_API_SECRET}" not in mtain_env
     assert "MDA_API_BASE_URL=https://messages.example.org/api/v1.0/" in mtain_env
     assert "MYHOSTNAME=mx.example.org" in mtain_env
 
-    # mta-in vault.yml: the prompted value is stored under vault_mda_api_secret
     assert vault.is_encrypted(paths.vault_path("messages", "prod", "mta-in"))
     mtain_vault = vault.decrypt_to_dict(paths.vault_path("messages", "prod", "mta-in"))
     assert mtain_vault["vault_mda_api_secret"] == "shared-secret-from-core"
 
-    # every scripted answer was consumed — the MDA_API_SECRET password prompt
-    # was actually issued (a regression-skip would leave this script leftover).
+    # a regression that skips the prompt would leave this script unconsumed.
     assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
 
-    # messages core unit NOT written (standalone -c mta-in)
     assert not paths.vars_path("messages", "prod", "messages").exists()
 
-    # manifest: only mta-in registered
     m = manifest.load_manifest()
     assert [u.component for u in m.units] == ["mta-in"]
     assert m.units[0].mode == "managed"
@@ -1076,14 +895,8 @@ def test_bootstrap_messages_mta_in_standalone_prompts_mda_api_secret(repo, monke
 def test_bootstrap_messages_socks_proxy_hashi_vault_derives_mta_proxies(
     repo, monkeypatch
 ):
-    """hashi_vault `bootstrap messages prod` deploying socks-proxy derives
-    MTA_OUT_DIRECT_PROXIES from the PROXY_USERS lookup term instead of prompting
-    for it (the ansible-vault bug). The messages core env blob carries a
-    self-contained OpenBao lookup embedded in each socks5s:// URL, no vault.yml
-    is written for socks-proxy (reference-only), and exactly one OpenBao lookup
-    for PROXY_USERS is prompted (the ScriptedQuestionary errors on any
-    unexpected/mismatched prompt, so not scripting MTA_OUT_DIRECT_PROXIES is the
-    regression guard)."""
+    """hashi_vault socks-proxy derives MTA_OUT_DIRECT_PROXIES from the
+    PROXY_USERS lookup term instead of prompting for it."""
     seed_creds(repo)
     script_questionary(
         monkeypatch,
@@ -1091,10 +904,9 @@ def test_bootstrap_messages_socks_proxy_hashi_vault_derives_mta_proxies(
             ("select", "Secret backend:", "hashi_vault (OpenBao)"),
             ("text", "OpenBao / Vault URL", "https://vault.example:8200"),
             ("confirm", "Skip TLS verification?", False),
-            # core hosts + optional worker-hosts prompt (messages has workers)
+            # messages has workers, so the core hosts step adds an optional prompt.
             ("text", "messages host(s)", "10.0.0.4"),
             ("text", "workers (leave blank", ""),
-            # core questionnaire (_ask_core, messages)
             ("text", "Public domain for messages", "messages.example.org"),
             (
                 "text",
@@ -1118,7 +930,8 @@ def test_bootstrap_messages_socks_proxy_hashi_vault_derives_mta_proxies(
                 "SALT_KEY",
                 "@openbao(kv/data/messages:salt_key)",
             ),
-            # messages-only S3: imports bucket (always) + blobs offload (declined)
+            # messages-only S3: the imports bucket always prompts, blobs offload here
+            # declines.
             ("text", "STORAGE_MESSAGE_IMPORTS_ENDPOINT_URL", "https://s3.example.org"),
             ("text", "STORAGE_MESSAGE_IMPORTS_BUCKET_NAME", "msg-imports"),
             ("text", "STORAGE_MESSAGE_IMPORTS_ACCESS_KEY", "impkey"),
@@ -1142,13 +955,11 @@ def test_bootstrap_messages_socks_proxy_hashi_vault_derives_mta_proxies(
                 "@openbao(kv/data/messages:oidc_secret)",
             ),
             ("select", "Outbound mail mode", "direct"),
-            ("confirm", "cadvisor", True),  # core cadvisor (last core question)
-            # deps loop — mta-in (required): deploy
+            ("confirm", "cadvisor", True),  # core cadvisor, last core question
             ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
             ("text", "mta-in host(s)", "10.0.0.7"),
             ("text", "MYHOSTNAME", "mx.example.org"),
             ("confirm", "cadvisor", True),  # mta-in cadvisor
-            # deps loop — mpa (optional): deploy
             ("select", "Bootstrap mpa now?", "Yes — bootstrap now"),
             ("text", "mpa host(s)", "10.0.0.8"),
             (
@@ -1162,12 +973,11 @@ def test_bootstrap_messages_socks_proxy_hashi_vault_derives_mta_proxies(
                 "@openbao(kv/data/messages:mpa_rspamd_controller_password)",
             ),
             ("confirm", "cadvisor", True),  # mpa cadvisor
-            # deps loop — socks-proxy (optional): deploy
             ("select", "Bootstrap socks-proxy now?", "Yes — bootstrap now"),
             ("text", "socks-proxy host(s)", "10.0.0.6"),
             ("text", "PROXY_EXTERNAL", "eth0"),
             ("text", "PROXY_INTERNAL_PORT", "50405"),
-            # exactly one PROXY_USERS — NO MTA_OUT_DIRECT_PROXIES
+            # exactly one PROXY_USERS prompt fires; MTA_OUT_DIRECT_PROXIES is derived.
             ("text", "PROXY_USERS", "@openbao(kv/data/messages:proxy_users)"),
             ("confirm", "cadvisor", True),  # socks-proxy cadvisor
         ],
@@ -1175,7 +985,6 @@ def test_bootstrap_messages_socks_proxy_hashi_vault_derives_mta_proxies(
 
     bootstrap.bootstrap("messages", "prod")
 
-    # socks-proxy: env blob rendered with the PROXY_USERS OpenBao lookup ref
     sp_env = tree.load_vars("messages", "prod", "socks-proxy")[
         "st_messages_socks_proxy_env"
     ]
@@ -1186,20 +995,18 @@ def test_bootstrap_messages_socks_proxy_hashi_vault_derives_mta_proxies(
         "'kv/data/messages:proxy_users') }}" in sp_env
     )
 
-    # no vault.yml for socks-proxy (hashi is reference-only)
+    # hashi_vault is reference-only, so socks-proxy gets no vault.yml.
     assert not paths.vault_path("messages", "prod", "socks-proxy").exists()
 
-    # messages core: derived MTA_OUT_DIRECT_PROXIES embedding the SAME PROXY_USERS
-    # lookup term (never prompted in hashi mode — derived from answers["PROXY_USERS"]).
+    # the same PROXY_USERS lookup term is derived from answers, never re-prompted.
     core_vars = (repo / "messages/prod/messages/vars.yml").read_text()
     assert (
         "MTA_OUT_DIRECT_PROXIES=socks5s://{{ lookup('community.hashi_vault.hashi_vault', "
         "'kv/data/messages:proxy_users') }}@10.0.0.6:50405" in core_vars
     )
 
-    # messages core: SPAM_CONFIG is CONSTRUCTED (never prompted) — single mpa host
-    # derives the rspamd_url and the auth bearer is the SAME OpenBao lookup ref
-    # entered for st_messages_mpa_auth_bearer.
+    # SPAM_CONFIG is constructed, never prompted: a single mpa host derives the
+    # rspamd_url, and the auth bearer reuses the st_messages_mpa_auth_bearer lookup.
     assert (
         'SPAM_CONFIG={"rspamd_url": "http://10.0.0.8:{{ st_messages_mpa_caddy_port }}", '
         '"rspamd_auth": "Bearer {{ lookup(\'community.hashi_vault.hashi_vault\', '
@@ -1209,31 +1016,24 @@ def test_bootstrap_messages_socks_proxy_hashi_vault_derives_mta_proxies(
 
 
 def test_bootstrap_messages_storage_blobs_offload(repo, monkeypatch):
-    """`bootstrap messages prod` with blobs offload enabled: the imports bucket
-    vars are always prompted, the blobs offload bucket + MESSAGES_BLOBS_OFFLOAD_ENABLED
-    + MESSAGES_BLOBS_ENCRYPT_KEYS (with its vault ref) land in the messages backend
-    env, and the three secrets (imports secret, blobs secret, blobs encrypt key) are
-    written to the messages vault (the encrypt key generated ≥32 chars)."""
+    """Blobs offload enabled writes the offload bucket, MESSAGES_BLOBS_OFFLOAD_ENABLED
+    and MESSAGES_BLOBS_ENCRYPT_KEYS, plus the three secrets to the vault."""
     seed_creds(repo)
     script_questionary(
         monkeypatch,
         messages_first_run_script(blobs_offload=True)
         + [
-            # deps loop — mta-in (required): take the deploy path
             ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
             ("text", "mta-in host(s)", "10.0.0.7"),
             ("text", "MYHOSTNAME", "mx.example.org"),
             ("confirm", "cadvisor", True),  # mta-in cadvisor
-            # deps loop — mpa (optional): skip
             ("select", "Bootstrap mpa now?", "No — bootstrap later"),
-            # deps loop — socks-proxy (optional): skip
             ("select", "Bootstrap socks-proxy now?", "No — bootstrap later"),
         ],
     )
 
     bootstrap.bootstrap("messages", "prod")
 
-    # messages backend vars.yml: imports bucket + blobs offload + encrypt keys
     core_vars = (repo / "messages/prod/messages/vars.yml").read_text()
     assert "STORAGE_MESSAGE_IMPORTS_ENDPOINT_URL=https://s3.example.org" in core_vars
     assert "STORAGE_MESSAGE_IMPORTS_BUCKET_NAME=msg-imports" in core_vars
@@ -1253,11 +1053,10 @@ def test_bootstrap_messages_storage_blobs_offload(repo, monkeypatch):
         in core_vars
     )
     assert "SALT_KEY={{ vault_salt_key }}" in core_vars
-    # OPENSEARCH_URL is mandatory — always rendered into the messages backend env.
+    # OPENSEARCH_URL is mandatory: it always renders into the messages backend env.
     assert "OPENSEARCH_URL=http://opensearch:9200" in core_vars
     assert "MESSAGES_TECHNICAL_DOMAIN=mail.example.org" in core_vars
 
-    # messages vault: the three secrets (imports secret, blobs secret, encrypt key)
     msgs_vault = vault.decrypt_to_dict(paths.vault_path("messages", "prod", "messages"))
     assert "vault_storage_message_imports_secret_key" in msgs_vault
     assert msgs_vault["vault_storage_message_imports_secret_key"] == "impsecret"
@@ -1269,62 +1068,47 @@ def test_bootstrap_messages_storage_blobs_offload(repo, monkeypatch):
 
 
 def test_bootstrap_messages_relay_outbound_mode(repo, monkeypatch):
-    """`bootstrap messages prod` in relay outbound mode: the MTA_OUT_MODE select
-    (asked at the end of _ask_core, after email, before the core cadvisor confirm)
-    collects the external SMTP smarthost host + optional credentials and routes
-    the password through the ansible-vault backend. Relay mode SUPPRESSES the
-    socks-proxy dependency prompt (egress is the smarthost, not socks-proxy), so
-    no socks-proxy prompt is scripted — ScriptedQuestionary errors on any
-    unscripted prompt, which is the regression guard for the skip. mta-in and mpa
-    are still bootstrapped as in the full deploy flow."""
+    """Relay outbound mode collects the SMTP smarthost + credentials and
+    suppresses the socks-proxy dependency prompt entirely."""
     seed_creds(repo)
     script_questionary(
         monkeypatch,
         messages_first_run_script(outbound="relay")
         + [
-            # deps loop — mta-in (required): deploy
             ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
             ("text", "mta-in host(s)", "10.0.0.7"),
             ("text", "MYHOSTNAME", "mx.example.org"),
             ("confirm", "cadvisor", True),  # mta-in cadvisor
-            # deps loop — mpa (optional): deploy
             ("select", "Bootstrap mpa now?", "Yes — bootstrap now"),
             ("text", "mpa host(s)", "10.0.0.8"),
-            ("confirm", "cadvisor", True),  # mpa cadvisor (secrets generated)
-            # deps loop — socks-proxy (optional): SKIPPED in relay mode — NOT scripted
-            # (ScriptedQuestionary would error if the relay-mode skip regressed).
+            ("confirm", "cadvisor", True),  # mpa cadvisor, secrets are generated
+            # relay mode skips the socks-proxy select; script_questionary errors
+            # on any unscripted prompt, so a regression would fail loudly here.
         ],
     )
 
     bootstrap.bootstrap("messages", "prod")
 
-    # messages core vars.yml: the relay outbound env vars land in the
-    # st_messages_backend_env blob (DIRECT mode would emit none of these).
     core_vars = (repo / "messages/prod/messages/vars.yml").read_text()
     assert "MTA_OUT_MODE=relay" in core_vars
     assert "MTA_OUT_RELAY_HOST=smtp.example.org:587" in core_vars
     assert "MTA_OUT_RELAY_USERNAME=relayuser" in core_vars
     assert "MTA_OUT_RELAY_PASSWORD={{ vault_mta_out_relay_password }}" in core_vars
 
-    # relay mode suppresses socks-proxy: no socks-proxy unit vars written, and no
-    # MTA_OUT_DIRECT_PROXIES (that var is computed by the socks-proxy helper).
+    # relay mode suppresses socks-proxy: no unit vars, and no MTA_OUT_DIRECT_PROXIES,
+    # since only the socks-proxy helper computes that var.
     assert not paths.vars_path("messages", "prod", "socks-proxy").exists()
     assert "MTA_OUT_DIRECT_PROXIES" not in core_vars
 
-    # messages vault: the relay password is routed through the backend.
     msgs_vault = vault.decrypt_to_dict(paths.vault_path("messages", "prod", "messages"))
     assert "vault_mta_out_relay_password" in msgs_vault
 
 
-# --------------------------------------------------------------------------- pre-questionnaire intro guidance
-
-
 def test_bootstrap_intro_guidance_for_core_not_provider(repo, monkeypatch, capfd):
-    """Pre-questionnaire guidance (arch-docs URL + a 'Requirements' checklist with
-    the ProConnect pointer) is printed before the 'Bootstrapped' line for a full/
-    core/workers run, and is ABSENT for a provider-only `-c <provider>` run."""
+    """Pre-questionnaire guidance is printed for a full/core/workers run, and
+    is absent for a provider-only `-c <provider>` run."""
     seed_creds(repo)
-    # --- part 1: keycloak full run → guidance present before "Bootstrapped" ---
+    # keycloak full run: guidance appears before "Bootstrapped".
     script_questionary(
         monkeypatch,
         [
@@ -1348,38 +1132,20 @@ def test_bootstrap_intro_guidance_for_core_not_provider(repo, monkeypatch, capfd
     flat = " ".join(intro.replace("│", " ").split())
     assert "st-ansible/tree/main/docs/02-keycloak" in flat
     assert "Requirements" in flat
-    # The checklist is app-aware (apps/<app>.yml `requires`): keycloak needs only
-    # a database — it IS the identity provider, and uses no Redis/S3 — so the
-    # OIDC/ProConnect pointer and the Redis/S3 lines must NOT be shown here.
+    # the checklist is app-aware, from apps/<app>.yml `requires`: keycloak needs
+    # only a database, is itself the identity provider, and uses no Redis or S3.
     assert "PostgreSQL" in flat
     assert "partenaires.proconnect.gouv.fr" not in flat
     assert "Redis" not in flat and "S3" not in flat
 
-    # --- part 2: meet livekit provider run → guidance absent ---
+    # meet livekit provider run: guidance is absent.
     script_questionary(
         monkeypatch,
         [
             ("select", "Secret backend:", "ansible-vault"),
-            ("text", "livekit host(s)", "10.0.0.1"),
-            # egress hosts (bundled into the livekit step) asked right after the
-            # livekit hosts, BEFORE LiveKit domain/TURN: blank → co-locate
-            ("text", "egress (leave blank", ""),
-            (
-                "text",
-                "LiveKit domain (e.g. livekit.example.org)",
-                "livekit.example.org",
-            ),
-            ("text", "LiveKit TURN domain (e.g. turn.example.org)", "turn.example.org"),
-            # standalone -c livekit → _ensure_meet_domain prompts DOMAIN for the
-            # livekit unit's st_meet_public_host (no _ask_core here, so DOMAIN
-            # isn't set yet).
-            (
-                "text",
-                "Public domain for meet (for the LiveKit recording webhook)",
-                "meet.example.org",
-            ),
-            ("confirm", "livekit", True),  # livekit cadvisor
-            ("confirm", "egress", True),  # egress cadvisor (single co-located → valkey)
+            # standalone -c livekit runs no _ask_core, so DOMAIN is unset and
+            # _ensure_meet_domain prompts for it to build st_meet_public_host.
+            *livekit_script(host="10.0.0.1", public_domain=True),
         ],
     )
     bootstrap.bootstrap("meet", "prod", component="livekit")
@@ -1391,9 +1157,7 @@ def test_bootstrap_intro_guidance_for_core_not_provider(repo, monkeypatch, capfd
 
 
 def test_confirm_ready_gate_aborts_on_decline_or_interrupt(monkeypatch):
-    """The pre-questionnaire readiness gate is a yes/no confirm: 'yes' continues,
-    while declining (False) or Ctrl+C/EOF (None from .ask()) raises StCliError so
-    the whole run aborts instead of half-preparing the questionnaire."""
+    """Declining the readiness gate, or Ctrl+C/EOF, raises StCliError."""
 
     class _Q:
         def __init__(self, ans):
@@ -1402,37 +1166,24 @@ def test_confirm_ready_gate_aborts_on_decline_or_interrupt(monkeypatch):
         def ask(self):
             return self._ans
 
-    # yes → no raise (continues)
+    # a yes answer does not raise.
     monkeypatch.setattr(prompts.questionary, "confirm", lambda *a, **k: _Q(True))
     prompts._confirm_ready("ready?")
 
-    # decline (n) → abort
+    # a no answer aborts.
     monkeypatch.setattr(prompts.questionary, "confirm", lambda *a, **k: _Q(False))
     with pytest.raises(StCliError):
         prompts._confirm_ready("ready?")
 
-    # Ctrl+C / EOF → .ask() returns None → abort
+    # Ctrl+C or EOF makes .ask() return None, which also aborts.
     monkeypatch.setattr(prompts.questionary, "confirm", lambda *a, **k: _Q(None))
     with pytest.raises(StCliError):
         prompts._confirm_ready("ready?")
 
 
-# --------------------------------------------------------------------------- core answers: LOGIN_REDIRECT_URL_FAILURE
-
-
 def test_ask_core_sets_login_redirect_url_failure_for_non_drive(monkeypatch):
-    """`_ask_core` sets LOGIN_REDIRECT_URL_FAILURE so the OIDC login "failure"
-    redirect resolves to https://<domain>/ instead of the literal string None
-    (browser → /api/v1.0/callback/None → 404). meet now HAS an override, like
-    drive: the meet branch reassigns LOGIN_REDIRECT_URL(_FAILURE) (and the
-    DJANGO_ALLOWED_HOSTS / CORS / logout redirect) to the st_meet_public_host
-    ansible var — single source of truth, mirroring drive's st_drive_public_host
-    override. The answer VALUE is the literal `https://{{ st_meet_public_host }}/`
-    string; the env template emits it via answers.SOMEKEY so the {{ }} lands
-    verbatim in the env blob and ANSIBLE resolves it at deploy. This test covers
-    the meet override path; drive is unaffected (its own override uses
-    st_drive_public_host), and messages (the actual no-override non-drive case)
-    is covered by its own _ask_core tests."""
+    """`_ask_core` sets LOGIN_REDIRECT_URL_FAILURE so the failed OIDC login
+    redirects to https://<domain>/ instead of the literal string None."""
     script_questionary(
         monkeypatch,
         [
@@ -1456,53 +1207,40 @@ def test_ask_core_sets_login_redirect_url_failure_for_non_drive(monkeypatch):
     meta = appmeta.load_app("meet")
     answers = bootstrap._ask_core(meta, AnsibleVaultBackend())
 
-    # meet reassigns the redirect URLs to the st_meet_public_host ansible var
-    # (single source of truth); the {{ }} travels verbatim through the answer so
-    # ANSIBLE resolves it at deploy from the core vars.yml (which lands the literal
-    # DOMAIN). DJANGO_ALLOWED_HOSTS + CSRF/CORS origins get the same treatment.
+    # meet reassigns the redirect URLs to the st_meet_public_host ansible var, the
+    # single source of truth, mirroring drive's st_drive_public_host override.
+    # DJANGO_ALLOWED_HOSTS and the CSRF/CORS origins get the same treatment.
     assert answers["LOGIN_REDIRECT_URL"] == "https://{{ st_meet_public_host }}/"
     assert answers["LOGIN_REDIRECT_URL_FAILURE"] == "https://{{ st_meet_public_host }}/"
     assert answers["DJANGO_ALLOWED_HOSTS"] == "{{ st_meet_public_host }}"
 
-    # the rendered meet backend env blob emits the verbatim var-ref (the env
-    # template prints answers.SOMEKEY, so the {{ }} is not re-evaluated by jinja2)
+    # the env template prints answers.SOMEKEY verbatim, so jinja2 does not
+    # re-evaluate the {{ }} ref; ansible resolves it at deploy.
     body = envrender.render_env("meet", "meet", answers)["st_meet_backend_env"]
     assert "LOGIN_REDIRECT_URL=https://{{ st_meet_public_host }}/" in body
     assert "LOGIN_REDIRECT_URL_FAILURE=https://{{ st_meet_public_host }}/" in body
-    # recording is always on now (no confirm) → RECORDING_* lines are always
-    # present in the rendered env
     assert "RECORDING_ENABLE=True" in body
 
 
-# --------------------------------------------------------------------------- docs / yprovider
-
-
 def test_bootstrap_docs_full_deploys_yprovider(repo, monkeypatch):
-    """Full `bootstrap docs prod` (no -c) deploying yprovider on a single host:
-    the docs core generates COLLABORATION_SERVER_SECRET / Y_PROVIDER_API_KEY (never
-    prompted) and the yprovider deploy path mirrors them into its own vault WITHOUT
-    re-prompting (the core's backend buffer already holds the values); a single
-    yprovider host keeps a real host:port endpoint (not co-located with the core) and the
-    endpoints list lands in the core vars.yml via `_core_extra_vars` (computed, not
-    a str.format placeholder). Configuring SMTP also exercises the docs-only
-    DJANGO_EMAIL_LOGO_IMG / DJANGO_EMAIL_URL_APP derivation."""
+    """Full `bootstrap docs prod` deploying yprovider on a single host generates
+    and mirrors the shared secrets without re-prompting for them."""
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
         docs_first_run_script(smtp=True, yprovider="Yes — bootstrap now")
         + [
             ("text", "yprovider host(s)", "10.0.0.9"),
-            # NO "Public domain for docs" — _ensure_docs_domain sees DOMAIN set
-            # NO secret prompts — mirrored straight from the core's buffer
+            # no "Public domain for docs" prompt: _ensure_domain sees DOMAIN set.
+            # no secret prompts: they mirror straight from the core's buffer.
             ("confirm", "cadvisor", True),  # yprovider cadvisor
         ],
     )
 
     bootstrap.bootstrap("docs", "prod")
 
-    # docs core vars.yml: public host + the computed caddy upstream list, an env
-    # value in the caddy blob (caddy expands {$CADDY_YPROVIDER_ENDPOINTS} at
-    # parse time), NOT an ansible var.
+    # caddy expands {$CADDY_YPROVIDER_ENDPOINTS} at parse time, so the endpoint
+    # list lands in the caddy env blob, not as an ansible var.
     core_data = tree.load_vars("docs", "prod", "docs")
     assert core_data["st_docs_public_host"] == "docs.example.org"
     assert "st_docs_yprovider_endpoints" not in core_data
@@ -1511,7 +1249,7 @@ def test_bootstrap_docs_full_deploys_yprovider(repo, monkeypatch):
     )
 
     core_vars = (repo / "docs/prod/docs/vars.yml").read_text()
-    # the upstream docs Django package is "impress", not "docs"
+    # the upstream docs Django package is named "impress", not "docs".
     assert "DJANGO_SETTINGS_MODULE=impress.settings" in core_vars
     assert "DJANGO_SETTINGS_MODULE=docs.settings" not in core_vars
     assert "DJANGO_ALLOWED_HOSTS={{ st_docs_public_host }}" in core_vars
@@ -1531,13 +1269,10 @@ def test_bootstrap_docs_full_deploys_yprovider(repo, monkeypatch):
         in core_vars
     )
     assert "Y_PROVIDER_API_KEY={{ vault_y_provider_api_key }}" in core_vars
-    # backend-only conversion base URL — the first yprovider endpoint
     assert "Y_PROVIDER_API_BASE_URL=http://10.0.0.9:50601/api/" in core_vars
     assert "# Backend-only (the browser never calls it)" in core_vars
-    # the import feature is on by default — docspec ships in the core compose
     assert "CONVERSION_UPLOAD_ENABLED=true" in core_vars
     assert "DOCSPEC_API_URL=http://docspec:4000/conversion" in core_vars
-    # docs-only email derivations (SMTP was configured above)
     assert (
         "DJANGO_EMAIL_LOGO_IMG=https://{{ st_docs_public_host }}"
         "/assets/logo-suite-numerique.png" in core_vars
@@ -1548,7 +1283,6 @@ def test_bootstrap_docs_full_deploys_yprovider(repo, monkeypatch):
     assert "vault_collaboration_server_secret" in core_vault
     assert "vault_y_provider_api_key" in core_vault
 
-    # yprovider vars.yml: the manifest vars literal renders with the mirrored refs
     yp_env = tree.load_vars("docs", "prod", "yprovider")["st_docs_yprovider_env"]
     assert "COLLABORATION_SERVER_SECRET={{ vault_collaboration_server_secret }}" in (
         yp_env
@@ -1558,7 +1292,7 @@ def test_bootstrap_docs_full_deploys_yprovider(repo, monkeypatch):
     assert "Y_PROVIDER_API_KEY={{ vault_y_provider_api_key }}" in yp_env
     assert "COLLABORATION_LOGGING=true" in yp_env
 
-    # the secrets mirrored into yprovider's own vault EQUAL the core's values
+    # the secrets mirrored into yprovider's own vault equal the core's values.
     yp_vault = vault.decrypt_to_dict(paths.vault_path("docs", "prod", "yprovider"))
     assert (
         yp_vault["vault_collaboration_server_secret"]
@@ -1578,10 +1312,8 @@ def test_bootstrap_docs_full_deploys_yprovider(repo, monkeypatch):
 
 
 def test_bootstrap_docs_yprovider_standalone_prompts_secrets(repo, monkeypatch):
-    """`bootstrap docs prod -c yprovider` with NO existing docs core prompts DOMAIN
-    (_ensure_docs_domain) and both core-owned secrets (no core buffer, no core
-    vault on disk yet) — mirrors
-    test_bootstrap_messages_mta_in_standalone_prompts_mda_api_secret."""
+    """`bootstrap docs prod -c yprovider` with no existing docs core prompts
+    DOMAIN and both core-owned secrets."""
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
@@ -1626,12 +1358,9 @@ def test_bootstrap_docs_yprovider_standalone_prompts_secrets(repo, monkeypatch):
 
 
 def test_bootstrap_docs_reuse_yprovider_adopts_kept_secrets(repo, monkeypatch):
-    """Full `bootstrap docs prod` REUSING an existing yprovider unit: the core
-    must ADOPT the kept unit's vault values (COLLABORATION_SERVER_SECRET /
-    Y_PROVIDER_API_KEY) — _ask_core generates fresh ones, and keeping those
-    would diverge from the reused unit and break the backend↔yprovider auth.
-    The endpoints list rebuilds from the kept unit's
-    hosts file (single host → direct URL, no LB prompt, no secret prompts)."""
+    """Reusing an existing yprovider unit makes the docs core adopt its kept
+    COLLABORATION_SERVER_SECRET and Y_PROVIDER_API_KEY instead of generating fresh ones.
+    """
     seed_docs_yprovider_unit(repo)
     yp_vault_before = (repo / "docs/prod/yprovider/vault.yml").read_bytes()
     sq = script_questionary(
@@ -1643,18 +1372,16 @@ def test_bootstrap_docs_reuse_yprovider_adopts_kept_secrets(repo, monkeypatch):
 
     bootstrap.bootstrap("docs", "prod")
 
-    # core vault adopted the KEPT unit's values, not freshly generated ones
     core_vault = vault.decrypt_to_dict(paths.vault_path("docs", "prod", "docs"))
     assert core_vault["vault_collaboration_server_secret"] == "kept-collab-secret"
     assert core_vault["vault_y_provider_api_key"] == "kept-yprovider-key"
 
-    # computed core values rebuilt from the kept unit's hosts file
+    # the computed core values rebuild from the kept unit's hosts file.
     core_data = tree.load_vars("docs", "prod", "docs")
     assert (
         "CADDY_YPROVIDER_ENDPOINTS=10.0.0.9:50601" in (core_data["st_docs_caddy_env"])
     )
     core_vars = (repo / "docs/prod/docs/vars.yml").read_text()
-    # backend-only conversion base URL — the first yprovider endpoint
     assert "Y_PROVIDER_API_BASE_URL=http://10.0.0.9:50601/api/" in core_vars
     assert "# Backend-only (the browser never calls it)" in core_vars
 
@@ -1669,12 +1396,8 @@ def test_bootstrap_docs_reuse_yprovider_adopts_kept_secrets(repo, monkeypatch):
 
 
 def test_bootstrap_docs_yprovider_external_prompts_endpoints(repo, monkeypatch):
-    """`bootstrap docs prod` with an EXTERNAL yprovider ("Already deployed"):
-    the prompt asks for the endpoints (comma-separated, joined with spaces for
-    the caddy upstream list), Y_PROVIDER_API_BASE_URL, and the two secrets
-    COLLABORATION_SERVER_SECRET / Y_PROVIDER_API_KEY. These prompted secrets
-    OVERWRITE the values _ask_core generated. No yprovider unit is written;
-    the manifest records yprovider with mode "external"."""
+    """An external yprovider prompts for its endpoints, base URL, and secrets,
+    which overwrite the values `_ask_core` generated."""
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
@@ -1706,7 +1429,6 @@ def test_bootstrap_docs_yprovider_external_prompts_endpoints(repo, monkeypatch):
     core_vars = (repo / "docs/prod/docs/vars.yml").read_text()
     assert "Y_PROVIDER_API_BASE_URL=http://yprovider.internal:50601/api/" in core_vars
 
-    # the prompted secrets replace the ones _ask_core generated
     core_vault = vault.decrypt_to_dict(paths.vault_path("docs", "prod", "docs"))
     assert core_vault["vault_collaboration_server_secret"] == "ext-collab-secret"
     assert core_vault["vault_y_provider_api_key"] == "ext-yprovider-key"
@@ -1722,10 +1444,8 @@ def test_bootstrap_docs_yprovider_external_prompts_endpoints(repo, monkeypatch):
 
 
 def test_bootstrap_docs_yprovider_skip_leaves_endpoints_empty(repo, monkeypatch):
-    """`bootstrap docs prod` SKIPPING yprovider ("No — bootstrap later") sets no
-    endpoint and no secret: CADDY_YPROVIDER_ENDPOINTS renders with an empty value
-    in the core caddy env. No yprovider unit is written, and the manifest
-    records no yprovider unit at all (unlike "external")."""
+    """Skipping yprovider sets no endpoint or secret, and the core caddy env
+    renders CADDY_YPROVIDER_ENDPOINTS as empty."""
     seed_creds(repo)
     sq = script_questionary(monkeypatch, docs_first_run_script())
 
@@ -1744,9 +1464,8 @@ def test_bootstrap_docs_yprovider_skip_leaves_endpoints_empty(repo, monkeypatch)
 
 
 def test_docs_yprovider_endpoints_colocated_single_host():
-    """core and yprovider on the SAME single host → the podman host alias
-    (host.containers.internal): the caddy container cannot always hairpin the
-    host's public IP."""
+    """core and yprovider on the same single host use the podman host alias
+    host.containers.internal."""
     answers = {"_core_hosts": ["10.0.0.5"]}
     assert (
         bootstrap._docs_yprovider_endpoints(
@@ -1767,8 +1486,8 @@ def test_docs_yprovider_endpoints_distinct_hosts():
 
 
 def test_docs_yprovider_endpoints_multi_colocated_keeps_real_hosts():
-    """several co-located hosts keep the real IPs — every caddy must share ONE
-    identical list so the room hash routes a room to the same node."""
+    """several co-located hosts keep the real IPs, so every caddy shares one
+    identical list and routes a room to the same node."""
     answers = {"_core_hosts": ["10.0.0.5", "10.0.0.6"]}
     assert (
         bootstrap._docs_yprovider_endpoints(
@@ -1779,7 +1498,8 @@ def test_docs_yprovider_endpoints_multi_colocated_keeps_real_hosts():
 
 
 def test_docs_yprovider_endpoints_reads_core_hosts_from_disk(repo):
-    """standalone/reuse runs carry no stash — the core hosts file on disk decides."""
+    """standalone and reuse runs carry no stash, so the core hosts file on disk
+    decides."""
     tree.write_hosts("docs", "prod", "docs", "docs", ["10.0.0.5"])
     assert (
         bootstrap._docs_yprovider_endpoints({}, "docs", "prod", "docs", ["10.0.0.5"])
@@ -1792,18 +1512,14 @@ def test_docs_yprovider_endpoints_rejects_empty_hosts(repo):
         bootstrap._docs_yprovider_endpoints({}, "docs", "prod", "docs", [])
 
 
-# --------------------------------------------------------------------------- projects
-
-
 def test_requirements_checklist_is_app_aware(capsys, monkeypatch):
-    """The pre-questionnaire Requirements panel lists only the infra the app
-    declares: projects (a Sails app) must NOT be told to prepare a Redis, while
-    the Django apps still are. An app declaring nothing gets the full list."""
+    """The pre-questionnaire Requirements panel lists only the infra an app
+    declares, so projects skips Redis while Django apps still list it."""
     monkeypatch.setattr(bootstrap, "_confirm_ready", lambda *a, **k: None)
     bootstrap._print_bootstrap_intro(appmeta.load_app("projects"))
     out = capsys.readouterr().out
-    # projects requires only PostgreSQL + an IdP; S3 is opt-in (local storage by
-    # default) so it must NOT be listed as required prep, and it uses no Redis.
+    # S3 is opt-in for projects, with local storage by default, so it is not
+    # listed as required prep, and projects uses no Redis.
     assert "PostgreSQL" in out and "Identity provider" in out
     assert "Redis" not in out and "S3" not in out
 
@@ -1815,7 +1531,7 @@ def test_requirements_checklist_is_app_aware(capsys, monkeypatch):
     bootstrap._print_bootstrap_intro(appmeta.load_app("meet"))
     assert "Redis" in capsys.readouterr().out
 
-    # an app that declares no `requires` falls back to the full generic list
+    # an app that declares no `requires` falls back to the full generic list.
     meta = appmeta.load_app("projects")
     meta.requires = []
     bootstrap._print_bootstrap_intro(meta)
@@ -1823,9 +1539,9 @@ def test_requirements_checklist_is_app_aware(capsys, monkeypatch):
 
 
 def test_bootstrap_projects_oidc_provider_switch_proconnect(repo, monkeypatch):
-    """projects gets the same identity-provider switch as the Django apps, but
-    derives a single OIDC_ISSUER: picking a ProConnect environment needs no URL
-    prompt at all (the issuer is bundled)."""
+    """projects gets the same identity-provider switch as the Django apps, but derives a
+    single OIDC_ISSUER without an extra URL prompt because the issuer is bundled.
+    """
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
@@ -1841,33 +1557,27 @@ def test_bootstrap_projects_oidc_provider_switch_proconnect(repo, monkeypatch):
 
     assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
     body = (repo / "projects/prod/projects/vars.yml").read_text()
-    # bundled ProConnect integ issuer, derived without asking for any URL
     assert "OIDC_ISSUER=https://fca.integ01.dev-agentconnect.fr/api/v2" in body, body
-    # the provider choice itself is questionnaire state, never an env key
+    # the provider choice itself is questionnaire state, never an env key.
     assert "OIDC_PROVIDER" not in body
-    # S3 declined ⇒ no S3 block at all (uploads fall back to the local dirs)
     assert "S3_" not in body
-    # ProConnect overrides the generic OIDC defaults: it returns the userinfo as a
-    # signed JWT (RS256) and exposes given_name/usual_name/email/siret via per-claim
-    # scopes (no `profile` scope, no `name` claim). Without these, login loops back.
+    # ProConnect returns the userinfo as a signed JWT and exposes
+    # given_name/usual_name/email/siret via per-claim scopes, not the generic
+    # profile scope and name claim. Without these, login loops back.
     assert "OIDC_SCOPES=openid given_name usual_name email siret" in body
     assert "OIDC_USERINFO_SIGNED_RESPONSE_ALG=RS256" in body
     assert "OIDC_FULLNAME_ATTRIBUTES=given_name,usual_name" in body
 
 
 def test_bootstrap_projects_custom_oidc_org_mode_and_smtp(repo, monkeypatch):
-    """Cover the projects questionnaire branches the happy-path tests skip: the
-    `custom` OIDC provider (issuer typed directly + rstrip-normalised), org mode
-    (ORGANIZATION_ID_CLAIM set), and SMTP configured with an authenticated user
-    (routing SMTP_PASSWORD through the vault). S3 is declined here (local
-    storage), so no S3_* keys are emitted and a warning flags that local
-    storage rules out multi-instance later."""
+    """Selecting the `custom` OIDC provider, org mode, and SMTP with a user
+    exercises the questionnaire branches the happy-path tests skip."""
     seed_creds(repo)
     warns: list[str] = []
     monkeypatch.setattr(bootstrap.ui, "warn", warns.append)
     sq = script_questionary(
         monkeypatch,
-        # trailing slash on the custom issuer exercises the rstrip normalisation
+        # a trailing slash on the custom issuer exercises the rstrip normalisation.
         projects_first_run_script(
             host="10.0.0.8",
             database_url="postgresql://u:p@db/projects",
@@ -1891,9 +1601,10 @@ def test_bootstrap_projects_custom_oidc_org_mode_and_smtp(repo, monkeypatch):
     assert "SMTP_PORT=587" in body
     assert "SMTP_SECURE=true" in body
     assert "SMTP_USER=mailer@example.org" in body
-    assert "SMTP_PASSWORD={{ vault_smtp_password }}" in body  # secret → vault ref
+    # secret becomes a vault ref
+    assert "SMTP_PASSWORD={{ vault_smtp_password }}" in body
     assert "SMTP_FROM=" in body
-    assert "S3_" not in body  # S3 declined → local storage
+    assert "S3_" not in body  # S3 declined, local storage
     # declining S3 warns that local storage rules out multi-instance later
     assert any("S3" in w for w in warns), warns
 
@@ -1903,16 +1614,12 @@ def test_bootstrap_projects_custom_oidc_org_mode_and_smtp(repo, monkeypatch):
 
 
 def test_bootstrap_projects_scaling_redis_enforces_s3(repo, monkeypatch):
-    """Accepting the horizontal-scaling prompt routes REDIS_URL through the
-    secret backend (the url can embed a password) into the env blob + vault,
-    and makes the S3 questionnaire mandatory: local uploads are not shared
-    between instances, so the "Configure S3?" opt-out confirm must NOT be asked
-    (ScriptedQuestionary raises on any unscripted prompt) and the S3_* prompts
-    run unconditionally."""
+    """Accepting horizontal scaling routes REDIS_URL through the secret backend
+    and makes the S3 questionnaire run unconditionally."""
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
-        # no ("confirm", "Configure S3 object storage") — skipped when scaling;
+        # scaling skips the "Configure S3 object storage" opt-out confirm.
         # S3_REGION is blank here, unlike the builder's "fr-par" default.
         with_answers(
             projects_first_run_script(
@@ -1929,7 +1636,7 @@ def test_bootstrap_projects_scaling_redis_enforces_s3(repo, monkeypatch):
 
     assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
     body = (repo / "projects/prod/projects/vars.yml").read_text()
-    assert "REDIS_URL={{ vault_redis_url }}" in body  # secret → vault ref
+    assert "REDIS_URL={{ vault_redis_url }}" in body  # secret becomes a vault ref
     assert "S3_ENDPOINT=https://s3.fr-par.scw.cloud" in body  # enforced S3
     pvault = vault.decrypt_to_dict(paths.vault_path("projects", "prod", "projects"))
     assert pvault["vault_redis_url"] == "redis://:pw@redis.example.org:6379/0"

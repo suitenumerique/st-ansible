@@ -2,22 +2,11 @@
 
 from __future__ import annotations
 
-import ruamel.yaml
+from helpers import seed_creds, seed_scaffolding_artifacts, set_flags
+
 import st_cli
-from helpers import seed_creds, seed_scaffolding_artifacts
-
-from st_cli.core import manifest, paths, ui, upgrades
+from st_cli.core import manifest, paths, ui
 from st_cli.core.models import StCliManifest, UnitState
-
-
-def _set_flags(monkeypatch, tmp_path, flags: list[dict]):
-    """Point upgrades._RESOURCE at a temp flags file (see test_upgrades.py)."""
-    p = tmp_path / "upgrades.yml"
-    y = ruamel.yaml.YAML(typ="safe")
-    with p.open("w", encoding="utf-8") as fh:
-        y.dump(flags, fh)
-    monkeypatch.setattr(upgrades, "_RESOURCE", p)
-    return p
 
 
 def _touch_core_vars(app: str, env: str) -> None:
@@ -105,7 +94,8 @@ def test_upgrade_stops_when_cli_older_than_pin(repo, mocker, monkeypatch):
 
 
 def test_upgrade_unknown_upstream_continues(repo, mocker, monkeypatch):
-    """Check that an unparseable upstream check informs and the run continues without early return."""
+    """Check that an unparseable upstream check informs and the run continues without
+    early return."""
     from st_cli.cmd import upgrade as upgrade_mod
 
     monkeypatch.delenv("ST_CLI_NO_UPSTREAM_CHECK", raising=False)
@@ -201,7 +191,8 @@ def test_upgrade_final_message_points_at_deploy(repo, mocker):
 def test_upgrade_groups_by_app_env_and_picks_replay_mode(
     repo, mocker, tmp_path, monkeypatch
 ):
-    """Check that each (app, env) group gets one grouped bootstrap call with replay=SILENT."""
+    """Check that each (app, env) group gets one grouped bootstrap call with
+    replay=SILENT."""
     from st_cli.cmd import upgrade as upgrade_mod
 
     seed_creds(repo)
@@ -217,7 +208,7 @@ def test_upgrade_groups_by_app_env_and_picks_replay_mode(
     )
     _touch_core_vars("meet", "prod")
     _touch_core_vars("drive", "prod")
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.5.0", "apps": ["meet", "drive"], "reason": "r", "link": ""}],
@@ -239,7 +230,8 @@ def test_upgrade_groups_by_app_env_and_picks_replay_mode(
 def test_upgrade_full_replay_flag_escalates_its_group_to_modify(
     repo, mocker, tmp_path, monkeypatch
 ):
-    """Check that a full_replay need escalates its group to MODIFY, not an unrelated group."""
+    """Check that a full_replay need escalates its group to MODIFY, not an unrelated
+    group."""
     from st_cli.cmd import upgrade as upgrade_mod
 
     seed_creds(repo)
@@ -255,7 +247,7 @@ def test_upgrade_full_replay_flag_escalates_its_group_to_modify(
     )
     _touch_core_vars("meet", "prod")
     _touch_core_vars("drive", "prod")
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [
@@ -284,7 +276,8 @@ def test_upgrade_full_replay_flag_escalates_its_group_to_modify(
 
 
 def test_upgrade_pin_realigned_before_first_replay(repo, mocker, tmp_path, monkeypatch):
-    """Check that the pin is saved to the new version before the first bootstrap call."""
+    """Check that the pin is saved to the new version before the first bootstrap
+    call."""
     from st_cli.cmd import upgrade as upgrade_mod
 
     seed_creds(repo)
@@ -294,7 +287,7 @@ def test_upgrade_pin_realigned_before_first_replay(repo, mocker, tmp_path, monke
         )
     )
     _touch_core_vars("meet", "prod")
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.5.0", "apps": ["meet"], "reason": "r", "link": ""}],
@@ -326,7 +319,7 @@ def test_upgrade_replays_when_pin_already_aligned(repo, mocker, tmp_path, monkey
         )
     )
     _touch_core_vars("meet", "prod")
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.5.0", "apps": ["meet"], "reason": "r", "link": ""}],
@@ -345,7 +338,8 @@ def test_upgrade_replays_when_pin_already_aligned(repo, mocker, tmp_path, monkey
 
 
 def test_upgrade_second_run_no_needs_is_noop(repo, mocker, tmp_path, monkeypatch):
-    """Check that a second run with no needs makes zero bootstrap calls and prints no success line."""
+    """Check that a second run with no needs makes zero bootstrap calls and prints no
+    success line."""
     from st_cli.cmd import upgrade as upgrade_mod
 
     seed_creds(repo)
@@ -354,7 +348,7 @@ def test_upgrade_second_run_no_needs_is_noop(repo, mocker, tmp_path, monkeypatch
             "0.0.99", "0.0.99", [UnitState("meet", "prod", "meet", "managed", "0.5.0")]
         )
     )
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.5.0", "apps": ["meet"], "reason": "r", "link": ""}],
@@ -378,7 +372,8 @@ def test_upgrade_second_run_no_needs_is_noop(repo, mocker, tmp_path, monkeypatch
 def test_upgrade_vault_check_runs_for_every_group_before_any_replay(
     repo, mocker, tmp_path, monkeypatch
 ):
-    """Check that ensure_vault_readable runs for every group before any group replays."""
+    """Check that ensure_vault_readable runs for every group before any group
+    replays."""
     from st_cli.cmd import upgrade as upgrade_mod
 
     seed_creds(repo)
@@ -394,7 +389,7 @@ def test_upgrade_vault_check_runs_for_every_group_before_any_replay(
     )
     _touch_core_vars("meet", "prod")
     _touch_core_vars("drive", "prod")
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.5.0", "apps": ["meet", "drive"], "reason": "r", "link": ""}],
@@ -405,7 +400,7 @@ def test_upgrade_vault_check_runs_for_every_group_before_any_replay(
     mocker.patch.object(
         upgrade_mod.writer,
         "ensure_vault_readable",
-        side_effect=lambda app, env, comps: calls.append(("vault", app, env)),
+        side_effect=lambda app, env, _comps: calls.append(("vault", app, env)),
     )
 
     def _fake_bootstrap(app, env, component=None, *, replay):
@@ -428,7 +423,8 @@ def test_upgrade_vault_check_runs_for_every_group_before_any_replay(
 def test_upgrade_provider_only_repo_calls_per_component_and_warns(
     repo, mocker, tmp_path, monkeypatch
 ):
-    """Check that a provider-only repo replays each flagged component and warns of skipped offers."""
+    """Check that a provider-only repo replays each flagged component and warns of
+    skipped offers."""
     from st_cli.cmd import upgrade as upgrade_mod
 
     seed_creds(repo)
@@ -440,7 +436,7 @@ def test_upgrade_provider_only_repo_calls_per_component_and_warns(
         )
     )
     # deliberately no meet/prod/meet/vars.yml
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.5.0", "apps": ["meet"], "reason": "r", "link": ""}],
@@ -463,7 +459,8 @@ def test_upgrade_provider_only_repo_calls_per_component_and_warns(
 def test_upgrade_unknown_app_group_warns_and_skips_without_aborting(
     repo, mocker, tmp_path, monkeypatch
 ):
-    """Check that a stale unit for a dropped app is warned and skipped, not aborting the run."""
+    """Check that a stale unit for a dropped app is warned and skipped, not aborting the
+    run."""
     from st_cli.cmd import upgrade as upgrade_mod
 
     seed_creds(repo)
@@ -478,7 +475,7 @@ def test_upgrade_unknown_app_group_warns_and_skips_without_aborting(
         )
     )
     _touch_core_vars("meet", "prod")
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.5.0", "apps": "all", "reason": "r", "link": ""}],
@@ -501,7 +498,8 @@ def test_upgrade_unknown_app_group_warns_and_skips_without_aborting(
 def test_upgrade_no_upstream_check_env_skips_could_not_check_info(
     repo, mocker, monkeypatch
 ):
-    """Check that the ST_CLI_NO_UPSTREAM_CHECK opt-out skips the "could not check" info."""
+    """Check that the ST_CLI_NO_UPSTREAM_CHECK opt-out skips the "could not check"
+    info."""
     from st_cli.cmd import upgrade as upgrade_mod
 
     seed_creds(repo)
@@ -532,7 +530,7 @@ def test_upgrade_unknown_pin_state_still_realigns_and_replays(
         )
     )
     _touch_core_vars("meet", "prod")
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.5.0", "apps": ["meet"], "reason": "r", "link": ""}],
@@ -565,7 +563,7 @@ def test_upgrade_prints_both_warnings_of_a_two_release_jump(
         )
     )
     _touch_core_vars("meet", "prod")
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [
@@ -618,7 +616,7 @@ def test_upgrade_skipped_group_still_prints_its_warnings(
             [UnitState("ghost-app", "prod", "ghost-app", "managed", "0.1.0")],
         )
     )
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [
@@ -667,7 +665,7 @@ def test_upgrade_warnings_print_only_in_manual_steps_block_before_success(
         )
     )
     _touch_core_vars("meet", "prod")
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [
@@ -722,7 +720,7 @@ def test_upgrade_no_warning_prints_no_manual_steps_block(
         )
     )
     _touch_core_vars("meet", "prod")
-    _set_flags(
+    set_flags(
         monkeypatch,
         tmp_path,
         [{"version": "0.5.0", "apps": ["meet"], "reason": "r", "link": ""}],

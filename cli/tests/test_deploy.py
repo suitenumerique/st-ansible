@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import st_cli
-from helpers import seed_creds, seed_meet_unit
+from helpers import call_order_spy, seed_creds, seed_drive_unit, seed_meet_unit
 from typer.testing import CliRunner
 
+import st_cli
 from st_cli import main as main_mod
 from st_cli.core import (
     drift,
@@ -22,27 +22,21 @@ from st_cli.core.models import StCliManifest, UnitState, UpgradeNeed
 
 
 def test_deploy_call_order_check_first_then_generate_galaxy_play(repo, mocker):
-    """Check that the pending-needs gate runs before generate, galaxy_install, and play."""
+    """Check that the pending-needs gate runs before generate, galaxy_install, and
+    play."""
     seed_meet_unit(repo)
-    call_order: list[str] = []
-
-    def _spy(name, real):
-        def _impl(*args, **kwargs):
-            call_order.append(name)
-            return real(*args, **kwargs)
-
-        return _impl
+    call_order, spy = call_order_spy()
 
     mocker.patch.object(
-        drift, "pending_needs", _spy("pending_needs", drift.pending_needs)
+        drift, "pending_needs", spy("pending_needs", drift.pending_needs)
     )
     mocker.patch.object(
-        generate, "generate_all", _spy("generate_all", lambda *a, **k: None)
+        generate, "generate_all", spy("generate_all", lambda *a, **k: None)
     )
     mocker.patch.object(
-        runner, "galaxy_install", _spy("galaxy_install", lambda *a, **k: None)
+        runner, "galaxy_install", spy("galaxy_install", lambda *a, **k: None)
     )
-    mocker.patch.object(runner, "play", _spy("play", lambda *a, **k: 0))
+    mocker.patch.object(runner, "play", spy("play", lambda *a, **k: 0))
 
     from st_cli.cmd import deploy as deploy_mod
 
@@ -52,7 +46,8 @@ def test_deploy_call_order_check_first_then_generate_galaxy_play(repo, mocker):
 
 
 def test_deploy_resolves_host_alias_to_play_limit(repo, mocker):
-    """`deploy -H <alias>` resolves the alias and passes it as runner.play(limit=...)."""
+    """`deploy -H <alias>` resolves the alias and passes it as
+    runner.play(limit=...)."""
     seed_meet_unit(repo)  # writes host meet1 (ansible_host=10.0.0.5)
     mocker.patch.object(generate, "generate_all", lambda *a, **k: None)
     mocker.patch.object(runner, "galaxy_install", lambda *a, **k: None)
@@ -63,13 +58,14 @@ def test_deploy_resolves_host_alias_to_play_limit(repo, mocker):
     deploy_mod.run("meet", "prod", None, dry_run=False, deploy_only=False, host="meet1")
     assert play.call_args.kwargs["limit"] == "meet1"  # the inventory alias
 
-    # no host → limit=None (all hosts)
+    # no host means limit=None (all hosts)
     deploy_mod.run("meet", "prod", None, dry_run=False, deploy_only=False)
     assert play.call_args.kwargs["limit"] is None
 
 
 def test_deploy_unknown_host_alias_raises(repo, mocker):
-    """`deploy -c <comp> -H <bad-alias>` raises (host not in the component)."""
+    """`deploy -c <comp> -H <bad-alias>` raises because the host is not in the
+    component."""
     import pytest
 
     from st_cli.core.errors import StCliError
@@ -109,7 +105,8 @@ def test_deploy_blocks_when_cli_older_than_pin(repo, mocker, monkeypatch):
 
 
 def test_deploy_aborts_when_rebootstrap_pending(repo, mocker, monkeypatch):
-    """A real pending flag at or below the pin blocks deploy before any ssh/network call."""
+    """A real pending flag at or below the pin blocks deploy before any ssh/network
+    call."""
     seed_meet_unit(repo)  # pin = 0.0.19, unit stamp = "" (reads as 0.0.0)
     generate_spy = mocker.patch.object(generate, "generate_all")
     galaxy_install = mocker.patch.object(runner, "galaxy_install")
@@ -150,7 +147,7 @@ def test_deploy_runs_normally_when_no_rebootstrap_pending(repo, mocker):
 
 
 def test_deploy_warns_but_runs_on_pending_flag_above_pin(repo, mocker):
-    """A pending flag above the pin (installed CLI newer than the pin) warns but does not block."""
+    """A pending flag above the pin warns without blocking deploy."""
     seed_meet_unit(repo)  # pin = 0.0.19
     mocker.patch.object(generate, "generate_all", lambda *a, **k: None)
     mocker.patch.object(runner, "galaxy_install", lambda *a, **k: None)
@@ -179,8 +176,7 @@ def test_deploy_warns_but_runs_on_pending_flag_above_pin(repo, mocker):
 
 
 def test_deploy_next_flag_warns_and_runs(repo, mocker, monkeypatch):
-    """A `next` flag warns only. An X.Y.Z flag at or below the pin blocks
-    (see test_deploy_aborts_when_rebootstrap_pending)."""
+    """A `next` flag warns and lets deploy run."""
     seed_meet_unit(repo)  # pin = 0.0.19, unit stamp = "" (reads as 0.0.0)
     mocker.patch.object(generate, "generate_all", lambda *a, **k: None)
     mocker.patch.object(runner, "galaxy_install", lambda *a, **k: None)
@@ -260,7 +256,7 @@ def test_deploy_blocking_message_omits_warning_text(repo, mocker):
 
 
 def test_deploy_blocking_message_includes_link(repo, mocker):
-    """A blocking need's link is appended to the deploy-blocking message."""
+    """A blocking need's link does not appear in the deploy-blocking message."""
     seed_meet_unit(repo)  # pin = 0.0.19
     mocker.patch.object(generate, "generate_all", lambda *a, **k: None)
     galaxy_install = mocker.patch.object(runner, "galaxy_install")
@@ -348,7 +344,7 @@ def test_deploy_baseline_synthetic_flag_warns_and_runs(repo, mocker, monkeypatch
 
     monkeypatch.setattr(st_cli, "__version__", "0.3.0")
     monkeypatch.setattr(upgrades, "load_baseline", lambda: "0.2.0")
-    monkeypatch.setattr(upgrades, "load_flags", lambda: [])
+    monkeypatch.setattr(upgrades, "load_flags", list)
     mocker.patch.object(generate, "generate_all", lambda *a, **k: None)
     mocker.patch.object(runner, "galaxy_install", lambda *a, **k: None)
     warn_spy = mocker.patch.object(ui, "warn")
@@ -364,9 +360,8 @@ def test_deploy_baseline_synthetic_flag_warns_and_runs(repo, mocker, monkeypatch
 def test_deploy_baseline_synthetic_flag_blocks_after_crashed_upgrade(
     repo, mocker, monkeypatch
 ):
-    """A unit stamped below the baseline blocks deploy once the pin already
-    matches the installed CLI: an earlier `upgrade` run realigned the pin but
-    crashed before the replay finished."""
+    """A unit stamped below the baseline blocks deploy once the pin matches the
+    installed CLI, because an earlier upgrade crashed before the replay finished."""
     seed_creds(repo)
     manifest.save_manifest(
         StCliManifest(
@@ -382,7 +377,7 @@ def test_deploy_baseline_synthetic_flag_blocks_after_crashed_upgrade(
 
     monkeypatch.setattr(st_cli, "__version__", "0.2.0")
     monkeypatch.setattr(upgrades, "load_baseline", lambda: "0.2.0")
-    monkeypatch.setattr(upgrades, "load_flags", lambda: [])
+    monkeypatch.setattr(upgrades, "load_flags", list)
     generate_spy = mocker.patch.object(generate, "generate_all")
     galaxy_install = mocker.patch.object(runner, "galaxy_install")
     play = mocker.patch.object(runner, "play", return_value=0)
@@ -397,21 +392,12 @@ def test_deploy_baseline_synthetic_flag_blocks_after_crashed_upgrade(
 
 
 def test_deploy_two_components_runs_play_for_each(repo, mocker):
-    """`st-cli deploy APP ENV -c drive -c collabora` (repeatable -c) is collected
-    into a list by Typer and runs runner.play once per requested component, in
-    deploy_order (collabora=10 before drive=20)."""
-    seed_creds(repo)
-    tree.write_hosts("drive", "prod", "drive", "drive", ["10.0.0.1"])
-    tree.write_hosts("drive", "prod", "collabora", "collabora", ["10.0.0.3"])
-    manifest.save_manifest(
-        StCliManifest(
-            "0.0.19",
-            "0.0.19",
-            [
-                UnitState("drive", "prod", "drive", "managed"),
-                UnitState("drive", "prod", "collabora", "managed"),
-            ],
-        )
+    """`st-cli deploy APP ENV -c drive -c collabora` runs runner.play once per
+    requested component, in deploy_order."""
+    seed_drive_unit(
+        repo,
+        components=("drive", "collabora"),
+        component_hosts={"drive": ["10.0.0.1"], "collabora": ["10.0.0.3"]},
     )
     mocker.patch.object(generate, "generate_all", lambda *a, **k: None)
     mocker.patch.object(runner, "galaxy_install", lambda *a, **k: None)
@@ -427,9 +413,6 @@ def test_deploy_two_components_runs_play_for_each(repo, mocker):
     assert played == ["collabora", "drive"]  # deploy_order sort applied
 
 
-# --------------------------------------------------------------------------- env_key_report wiring (warn-only)
-
-
 def test_deploy_env_key_advisory_does_not_block(repo, mocker):
     """Check that an env-key advisory alone does not block the deploy."""
     seed_meet_unit(repo)
@@ -439,8 +422,7 @@ def test_deploy_env_key_advisory_does_not_block(repo, mocker):
         drift,
         "env_key_report",
         lambda *a, **k: [
-            "meet/prod/meet: new env keys available: FOO — run "
-            "`st-cli bootstrap meet prod` to set them."
+            "meet/prod/meet: new env keys available: FOO — run `st-cli bootstrap meet prod` to set them."
         ],
     )
     warn_spy = mocker.patch.object(ui, "warn")
@@ -459,7 +441,8 @@ def test_deploy_env_key_advisory_does_not_block(repo, mocker):
 def test_deploy_rebootstrap_flag_still_blocks_even_with_clean_env_keys(
     repo, mocker, monkeypatch
 ):
-    """Check that a blocking flag still blocks the deploy regardless of env_key_report."""
+    """Check that a blocking flag still blocks the deploy regardless of
+    env_key_report."""
     seed_meet_unit(repo)  # pin = 0.0.19
     mocker.patch.object(generate, "generate_all", lambda *a, **k: None)
     mocker.patch.object(runner, "galaxy_install", lambda *a, **k: None)

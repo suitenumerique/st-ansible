@@ -1,12 +1,10 @@
 """Application metadata loader for st-cli.
 
-Reads the bundled ``resources/apps/<app>.yml`` files (the single source of truth for the
-app/component map of section 0 of CONTRACT.md) and exposes typed views consumed
-by :mod:`st_cli.cmd.bootstrap` and :mod:`st_cli.core.envrender`.
+Reads the bundled `resources/apps/<app>.yml` files and exposes typed views
+consumed by `st_cli.cmd.bootstrap` and `st_cli.core.envrender`.
 
-This module owns the YAML files and the :class:`Dependency` / :class:`AppMeta`
-dataclasses. The :class:`Component` dataclass is owned by :mod:`st_cli.core.models`
-and imported from there.
+This module owns the `Dependency` and `AppMeta` dataclasses. `Component` is
+owned by `st_cli.core.models` and imported from there.
 """
 
 from __future__ import annotations
@@ -14,26 +12,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ruamel.yaml import YAML
-
+from . import tree
 from .errors import StCliError
-from .models import (
-    Component,
-)  # CONTRACT section 2: Component lives in st_cli.core.models
-
+from .models import Component
 
 _APPS_DIR = Path(__file__).resolve().parent / "resources" / "apps"
 
 
 def list_apps() -> list[str]:
-    """Return the sorted list of supported app names (e.g. ``["drive","meet","messages"]``)."""
+    """Return the sorted list of supported app names (e.g.
+    `["drive","meet","messages"]`)."""
     return sorted(p.stem for p in _APPS_DIR.glob("*.yml"))
-
-
-def _yaml() -> YAML:
-    y = YAML(typ="safe")
-    y.default_flow_style = False
-    return y
 
 
 def _component_from(c: dict) -> Component:
@@ -51,15 +40,15 @@ def _component_from(c: dict) -> Component:
     )
 
 
-def load_app(app: str) -> "AppMeta":
-    """Load metadata for ``app`` from the bundled ``apps/<app>.yml``.
+def load_app(app: str) -> AppMeta:
+    """Load metadata for `app` from the bundled `apps/<app>.yml`.
 
-    Raises :class:`StCliError` if the app is unknown.
+    Raises `StCliError` if the app is unknown.
     """
     path = _APPS_DIR / f"{app}.yml"
     if not path.is_file():
         raise StCliError(f"unknown app {app!r}; available: {', '.join(list_apps())}")
-    data = _yaml().load(path) or {}
+    data = tree.yaml_safe().load(path) or {}
 
     components = [_component_from(c) for c in data.get("components", [])]
     component_raw: dict[str, dict] = {c["key"]: c for c in data.get("components", [])}
@@ -116,10 +105,9 @@ class AppMeta:
         raise KeyError(f"app {self.app!r} has no core component")
 
     def worker(self) -> Component | None:
-        """Return the app's workers component, or ``None`` if it has none.
+        """Return the app's workers component, or `None` if it has none.
 
-        Non-raising counterpart of :meth:`core` — workers are optional metadata,
-        so callers guard with ``if meta.worker():``.
+        Non-raising counterpart of `core`.
         """
         for c in self.components:
             if c.is_worker:
@@ -135,33 +123,27 @@ class AppMeta:
         )
 
     def files_component(self, key: str) -> Component:
-        """Return the component whose on-disk unit files back ``key``.
+        """Return the component whose on-disk unit files back `key`.
 
-        Workers own no ``vars.yml``/``vault.yml``/``hosts`` of their own — they
-        reuse the core unit's files verbatim (``st_<app>_workers_env`` defaults to
-        ``st_<app>_backend_env``, and they run on the same hosts). So a worker
-        resolves to :meth:`core`; every other component resolves to itself.
+        A worker resolves to `core`; every other component resolves to itself.
         """
         comp = self.component(key)
         return self.core() if comp.is_worker else comp
 
     def env_render_spec(self, component_key: str) -> dict:
-        """Return the ``env_render`` mapping for the given component.
+        """Return the `env_render` mapping for the given component.
 
-        Shape: ``{layer: {"blob_var": str, "templates": [str, ...]}}`` where
-        ``layer`` is e.g. ``"backend"`` or ``"frontend"``. Returns ``{}`` when
-        the component has no templated env blob (e.g. livekit / collabora /
-        mta-in / mpa / socks-proxy).
+        Shape: `{layer: {"blob_var": str, "templates": [str, ...]}}`. Returns
+        `{}` when the component has no templated env blob.
         """
         raw = self._component_raw.get(component_key, {})
         return dict(raw.get("env_render") or {})
 
     def component_vars(self, component_key: str) -> dict:
-        """Return component-level ansible vars (``st_*``) with answer templates.
+        """Return component-level ansible vars (`st_*`) with answer templates.
 
-        Values are strings that may reference questionnaire answers via
-        ``str.format`` placeholders, e.g. ``{"st_drive_public_host": "{DOMAIN}"}``.
-        Returns ``{}`` when the component declares none.
+        Values may reference answers via `str.format` placeholders. Returns
+        `{}` when the component declares none.
         """
         raw = self._component_raw.get(component_key, {})
         return dict(raw.get("vars") or {})

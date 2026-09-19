@@ -1,33 +1,25 @@
-"""`st-cli secrets` — edit an (app, env)'s ansible-vault secrets in ``$EDITOR``.
+"""`st-cli secrets`: edit an (app, env)'s ansible-vault secrets in ``$EDITOR``.
 
-Thin command layer (see the layering rule in ``CLAUDE.md``): resolves which
-component's ``vault.yml`` to hand to :func:`st_cli.core.vault.edit_file` and
-reports back via :mod:`st_cli.core.ui`. The actual ``ansible-vault edit`` call
-lives in :mod:`st_cli.core.vault` so it stays reachable from core only.
-
-ansible-vault backend only — a ``(app, env)`` on the ``hashi_vault`` backend has
-no ``vault.yml`` (its secrets live in OpenBao), so this command refuses with a
-clear pointer instead.
+ansible-vault backend only. A ``(app, env)`` on the ``hashi_vault`` backend has
+no ``vault.yml`` (its secrets live in OpenBao), so this command refuses instead.
 """
 
 from __future__ import annotations
 
 from ..core import manifest, paths, prompts, ui, vault
 from ..core.errors import StCliError
+from ..core.models import BACKEND_ANSIBLE_VAULT, MODE_EXTERNAL
 
 
 def edit_secrets(app_name: str, env: str, component: str | None) -> None:
     """Open one component's encrypted ``vault.yml`` in ``$EDITOR`` for editing.
 
-    * Backend guard: only ``ansible-vault`` (the default) is supported — a
-      ``hashi_vault`` (app, env) carries no local ``vault.yml``.
-    * Component selection: external units are skipped; only components whose
-      ``vault.yml`` exists are editable. A single candidate is used directly;
-      several prompt via :func:`prompts._ask_select`. ``-c`` narrows up front.
+    Skips external units; only components with a ``vault.yml`` are editable. A single
+    candidate is used directly; several prompt for one. ``-c`` narrows up front.
     """
     m = manifest.load_manifest()
     sc = manifest.secret_config_for(m, app_name, env)
-    if sc.backend != "ansible-vault":
+    if sc.backend != BACKEND_ANSIBLE_VAULT:
         raise StCliError(
             f"{app_name}/{env} uses the {sc.backend} backend — "
             "edit its secrets in OpenBao, not here."
@@ -38,7 +30,7 @@ def edit_secrets(app_name: str, env: str, component: str | None) -> None:
         for u in manifest.units_for(
             m, app_name, env, [component] if component is not None else None
         )
-        if u.mode != "external"
+        if u.mode != MODE_EXTERNAL
     ]
     editable = [
         u.component

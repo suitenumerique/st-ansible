@@ -1,29 +1,7 @@
 """Preflight checks run before a deploy, and the standalone `doctor` sweep.
 
-Historically this module also materialized the pinned collection to diff
-committed ``st_*`` vars against each role's ``meta/argument_specs.yml``. That
-check is gone: it flagged hand-edited ``vars.yml`` keys, which is backwards
-for a config tree we explicitly tell operators to edit by hand (see
-``core/writer.py`` / the bootstrap docs). ``check_app`` is now the
-**rebootstrap-status report**: it surfaces which bootstrapped units have an
-outstanding rebootstrap flag (``core/upgrades.py``) so operators learn
-*before* a deploy that a release requires them to replay the bootstrap
-questionnaire.
-
-``preflight`` (single pair, used by ``deploy``) only materializes the pinned
-collection now — the rebootstrap hard gate lives in ``cmd/deploy.py`` and runs
-earlier, before any remote or network side effect. ``preflight_all`` (sweep,
-used by ``doctor``) still touches neither the collection nor the network at
-all: with the argspec check gone, there is nothing left that needs it, so
-`doctor` is fast and fully offline.
-
-``env_key_report`` is a second, unrelated signal: an offline diff between each
-unit's committed env blob and a fresh render from the current templates. It
-surfaces new upstream env keys (advisories). It is warn-only and never gates
-``deploy``.
-
-Neither ``check_app`` nor ``env_key_report`` ever touches the committed config
-tree.
+`check_app` reports units with an outstanding rebootstrap flag.
+`env_key_report` is a warn-only diff between a fresh render and the blob.
 """
 
 from __future__ import annotations
@@ -41,7 +19,22 @@ from . import (
     upgrades,
 )
 from .errors import StCliError
-from .models import StCliManifest, UpgradeNeed
+from .models import MODE_EXTERNAL, StCliManifest, UnitState, UpgradeNeed
+
+
+def _load_units(
+    app: str,
+    env: str,
+    components: list[str] | None = None,
+    m: StCliManifest | None = None,
+) -> tuple[StCliManifest, list[UnitState]]:
+    """Load the manifest, unless given, and this app/env's units.
+
+    Callers decide whether an empty result is an error.
+    """
+    if m is None:
+        m = manifest.load_manifest()
+    return m, manifest.units_for(m, app, env, components)
 
 
 def pending_needs(
@@ -52,44 +45,27 @@ def pending_needs(
 ) -> list[UpgradeNeed]:
     """Return the newest outstanding rebootstrap need per unit of an app/env.
 
-    Narrows to the (optionally ``components``-narrowed) units of ``(app,
-    env)``, then to their outstanding flags from ``upgrades.needed()``,
-    collapsed to one entry per unit via ``upgrades.newest_per_unit`` — a
-    replay is cumulative, so only the newest flag per unit matters. Raise
-    ``StCliError`` when ``manifest.units_for`` finds no unit for the pair.
-    ``m`` is the loaded manifest; when None, the function loads it.
+    Raises StCliError when no unit matches. Pass `m` to reuse an already
+    loaded manifest.
     """
-    if m is None:
-        m = manifest.load_manifest()
-    units = manifest.units_for(m, app, env, components)
+    m, units = _load_units(app, env, components, m)
     if not units:
         raise StCliError(f"No units for {app}/{env} in .st-cli.yml.")
-    wanted = {u.component for u in units if u.mode != "external"}
+    wanted = {u.component for u in units if u.mode != MODE_EXTERNAL}
     needs = [n for n in upgrades.needed(m, app, env) if n.component in wanted]
     return upgrades.newest_per_unit(needs)
 
 
 def check_app(app: str, env: str, components: list[str] | None = None) -> list[str]:
-    """Return human-readable rebootstrap-status warnings for an app/env.
+    """Return rebootstrap-status warnings for an app/env's bootstrapped units.
 
-    Checks every (optionally ``components``-narrowed) unit of ``(app, env)``
-    against ``pending_needs`` and reports the ones with an outstanding flag.
-    External units are already skipped inside ``pending_needs`` (they have no
-    local tree for bootstrap to rewrite); if EVERY matched unit is external,
-    this returns a single explicit warning rather than an empty list — an
-    empty result would read as "clean" even though nothing was actually
-    evaluated.
-
-    Each warning names the unit (``app/env/component``), the flagged version,
-    the reason, the changelog/PR link when the flag carries one, and the
-    command to run (``st-cli upgrade`` — the documented way to clear a
-    rebootstrap flag).
+    Raises StCliError when no unit matches. Reports one line, not an empty
+    list, when every matched unit is external.
     """
-    m = manifest.load_manifest()
-    units = manifest.units_for(m, app, env, components)
+    m, units = _load_units(app, env, components)
     if not units:
         raise StCliError(f"No units for {app}/{env} in .st-cli.yml.")
-    managed = [u for u in units if u.mode != "external"]
+    managed = [u for u in units if u.mode != MODE_EXTERNAL]
     if not managed:
         scope = f"{app}/{env}" + (f"/{','.join(components)}" if components else "")
         return [f"{scope}: all units are external — nothing to rebootstrap-check."]
@@ -100,8 +76,7 @@ def check_app(app: str, env: str, components: list[str] | None = None) -> list[s
 def format_need(app: str, env: str, need: UpgradeNeed) -> str:
     """Return the one-line warning for a pending rebootstrap need.
 
-    The link and the manual steps stay out of this line: ``st-cli upgrade``
-    prints them.
+    Excludes the link and the manual steps; `st-cli upgrade` prints those.
     """
     return (
         f"{app}/{env}/{need.component}: rebootstrap needed "
@@ -112,37 +87,13 @@ def format_need(app: str, env: str, need: UpgradeNeed) -> str:
 def env_key_report(
     app: str, env: str, components: list[str] | None = None
 ) -> list[str]:
-    """Diff each unit's committed env blob against a fresh offline render.
+    """Return advisories for keys a fresh render has that the committed blob lacks.
 
-    Returns the advisories. For every non-external unit of ``(app,
-    env)`` (optionally ``components``-narrowed, via ``manifest.units_for``):
-    recovers ``answers`` from the committed tree (``core/recover.py``),
-    re-renders the env blobs offline from the current templates
-    (``core/envrender.render_env``), and compares each rendered blob's key
-    list against the committed one (``core/envblob.keys``, both
-    order-preserving).
-
-    A key present in the render but missing from the committed blob is a new
-    upstream key the operator has not set yet — collected per unit into one
-    advisory. A key present in the committed blob but absent from the render
-    is the operator's own addition: it is not reported. A unit whose blobs
-    match exactly reports nothing.
-
-    Units with no ``env_render`` spec (providers with no env blob, workers)
-    and units with nothing recoverable (``recover.recover`` returns ``{}``,
-    e.g. no committed ``vars.yml`` yet) are skipped — there is nothing to
-    compare. Best-effort: any exception while processing one unit (unknown
-    app, a render error) skips just that unit and reports the skip via an
-    info line, so one bad unit never breaks the sweep this feeds (``doctor``).
-
-    **Detection is deliberately partial**: a template line guarded by
-    ``{% if answers.X %}`` renders nothing at all when ``X`` has no answer, so
-    only unconditionally-emitted keys are ever reported as missing — this
-    catches new mandatory vars, not new optional ones.
+    Detects only unconditionally-rendered keys; a template line guarded by
+    `{% if %}` never triggers one. A unit that errors is skipped, not fatal.
     """
-    m = manifest.load_manifest()
-    units = manifest.units_for(m, app, env, components)
-    managed = [u for u in units if u.mode != "external"]
+    _m, units = _load_units(app, env, components)
+    managed = [u for u in units if u.mode != MODE_EXTERNAL]
 
     advisories: list[str] = []
     for u in managed:
@@ -184,13 +135,9 @@ def env_key_report(
 
 
 def preflight(app: str, env: str) -> None:
-    """Materialize the scaffolding + pinned collection for a deploy.
+    """Materialize the scaffolding and the pinned collection ahead of a deploy.
 
-    Renders the trashable scaffolding (``generate.generate_all``) and
-    installs the pinned collection (``runner.galaxy_install``) — a deploy
-    needs both regardless of drift status. The rebootstrap hard gate lives in
-    ``cmd/deploy.py`` and runs earlier, before this (and before any other
-    remote/network side effect); it no longer runs from here.
+    The rebootstrap hard gate lives in `cmd/deploy.py` and runs earlier.
     """
     generate.generate_all(app, env)
     runner.galaxy_install()
@@ -199,21 +146,10 @@ def preflight(app: str, env: str) -> None:
 def preflight_all(
     app: str | None = None, env: str | None = None, components: list[str] | None = None
 ) -> list[str]:
-    """Rebootstrap-status sweep across every managed ``(app, env)`` pair (warn-only).
+    """Run the rebootstrap-status and env-key sweep across managed app/env pairs.
 
-    Sweeps the whole ``.st-cli.yml`` when no args are given (external units
-    are skipped), narrows to one app when only APP is given, or checks a
-    single ``(app, env)`` unit when both are given. ``--component`` requires
-    both APP and ENV (a component is meaningless without its unit).
-
-    Unlike ``preflight``, this never touches the collection or the network:
-    now that the argspec drift check is gone, ``check_app`` only reads
-    ``.st-cli.yml`` and the rebootstrap flag declaration, both local — so
-    `doctor` stays fast and fully offline.
-
-    Also runs ``env_key_report`` per pair: its advisories are appended to the
-    returned warnings (so a new-env-key advisory suppresses doctor's "No
-    rebootstrap needed." success line, same as a rebootstrap warning).
+    Sweeps every pair when app and env are omitted; `--component` requires
+    both. Offline and warn-only: never touches the collection or the network.
     """
     if components and not (app and env):
         raise StCliError("--component requires both APP and ENV.")
@@ -222,7 +158,7 @@ def preflight_all(
     if app and env:
         pairs: list[tuple[str, str]] = [(app, env)]
     else:
-        managed = {(u.app, u.env) for u in m.units if u.mode != "external"}
+        managed = {(u.app, u.env) for u in m.units if u.mode != MODE_EXTERNAL}
         if app:
             managed = {p for p in managed if p[0] == app}
         if not managed:

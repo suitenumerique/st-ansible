@@ -1,0 +1,7 @@
+minor_changes:
+  - "cli: remove dead code, merge duplicate helpers, and trim the docstrings to the why-only rule. ``pyproject.toml`` commits the ruff rule set. The ``ansible`` extra pins the same ``ansible-core`` as ``full``."
+  - "cli: fix the README, ``CLAUDE.md`` and help texts. ``podman rmi`` removes the image. ``st-cli upgrade`` does not upgrade the CLI itself. ``ST_CLI_NO_UPSTREAM_CHECK`` also disables the upstream gate of ``st-cli upgrade``."
+  - "cli: ``st-cli deploy`` resolves every target host before it deploys a component. A wrong ``-c`` and ``-H`` pair or an empty inventory now fails before any deploy."
+bugfixes:
+  - "cli: a blank ``AWS_S3_REGION_NAME`` answer on a rebootstrap removes the key and warns, instead of writing an empty value."
+  - "cli: ``st-cli reset -H <alias>`` redeploys only the selected host. It redeployed the component on every host."

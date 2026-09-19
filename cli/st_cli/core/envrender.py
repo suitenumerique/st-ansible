@@ -1,14 +1,7 @@
-"""Render per-component env blobs from Jinja2 templates + bootstrap answers.
+"""Render per-component env blobs from Jinja2 templates and bootstrap answers.
 
-Public surface (CONTRACT section 3):
-
-* :func:`render_env` — ``render_env(app, component, answers) -> {blob_var: text}``
-* :func:`oidc_endpoints` — derive the ``OIDC_OP_*`` endpoint dict for a provider.
-
-Templates live under ``st_cli/core/resources/templates/env`` (bundled with the wheel).
-Backend overlays ``{% include "base.django.env.j2" %}``; frontend overlays do
-not. ``answers`` is the dict produced by bootstrap; missing keys render as the
-empty string so partial answers never blow up :func:`render_env`.
+Templates live under `resources/templates/env`. A missing answer renders as
+an empty string, so partial answers never break `render_env`.
 """
 
 from __future__ import annotations
@@ -33,7 +26,7 @@ _OIDC_ENDPOINT_KEYS = (
 
 
 class _EmptyUndefined(Undefined):
-    """Undefined that renders as ``""`` and is falsy — keeps templates tolerant."""
+    """Undefined that renders as ``""`` and is falsy, so templates stay tolerant."""
 
     def __str__(self) -> str:
         return ""
@@ -60,11 +53,10 @@ def _environment() -> Environment:
 
 
 def render_env(app: str, component: str, answers: dict) -> dict[str, str]:
-    """Render the env blobs for ``(app, component)`` using ``answers``.
+    """Render the env blobs for `(app, component)` using `answers`.
 
-    Returns ``{blob_var_name: rendered_text}``. For components without an
-    ``env_render`` spec (e.g. livekit, collabora, mta-in, mpa, socks-proxy)
-    returns ``{}``.
+    Returns `{blob_var: rendered_text}`; `{}` for a component with no
+    `env_render` spec.
     """
     spec = load_app(app).env_render_spec(component)
     if not spec:
@@ -74,7 +66,7 @@ def render_env(app: str, component: str, answers: dict) -> dict[str, str]:
     ctx = {"answers": dict(answers or {}), "oidc_endpoints": oidc_endpoints}
 
     out: dict[str, str] = {}
-    for _layer, info in spec.items():
+    for info in spec.values():
         blob_var = info["blob_var"]
         templates = info.get("templates") or []
         parts: list[str] = []
@@ -122,14 +114,9 @@ def _proconnect_endpoints(provider: str) -> dict[str, str]:
 
 
 def oidc_issuer(provider: str, base_url: str | None, realm: str | None) -> str:
-    """Return the OIDC **issuer** URL (discovery base) for ``provider``.
+    """Return the OIDC issuer URL (discovery base) for `provider`.
 
-    Non-Django apps (e.g. projects) configure a single ``OIDC_ISSUER`` and let
-    their OIDC client discover the endpoints, rather than the explicit
-    ``OIDC_OP_*`` set the Django apps need. Delegates to :func:`oidc_endpoints`
-    so the ProConnect bases and the Keycloak realm derivation stay defined once.
-    Returns ``""`` when the provider needs a ``base_url``/``realm`` that wasn't
-    supplied.
+    Returns `""` when `provider` needs a `base_url` or `realm` that is missing.
     """
     return oidc_endpoints(provider, base_url, realm).get("OIDC_OP_URL", "")
 
@@ -137,16 +124,9 @@ def oidc_issuer(provider: str, base_url: str | None, realm: str | None) -> str:
 def oidc_endpoints(
     provider: str, base_url: str | None, realm: str | None
 ) -> dict[str, str]:
-    """Return the ``OIDC_OP_*`` endpoint dict for ``provider``.
+    """Return the `OIDC_OP_*` endpoint dict for `provider`.
 
-    ``provider`` ∈ {"keycloak","proconnect-prod","proconnect-integ","custom"}.
-
-    * keycloak: derive ``/realms/<realm>/protocol/openid-connect/...`` from
-      ``base_url`` + ``realm``.
-    * proconnect-prod / proconnect-integ: bundled ProConnect endpoints from each
-      environment's ``/.well-known/openid-configuration``.
-    * custom: pass through — endpoints are expected to already be supplied by
-      the user; only ``OIDC_OP_URL`` is echoed when ``base_url`` is given.
+    `provider` is one of keycloak, proconnect-prod, proconnect-integ, custom.
     """
     if provider == "keycloak":
         if not base_url or not realm:

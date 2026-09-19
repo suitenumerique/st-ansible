@@ -1,40 +1,37 @@
-"""Read/write the committed config tree: ``<app>/<env>/<component>/{vars.yml,hosts}``.
+"""Read/write the committed config tree: per-unit vars.yml/hosts, common.yml, the ssh/
+scaffold, and .gitignore.
 
-Uses a single round-trip ruamel YAML instance that preserves comments and
-round-trips ansible-vault ``!vault`` tagged scalars untouched (via
-:class:`VaultString`).
+Uses one round-trip ruamel YAML instance that preserves comments and vault tags.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Optional
 
 from ruamel.yaml import YAML
 
-from . import paths
+from . import paths, ui
+from .errors import StCliError
 
 
 class VaultString(str):
-    """A string carrying the ``!vault`` tag, rendered as a literal block scalar.
-
-    Subclasses ``str`` so the rest of the code can treat it as text while ruamel
-    re-emits it with its tag and ``|`` style.
-    """
+    """A string carrying the ``!vault`` tag, rendered as a literal block scalar."""
 
     yaml_tag = "!vault"
 
 
-def _construct_vault(constructor, node):
+def _construct_vault(_constructor, node):
     return VaultString(node.value)
 
 
 def _represent_vault(representer, data):
-    return representer.represent_scalar("!vault", str(data), style="|")
+    return representer.represent_scalar(VaultString.yaml_tag, str(data), style="|")
 
 
-_YAML: Optional[YAML] = None
+_YAML: YAML | None = None
+_SAFE_YAML: YAML | None = None
 
 
 def yaml() -> YAML:
@@ -45,17 +42,27 @@ def yaml() -> YAML:
         y.preserve_quotes = True
         y.width = 4096  # don't wrap long env lines
         y.indent(mapping=2, sequence=4, offset=2)
-        y.constructor.add_constructor("!vault", _construct_vault)
+        y.constructor.add_constructor(VaultString.yaml_tag, _construct_vault)
         y.representer.add_representer(VaultString, _represent_vault)
         _YAML = y
     return _YAML
 
 
+def yaml_safe() -> YAML:
+    """Return the shared safe-load YAML instance, for read-only bundled resources."""
+    global _SAFE_YAML
+    if _SAFE_YAML is None:
+        y = YAML(typ="safe")
+        y.default_flow_style = False
+        _SAFE_YAML = y
+    return _SAFE_YAML
+
+
 def _load_yaml(path: Path):
     """Load a YAML file via the shared round-trip instance.
 
-    Returns an empty ``CommentedMap`` when the file is absent or empty, so
-    callers always get a mutable mapping whose comments/order round-trip on save.
+    Returns an empty ``CommentedMap`` when the file is absent or empty, so a
+    caller always gets a mutable mapping whose comments and order round-trip on save.
     """
     from ruamel.yaml.comments import CommentedMap
 
@@ -83,80 +90,49 @@ def save_vars(app: str, env: str, component: str, data) -> None:
     _save_yaml(paths.vars_path(app, env, component), data)
 
 
-def _host_vars_suffix(host_vars: Optional[dict]) -> str:
-    """Render ``host_vars`` as a leading-space ``k=v`` suffix (``""`` when none)."""
-    if not host_vars:
-        return ""
-    return " " + " ".join(f"{k}={v}" for k, v in host_vars.items())
-
-
-def _group_lines(group: str, hosts: list[str], suffix: str) -> list[str]:
-    """INI lines for one ``[group]``: a header + a ``<group><n> ansible_host=<ip>``
-    alias per host, each carrying ``suffix``."""
+def _group_lines(group: str, hosts: list[str]) -> list[str]:
     lines = [f"[{group}]"]
     for i, ip in enumerate(hosts, start=1):
-        lines.append(f"{group}{i} ansible_host={ip}{suffix}")
+        lines.append(f"{group}{i} ansible_host={ip}")
     return lines
 
 
 def _write_ini(app: str, env: str, component: str, lines: list[str]) -> None:
-    """Write INI ``lines`` to the unit's ``hosts`` file (trailing newline, mkdir)."""
     p = paths.hosts_path(app, env, component)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def write_hosts(
-    app: str,
-    env: str,
-    component: str,
-    group: str,
-    hosts: list[str],
-    host_vars: Optional[dict] = None,
+    app: str, env: str, component: str, group: str, hosts: list[str]
 ) -> None:
     """Write an INI inventory with one ``[group]`` listing the given host IPs.
 
     Each host gets a generated alias ``<group><n>`` with ``ansible_host=<ip>``.
-    ``host_vars`` (if given) are appended to every host line as ``k=v`` pairs.
     """
-    _write_ini(
-        app, env, component, _group_lines(group, hosts, _host_vars_suffix(host_vars))
-    )
+    _write_ini(app, env, component, _group_lines(group, hosts))
 
 
 def write_groups(
-    app: str,
-    env: str,
-    component: str,
-    groups: dict[str, list[str]],
-    host_vars: Optional[dict] = None,
+    app: str, env: str, component: str, groups: dict[str, list[str]]
 ) -> None:
-    """Write an INI inventory with one ``[group]`` section per NON-EMPTY group.
+    """Write an INI inventory with one ``[group]`` section per non-empty group.
 
-    Reuses the ``<group><n> ansible_host=<ip>`` alias format of :func:`write_hosts`.
-    Empty groups are omitted entirely (so a worker list of ``[]`` writes no
-    ``[workers]`` section → workers fall back to the core group). Preserves the
-    trailing newline. Used by bootstrap to write a core's core+workers groups in
-    one shot (workers own no directory of their own — both live in the core's
-    ``hosts`` file).
+    Empty groups are omitted entirely, so a worker list of ``[]`` writes no
+    ``[workers]`` section and workers fall back to the core group.
     """
-    suffix = _host_vars_suffix(host_vars)
     lines: list[str] = []
     for group, hosts in groups.items():
         if not hosts:
             continue
-        lines += _group_lines(group, hosts, suffix)
+        lines += _group_lines(group, hosts)
     _write_ini(app, env, component, lines)
 
 
 def ensure_common(app: str, env: str) -> None:
     """Seed an empty ``common.yml`` next to the env's component trees if absent.
 
-    Idempotent: writes a header comment + ``---`` document marker only when the
-    file does NOT already exist, so a hand-edited ``common.yml`` is never
-    overwritten. The file is loaded FIRST into every component playbook's
-    ``vars_files`` (see :func:`generate.generate_all`), letting users set
-    app-wide vars (e.g. ``st_<app>_uid``) once instead of per component.
+    Never overwrites an existing file, so a hand-edited ``common.yml`` stays intact.
     """
     p = paths.common_path(app, env)
     if p.exists():
@@ -218,39 +194,23 @@ _SSH_KNOWN_HOSTS_SEED = """\
 
 
 def ensure_ssh_scaffold() -> None:
-    """Seed the committed ``ssh/`` dir (config + known_hosts + config.local) if absent.
+    """Seed the committed ``ssh/`` dir (config, known_hosts, config.local) if absent.
 
-    Idempotent and never overwrites a hand-edited file (mirrors :func:`ensure_common`).
-    ``ssh/config`` and ``ssh/known_hosts`` are COMMITTED (not gitignored): host-key /
-    bastion config is not secret and the inventory IPs are already tracked. The
-    st-cli container auto-Includes ``ssh/config`` (and the gitignored
-    ``ssh/config.local`` first) and pins keys against ``ssh/known_hosts``; native
-    installs may Include the config too. ``ssh/config.local`` is the per-operator
-    place for ssh identity (User/IdentityFile/ProxyJump); it is gitignored and seeded
-    fully commented so an untouched file is a no-op. No active ``Host *`` block is
-    seeded in ``ssh/config`` (it could override a user's global ssh defaults when
-    Included).
+    Never overwrites a hand-edited file. ``ssh/config`` and ``ssh/known_hosts`` are
+    committed; ``ssh/config.local`` is gitignored and seeded fully commented.
     """
     paths.ssh_dir().mkdir(parents=True, exist_ok=True)
     cfg = paths.ssh_config_path()
     if not cfg.exists():
         cfg.write_text(_SSH_CONFIG_SEED, encoding="utf-8")
-    # ssh refuses an Included client config that is group/other-writable ("Bad owner
-    # or permissions" at connect time). Git does not track file modes beyond the
-    # exec bit, so a checkout under umask 002 leaves this COMMITTED file
-    # group-writable (0664) — which would block every deploy. Normalise to 0644
-    # (strip group/other WRITE bits) on every pass — not just at creation — so a
-    # loose-mode checkout or hand-edit is repaired before the next deploy connects.
+    # Git tracks no mode beyond the exec bit, so a checkout under umask 002 can leave
+    # this committed file group-writable; ssh then refuses it. Repair on every pass.
     cfg.chmod(0o644)
     local_cfg = paths.ssh_config_local_path()
     if not local_cfg.exists():
         local_cfg.write_text(_SSH_CONFIG_LOCAL_SEED, encoding="utf-8")
-    # ssh refuses a client config that is group/other-writable ("Bad owner or
-    # permissions" at connect time). Normalise to 0600 on every pass — not just at
-    # creation — so a file seeded under a loose umask or hand-edited by the operator
-    # is repaired before the next deploy connects. Safe: config.local is gitignored
-    # and per-operator (git only tracks the exec bit anyway).
-    local_cfg.chmod(0o600)
+    # ssh refuses a group/other-writable client config. Repair on every pass.
+    local_cfg.chmod(paths.SECRET_FILE_MODE)
     kh = paths.ssh_known_hosts_path()
     if not kh.exists():
         kh.write_text(_SSH_KNOWN_HOSTS_SEED, encoding="utf-8")
@@ -260,11 +220,8 @@ _GITIGNORE_ENTRIES = [".st-cli/", ".vault-pass", "ssh/config.local"]
 
 
 def ensure_gitignore() -> None:
-    """Append the st-cli scaffolding-ignore entries to the repo-root ``.gitignore``.
-
-    Idempotent: only missing entries are appended (under a header comment on first
-    write). Owns the sole write to the committed ``.gitignore``.
-    """
+    """Append the missing st-cli scaffolding-ignore entries to the repo-root
+    ``.gitignore``."""
     gi = paths.repo_root() / ".gitignore"
     existing = gi.read_text(encoding="utf-8").splitlines() if gi.exists() else []
     missing = [e for e in _GITIGNORE_ENTRIES if e not in existing]
@@ -279,65 +236,48 @@ def ensure_gitignore() -> None:
 def read_common_text(app: str, env: str) -> str:
     """Return the raw text of ``<app>/<env>/common.yml`` (``""`` if absent).
 
-    For callers needing the pre-``---`` header comment block that the round-trip
-    loader (:func:`load_common`) does not preserve.
+    Keeps the pre-``---`` header comment block that `load_common` does not preserve.
     """
     p = paths.common_path(app, env)
     return p.read_text(encoding="utf-8") if p.exists() else ""
 
 
 def load_common(app: str, env: str):
-    """Load ``<app>/<env>/common.yml`` (returns a ruamel CommentedMap; {} if absent).
-
-    Round-trips through the shared YAML instance so comments and existing keys
-    are preserved when the caller updates and saves via :func:`save_common`.
-    """
+    """Load ``<app>/<env>/common.yml`` (returns a ruamel CommentedMap; {} if absent)."""
     return _load_yaml(paths.common_path(app, env))
 
 
 def save_common(app: str, env: str, data) -> None:
     """Write ``<app>/<env>/common.yml``, creating parent dirs.
 
-    Merges are the caller's responsibility — load via :func:`load_common`,
-    mutate the returned CommentedMap, then save. Preserves comments + order.
+    A merge is the caller's responsibility: load, mutate, then save.
     """
     _save_yaml(paths.common_path(app, env), data)
 
 
 def read_hosts(
-    app: str, env: str, component: str, group: Optional[str] = None
+    app: str, env: str, component: str, group: str | None = None
 ) -> list[str]:
     """Parse the unit's ``hosts`` ini and return its host IPs/names.
 
-    The hosts file is the single source of truth for a unit's hosts (they are
-    NOT duplicated in .st-cli.yml). Reads the ``ansible_host=<x>`` value of each
-    inventory line, falling back to the leading token.
-
-    When ``group`` is given, only the hosts under that ``[group]`` section are
-    returned; when ``None`` (default), all hosts across all groups are returned.
-    Section headers (``[...]``) and ``#`` / ``;`` comments are always ignored.
-
-    Thin wrapper over :func:`read_inventory` — returns the ip half of each pair.
+    ``group`` narrows to one ``[group]`` section; ``None`` returns every group.
     """
     return [ip for _alias, ip in read_inventory(app, env, component, group)]
 
 
 def read_inventory(
-    app: str, env: str, component: str, group: Optional[str] = None
+    app: str, env: str, component: str, group: str | None = None
 ) -> list[tuple[str, str]]:
     """Parse the unit's ``hosts`` ini into ``(alias, ip)`` pairs.
 
-    ``alias`` is the inventory hostname (the leading token of each line, e.g.
-    ``meet1``) — the identifier an ansible pattern / ``--limit`` matches and what
-    ``-H/--host`` accepts. ``ip`` is the ``ansible_host=<x>`` value (what ssh
-    connects to), falling back to the alias when no ``ansible_host`` is set. Group
-    filtering + comment/header skipping mirror :func:`read_hosts`.
+    ``alias`` is the inventory hostname an ansible pattern or ``-H/--host`` matches.
+    ``ip`` is the ``ansible_host=<x>`` value, falling back to the alias.
     """
     p = paths.hosts_path(app, env, component)
     if not p.exists():
         return []
     entries: list[tuple[str, str]] = []
-    current: Optional[str] = None
+    current: str | None = None
     want_group = group is not None
     for line in p.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -354,22 +294,17 @@ def read_inventory(
     return entries
 
 
-def find_host(entries: list[tuple[str, str]], alias: str) -> Optional[tuple[str, str]]:
-    """Return the ``(alias, ip)`` entry whose alias equals ``alias`` (else None).
+def find_host(entries: list[tuple[str, str]], alias: str) -> tuple[str, str] | None:
+    """Return the ``(alias, ip)`` entry whose alias equals ``alias`` (else ``None``).
 
-    Matching is on the inventory alias only (never the ip), so ``-H`` is scoped to
-    a host that provably belongs to this app/env/component's inventory.
+    Matches on the inventory alias only, never the ip.
     """
     return next((e for e in entries if e[0] == alias), None)
 
 
 def component_inventory(app: str, env: str, meta, comp) -> list[tuple[str, str]]:
-    """The ``(alias, ip)`` inventory a component targets (worker→core aware).
-
-    Reads the hosts file of the component's :func:`~appmeta.files_component` under
-    its :func:`effective_group`. Shared by the ssh path (``cmd/remote.py``) and the
-    playbook path (``cmd/deploy.py``) so the read + group rule lives in one place.
-    """
+    """Return the ``(alias, ip)`` inventory a component targets (worker-to-core
+    aware)."""
     files = meta.files_component(comp.key)
     return read_inventory(
         app, env, files.key, group=effective_group(app, env, meta, comp)
@@ -377,14 +312,62 @@ def component_inventory(app: str, env: str, meta, comp) -> list[tuple[str, str]]
 
 
 def effective_group(app: str, env: str, meta, comp) -> str:
-    """Return the inventory group a component should target (the DRY rule).
+    """Return the inventory group a component should target.
 
-    Workers with their own ``[workers]`` group in the core's ``hosts`` file target
-    it; a worker without one falls back to the core (files) group. Non-workers
-    always target their own (files) group. ``vars_files`` stay pointed at the
-    core regardless — only the targeted ``hosts:`` group changes.
+    A worker with its own ``[workers]`` group targets it; otherwise it falls back
+    to the core group. A non-worker always targets its own group.
     """
     files = meta.files_component(comp.key)
     if comp.is_worker and read_hosts(app, env, files.key, group=comp.app_name):
         return comp.app_name
     return files.app_name
+
+
+def alias_list(entries: list[tuple[str, str]]) -> str:
+    """Format ``(alias, ip)`` entries as a comma-separated list of aliases."""
+    return ", ".join(a for a, _ in entries)
+
+
+def iter_targeted_hosts(
+    app: str,
+    env: str,
+    meta,
+    units,
+    components: list[str] | None,
+    host: str | None,
+    skip_workers: bool = False,
+) -> Iterator[tuple[object, str, str]]:
+    """Yield ``(comp, alias, ip)`` for every targeted host across ``units``.
+
+    Default is all hosts of each component; ``host`` (an alias) narrows to one.
+    With ``components`` set, a missing ``host`` raises; without it, a component
+    that lacks the host is skipped. ``skip_workers`` drops ``is_worker`` components.
+    """
+    matched = False
+    for u in units:
+        comp = meta.component(u.component)
+        if skip_workers and comp.is_worker:
+            continue
+        entries = component_inventory(app, env, meta, comp)
+        if not entries:
+            raise StCliError(
+                f"Unit {app}/{env}/{u.component} has no hosts (check its hosts file)."
+            )
+        if host is not None:
+            e = find_host(entries, host)
+            if e is None:
+                if components:
+                    raise StCliError(
+                        f"Host '{host}' is not an alias of {app}/{env}/{u.component}: "
+                        f"{alias_list(entries)}."
+                    )
+                ui.info(f"Skipping {u.component}: alias '{host}' not in its inventory.")
+                continue
+            entries = [e]
+        for alias, ip in entries:
+            matched = True
+            yield comp, alias, ip
+    if host is not None and not matched:
+        raise StCliError(
+            f"Host alias '{host}' matched no managed component's inventory."
+        )
