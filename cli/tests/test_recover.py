@@ -201,20 +201,20 @@ def test_recover_dotenv_inversion_skips_embedded_placeholder_lines(repo):
     seed_creds(repo)
     save_manifest(
         StCliManifest(
-            "0.0.20", "0.0.20", [UnitState("messages", "prod", "mta-in", "managed")]
+            "0.0.20", "0.0.20", [UnitState("messages", "prod", "pymta", "managed")]
         )
     )
-    data = tree.load_vars("messages", "prod", "mta-in")
-    data["st_messages_mta_in_env"] = (
+    data = tree.load_vars("messages", "prod", "pymta")
+    data["st_messages_pymta_env"] = (
         "MDA_API_SECRET={{ vault_mda_api_secret }}\n"
         "MDA_API_BASE_URL=https://messages.example.org/api/v1.0/\n"
-        "MYHOSTNAME=mx.example.org\n"
+        "PYMTA_SMTP_HOSTNAME=mx.example.org\n"
     )
-    tree.save_vars("messages", "prod", "mta-in", data)
+    tree.save_vars("messages", "prod", "pymta", data)
 
-    answers = recover.recover("messages", "prod", "mta-in")
+    answers = recover.recover("messages", "prod", "pymta")
     assert answers["MDA_API_SECRET"] == "{{ vault_mda_api_secret }}"
-    assert answers["MYHOSTNAME"] == "mx.example.org"
+    assert answers["PYMTA_SMTP_HOSTNAME"] == "mx.example.org"
     assert "DOMAIN" not in answers
 
 
@@ -223,29 +223,29 @@ def test_recover_dotenv_inversion_blob_takes_precedence(repo, monkeypatch):
     seed_creds(repo)
     save_manifest(
         StCliManifest(
-            "0.0.20", "0.0.20", [UnitState("messages", "prod", "mta-in", "managed")]
+            "0.0.20", "0.0.20", [UnitState("messages", "prod", "pymta", "managed")]
         )
     )
-    data = tree.load_vars("messages", "prod", "mta-in")
-    data["st_messages_mta_in_env"] = (
+    data = tree.load_vars("messages", "prod", "pymta")
+    data["st_messages_pymta_env"] = (
         "MDA_API_SECRET={{ vault_mda_api_secret }}\n"
         "MDA_API_BASE_URL=https://messages.example.org/api/v1.0/\n"
-        "MYHOSTNAME=from-dotenv.example.org\n"
+        "PYMTA_SMTP_HOSTNAME=from-dotenv.example.org\n"
     )
-    data["st_fake_blob"] = "MYHOSTNAME=from-blob.example.org\n"
-    tree.save_vars("messages", "prod", "mta-in", data)
+    data["st_fake_blob"] = "PYMTA_SMTP_HOSTNAME=from-blob.example.org\n"
+    tree.save_vars("messages", "prod", "pymta", data)
 
     real_env_render_spec = appmeta.AppMeta.env_render_spec
 
     def fake_env_render_spec(self, component_key):
-        if component_key == "mta-in":
+        if component_key == "pymta":
             return {"fake": {"blob_var": "st_fake_blob"}}
         return real_env_render_spec(self, component_key)
 
     monkeypatch.setattr(appmeta.AppMeta, "env_render_spec", fake_env_render_spec)
 
-    answers = recover.recover("messages", "prod", "mta-in")
-    assert answers["MYHOSTNAME"] == "from-blob.example.org"
+    answers = recover.recover("messages", "prod", "pymta")
+    assert answers["PYMTA_SMTP_HOSTNAME"] == "from-blob.example.org"
 
 
 def test_recover_cadvisor_true(repo):

@@ -1,0 +1,24 @@
+---
+{{ ansible_managed | comment }}
+
+name: messages_pymta
+services:
+  pymta:
+    container_name: pymta
+    image: "{{ st_messages_pymta_image }}:{{ st_messages_pymta_tag }}"
+    network_mode: host
+    env_file: ./env
+    # environment wins over env_file: the role owns the bind ports and the TLS paths.
+    environment:
+      PYMTA_SMTP_BIND_PORT: "{{ st_messages_pymta_port }}"
+      PYMTA_METRICS_BIND_HOST: "127.0.0.1"
+      PYMTA_METRICS_BIND_PORT: "{{ st_messages_pymta_metrics_port }}"
+{% if st_messages_pymta_starttls_certificate_path is defined and st_messages_pymta_starttls_certificate_path | trim | length > 0 %}
+      PYMTA_TLS_CERT_FILE: /starttls_certificate.pem
+      PYMTA_TLS_KEY_FILE: /starttls_certificate.pem
+    volumes:
+      - {{ st_messages_pymta_starttls_certificate_path }}:/starttls_certificate.pem:ro
+{% endif %}
+    # The image has a HEALTHCHECK on PYMTA_SMTP_BIND_PORT; the podman role waits on it.
+    # PYMTA_SHUTDOWN_TIMEOUT is 25 s; podman stops after 10 s by default.
+    stop_grace_period: 30s

@@ -561,28 +561,58 @@ def test_needed_baseline_skips_external_units(tmp_path, monkeypatch):
     assert upgrades.needed(m) == []
 
 
+def test_needed_skips_a_component_bootstrap_can_no_longer_replay(tmp_path, monkeypatch):
+    """A legacy mta-in unit is never flagged: no replay path would clear it."""
+    _set_document(
+        monkeypatch,
+        tmp_path,
+        {"flags": [{"version": "0.4.0", "apps": ["messages"], "reason": "r"}]},
+    )
+    m = _manifest(
+        [
+            UnitState("messages", "prod", "messages", "managed", "0.3.1"),
+            UnitState("messages", "prod", "mta-in", "managed", "0.3.1"),
+        ]
+    )
+    assert {n.component for n in upgrades.needed(m)} == {"messages"}
+
+
+def test_needed_skips_mta_in_even_when_baseline_is_above_its_stamp(
+    tmp_path, monkeypatch
+):
+    """A baseline full-replay must not resurrect the unreplayable mta-in unit."""
+    _set_document(monkeypatch, tmp_path, {"baseline": "0.4.0", "flags": []})
+    m = _manifest(
+        [
+            UnitState("messages", "prod", "messages", "managed", "0.3.1"),
+            UnitState("messages", "prod", "mta-in", "managed", "0.3.1"),
+        ]
+    )
+    assert {n.component for n in upgrades.needed(m)} == {"messages"}
+
+
 def test_offerable_components_meet_excludes_egress_and_workers():
     # "egress" is bundled into the livekit step; "workers" is never a dependency target
     assert upgrades.offerable_components("meet") == {"livekit"}
 
 
 def test_offerable_components_messages_lists_every_dependency_target():
-    assert upgrades.offerable_components("messages") == {"mta-in", "mpa", "socks-proxy"}
+    assert upgrades.offerable_components("messages") == {"pymta", "mpa", "socks-proxy"}
 
 
 def test_offerable_components_unknown_app_yields_empty_set():
     assert upgrades.offerable_components("not-a-real-app") == set()
 
 
-def _mta_in_flag(**overrides) -> dict:
-    # "mta-in" is a real dependency target; unlike "egress" it is its own
+def _pymta_flag(**overrides) -> dict:
+    # "pymta" is a real dependency target; unlike "egress" it is its own
     # dep-loop iteration
     flag = {
         "version": "0.3.0",
         "apps": ["messages"],
-        "reason": "messages 1.5 adds an mta-in relay component",
+        "reason": "messages 1.5 adds a pymta relay component",
         "link": "l",
-        "new_components": ["mta-in"],
+        "new_components": ["pymta"],
     }
     flag.update(overrides)
     return flag
@@ -591,22 +621,22 @@ def _mta_in_flag(**overrides) -> dict:
 def test_new_component_offers_untracked_and_stale_stamp_is_offered(
     tmp_path, monkeypatch
 ):
-    _set_document(monkeypatch, tmp_path, {"flags": [_mta_in_flag()]})
+    _set_document(monkeypatch, tmp_path, {"flags": [_pymta_flag()]})
     m = _manifest([UnitState("messages", "prod", "messages", "managed", "0.1.0")])
     assert upgrades.new_component_offers(m) == [
         NewComponentOffer(
             app="messages",
             env="prod",
-            component="mta-in",
+            component="pymta",
             version="0.3.0",
-            reason="messages 1.5 adds an mta-in relay component",
+            reason="messages 1.5 adds a pymta relay component",
             link="l",
         )
     ]
 
 
 def test_new_component_offers_next_flag_offers_on_current_stamp(tmp_path, monkeypatch):
-    flag = _mta_in_flag(version=upgrades.NEXT)
+    flag = _pymta_flag(version=upgrades.NEXT)
     del flag["link"]
     _set_document(monkeypatch, tmp_path, {"flags": [flag]})
     # a "next" flag offers even when the unit is stamped with the current CLI.
@@ -620,7 +650,7 @@ def test_new_component_offers_next_flag_offers_on_current_stamp(tmp_path, monkey
 
 
 def test_new_component_offers_derives_link_when_flag_has_none(tmp_path, monkeypatch):
-    flag = _mta_in_flag()
+    flag = _pymta_flag()
     del flag["link"]
     _set_document(monkeypatch, tmp_path, {"flags": [flag]})
     m = _manifest([UnitState("messages", "prod", "messages", "managed", "0.1.0")])
@@ -636,7 +666,7 @@ def test_new_component_offers_egress_is_never_offered(tmp_path, monkeypatch):
     _set_document(
         monkeypatch,
         tmp_path,
-        {"flags": [_mta_in_flag(apps=["meet"], new_components=["egress"])]},
+        {"flags": [_pymta_flag(apps=["meet"], new_components=["egress"])]},
     )
     m = _manifest([UnitState("meet", "prod", "meet", "managed", "0.1.0")])
     assert upgrades.new_component_offers(m) == []
@@ -645,11 +675,11 @@ def test_new_component_offers_egress_is_never_offered(tmp_path, monkeypatch):
 def test_new_component_offers_already_tracked_managed_is_not_offered(
     tmp_path, monkeypatch
 ):
-    _set_document(monkeypatch, tmp_path, {"flags": [_mta_in_flag()]})
+    _set_document(monkeypatch, tmp_path, {"flags": [_pymta_flag()]})
     m = _manifest(
         [
             UnitState("messages", "prod", "messages", "managed", "0.1.0"),
-            UnitState("messages", "prod", "mta-in", "managed", "0.1.0"),
+            UnitState("messages", "prod", "pymta", "managed", "0.1.0"),
         ]
     )
     assert upgrades.new_component_offers(m) == []
@@ -658,11 +688,11 @@ def test_new_component_offers_already_tracked_managed_is_not_offered(
 def test_new_component_offers_already_tracked_external_is_not_offered(
     tmp_path, monkeypatch
 ):
-    _set_document(monkeypatch, tmp_path, {"flags": [_mta_in_flag()]})
+    _set_document(monkeypatch, tmp_path, {"flags": [_pymta_flag()]})
     m = _manifest(
         [
             UnitState("messages", "prod", "messages", "managed", "0.1.0"),
-            UnitState("messages", "prod", "mta-in", "external", "0.1.0"),
+            UnitState("messages", "prod", "pymta", "external", "0.1.0"),
         ]
     )
     assert upgrades.new_component_offers(m) == []
@@ -671,13 +701,13 @@ def test_new_component_offers_already_tracked_external_is_not_offered(
 def test_new_component_offers_stamp_at_or_above_flag_version_is_not_offered(
     tmp_path, monkeypatch
 ):
-    _set_document(monkeypatch, tmp_path, {"flags": [_mta_in_flag()]})
+    _set_document(monkeypatch, tmp_path, {"flags": [_pymta_flag()]})
     m = _manifest([UnitState("messages", "prod", "messages", "managed", "0.3.0")])
     assert upgrades.new_component_offers(m) == []
 
 
 def test_new_component_offers_app_not_listed_is_not_offered(tmp_path, monkeypatch):
-    _set_document(monkeypatch, tmp_path, {"flags": [_mta_in_flag(apps=["drive"])]})
+    _set_document(monkeypatch, tmp_path, {"flags": [_pymta_flag(apps=["drive"])]})
     m = _manifest([UnitState("messages", "prod", "messages", "managed", "0.1.0")])
     assert upgrades.new_component_offers(m) == []
 
@@ -686,7 +716,7 @@ def test_new_component_offers_excludes_external_units_from_stamp_minimum(
     tmp_path, monkeypatch
 ):
     # the external mpa's ancient stamp must not drag the minimum down
-    _set_document(monkeypatch, tmp_path, {"flags": [_mta_in_flag()]})
+    _set_document(monkeypatch, tmp_path, {"flags": [_pymta_flag()]})
     m = _manifest(
         [
             UnitState("messages", "prod", "messages", "managed", "0.3.0"),
@@ -697,13 +727,13 @@ def test_new_component_offers_excludes_external_units_from_stamp_minimum(
 
 
 def test_new_component_offers_apps_all_is_defensively_skipped(tmp_path, monkeypatch):
-    _set_document(monkeypatch, tmp_path, {"flags": [_mta_in_flag(apps="all")]})
+    _set_document(monkeypatch, tmp_path, {"flags": [_pymta_flag(apps="all")]})
     m = _manifest([UnitState("messages", "prod", "messages", "managed", "0.1.0")])
     assert upgrades.new_component_offers(m) == []
 
 
 def test_new_component_offers_filters_by_app_and_env(tmp_path, monkeypatch):
-    _set_document(monkeypatch, tmp_path, {"flags": [_mta_in_flag()]})
+    _set_document(monkeypatch, tmp_path, {"flags": [_pymta_flag()]})
     m = _manifest(
         [
             UnitState("messages", "prod", "messages", "managed", "0.1.0"),

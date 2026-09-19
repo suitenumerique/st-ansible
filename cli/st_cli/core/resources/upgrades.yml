@@ -34,7 +34,7 @@
 #                                         # declared for `apps` (must be an
 #                                         # explicit list, not "all"); each
 #                                         # key must be a real dependencies[].on
-#                                         # target (e.g. "livekit", "mta-in");
+#                                         # target (e.g. "livekit", "pymta");
 #                                         # upgrade offers to bootstrap them once
 #       warnings: ["..."]                # optional: the manual steps the
 #                                         # replay cannot do; a list of strings
