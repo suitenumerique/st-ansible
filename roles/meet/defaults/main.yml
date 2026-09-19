@@ -15,7 +15,7 @@ st_meet_frontend_image: docker.io/lasuite/meet-frontend
 # Image repository for the meet backend.
 st_meet_backend_image: docker.io/lasuite/meet-backend
 # Tag of the meet docker image to deploy.
-st_meet_tag: v1.29.0
+st_meet_tag: v1.31.0
 # Local path to the custom template to use for meet env file.
 st_meet_backend_env_template: meet/backend_env.j2
 # Content of the default backend_env_template, not used if st_meet_backend_env_template is defined.

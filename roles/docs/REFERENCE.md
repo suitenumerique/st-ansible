@@ -31,7 +31,7 @@ Installs and configures the docs application from La Suite Territoriale on Debia
 | st_docs_frontend_image | Image repository for the docs frontend. | str | no | docker.io/lasuite/impress-frontend |
 | st_docs_backend_image | Image repository for the docs backend. | str | no | docker.io/lasuite/impress-backend |
 | st_docs_yprovider_image | Image repository for the docs y-provider collaboration server. | str | no | docker.io/lasuite/impress-y-provider |
-| st_docs_tag | Tag of the docs docker images to deploy. | str | no | v5.5.0 |
+| st_docs_tag | Tag of the docs docker images to deploy. | str | no | v5.6.1 |
 | st_docs_backend_env_template | Local path to the custom template to use for docs backend env file. | str | no | docs/backend_env.j2 |
 | st_docs_backend_env | Content of the default backend_env_template, not used if st_docs_backend_env_template is defined. | str | no |  |
 | st_docs_backend_run_migrations | Whether to run database migrations on docs backend startup. | bool | no | True |
