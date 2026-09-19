@@ -7,9 +7,11 @@
 		format json
 	}
 	servers {
-		# Trust the front load balancer (private network) so the real client IP
-		# from its X-Forwarded-For is preserved and forwarded to frontend + backend.
-		trusted_proxies static private_ranges
+		# Trust the front load balancer so the client IP comes from its X-Forwarded-For.
+		# CADDY_TRUSTED_PROXIES is an optional CIDR list from the caddy_env file.
+		trusted_proxies static {$CADDY_TRUSTED_PROXIES:private_ranges}
+		# Walk X-Forwarded-For right to left, so a client cannot set its own client IP.
+		trusted_proxies_strict
 	}
 }
 
@@ -73,6 +75,17 @@
 				header_up Host {$CADDY_S3_HOST}
 			}
 		}
+	}
+
+	# Django admin IP allowlist (mirrors the messages Caddyfiles). CADDY_ADMIN_IP_ALLOWLIST
+	# is an optional space-separated CIDR list from the caddy_env file: unset allows all,
+	# empty denies all. A named matcher keeps this handle before @backend in file order.
+	@admin_denied {
+		path /admin /admin/* /admin;*
+		not client_ip {$CADDY_ADMIN_IP_ALLOWLIST:0.0.0.0/0 ::/0}
+	}
+	handle @admin_denied {
+		respond 403
 	}
 
 	# Backend (mirrors ingress.yaml /api + /external_api, ingress_admin.yaml).

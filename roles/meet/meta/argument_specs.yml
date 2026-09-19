@@ -73,7 +73,7 @@ argument_specs:
         default: "meet/caddy_env.j2"
       st_meet_caddy_env:
         type: "str"
-        description: "Content of the default caddy_env_template, not used if st_meet_caddy_env_template is defined."
+        description: "Content of the default caddy_env_template, not used if st_meet_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST and CADDY_S3_BUCKET. Optional: CADDY_ADMIN_IP_ALLOWLIST (space-separated CIDR list of client IPs allowed on the Django admin URL, default allows all) and CADDY_TRUSTED_PROXIES (space-separated CIDR list of proxies whose X-Forwarded-For sets the client IP, default private_ranges)."
         default: ""
       st_meet_compose_template:
         type: "str"

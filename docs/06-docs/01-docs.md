@@ -64,7 +64,7 @@ reference.
 | `st_docs_uid` | Unix UID for the docs user | `1106` |
 | `st_docs_port` | Host port for the caddy edge | `50600` |
 | `st_docs_backend_env` | Backend environment content | _(empty)_ |
-| `st_docs_caddy_env` | Caddy env content: `CADDY_S3_*` + `CADDY_YPROVIDER_ENDPOINTS` (space-separated `host:port` yprovider upstreams for the `/collaboration/*` route) | _(empty, required keys)_ |
+| `st_docs_caddy_env` | Caddy env content: `CADDY_S3_*` + `CADDY_YPROVIDER_ENDPOINTS` (space-separated `host:port` yprovider upstreams for the `/collaboration/*` route), plus optional `CADDY_ADMIN_IP_ALLOWLIST` / `CADDY_TRUSTED_PROXIES` | _(empty, required keys)_ |
 | `st_docs_frontend_logo_src` | Local path to an optional custom logo (svg) | _(unset)_ |
 | `st_docs_theme_customization_src` | Local path to an optional theme customization JSON | _(unset)_ |
 | `st_docs_backend_run_migrations` | Run Django migrations on deploy | `true` |
@@ -77,6 +77,43 @@ reference.
 
 Caddy listens on `50600` inside its own container and is the only container published to the
 host. The frontend and backend are only reachable from caddy via the Podman bridge network.
+
+## Django Admin IP Allowlist
+
+The caddy edge adds two optional environment variables. Set them as lines in `st_docs_caddy_env`.
+
+| Variable | Default | Description |
+|----------|---------|--------------|
+| `CADDY_ADMIN_IP_ALLOWLIST` | `0.0.0.0/0 ::/0` | Space-separated CIDR list of client IPs allowed on `/admin`, `/admin/*`, and `/admin;*`. Caddy answers 403 to a denied request. |
+| `CADDY_TRUSTED_PROXIES` | `private_ranges` | Space-separated CIDR list of upstream proxies whose `X-Forwarded-For` sets the client IP. |
+
+Example:
+
+```yaml
+st_docs_caddy_env: |
+  CADDY_S3_PROTOCOL=https
+  CADDY_S3_HOST=s3.example.com
+  CADDY_S3_BUCKET=docs-media-storage
+  CADDY_YPROVIDER_ENDPOINTS=yprovider1.example.com:4444 yprovider2.example.com:4444
+  # Load balancer range: trusted proxy only (default: private_ranges).
+  CADDY_TRUSTED_PROXIES=203.0.113.0/24
+  # Operator network allowed on the Django admin URL (default: allow all).
+  CADDY_ADMIN_IP_ALLOWLIST=198.51.100.0/24
+```
+
+Follow these rules:
+
+- If you set `CADDY_ADMIN_IP_ALLOWLIST`, add your own administration network. When the list
+  does not include it, you lose access to the Django admin.
+- Do not set `CADDY_ADMIN_IP_ALLOWLIST` to an empty value. An empty list denies every admin
+  request. Remove the line to allow all.
+- `CADDY_TRUSTED_PROXIES` must cover the load balancer. When it does not, Caddy uses the load
+  balancer IP as the client IP. The allowlist then applies to that IP, not to the client.
+- Do not keep the `private_ranges` default when untrusted machines share the private network
+  with caddy.
+- Caddy walks `X-Forwarded-For` right to left, so a client cannot set its own client IP.
+- `st-cli bootstrap` keeps these lines on a Modify or a silent replay. An Override replay
+  drops them. Add them back by hand.
 
 ## S3 Media Auth
 

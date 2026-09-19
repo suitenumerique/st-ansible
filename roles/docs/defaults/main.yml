@@ -30,7 +30,7 @@ st_docs_frontend_env_template: docs/frontend_env.j2
 st_docs_frontend_env: ''
 # Local path to the custom template to use for docs caddy env file.
 st_docs_caddy_env_template: docs/caddy_env.j2
-# Content of the default caddy_env_template, not used if st_docs_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST, CADDY_S3_BUCKET and CADDY_YPROVIDER_ENDPOINTS (a space-separated host:port list of y-provider upstreams, load-balanced by document room).
+# Content of the default caddy_env_template, not used if st_docs_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST, CADDY_S3_BUCKET and CADDY_YPROVIDER_ENDPOINTS (a space-separated host:port list of y-provider upstreams, load-balanced by document room). Optional: CADDY_ADMIN_IP_ALLOWLIST (space-separated CIDR list of client IPs allowed on the Django admin URL, default allows all) and CADDY_TRUSTED_PROXIES (space-separated CIDR list of proxies whose X-Forwarded-For sets the client IP, default private_ranges).
 st_docs_caddy_env: ''
 # Local path to the custom template to use for docs compose file.
 st_docs_compose_template: docs/compose.yaml.j2

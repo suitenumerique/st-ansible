@@ -32,7 +32,7 @@ st_drive_frontend_env_template: drive/frontend_env.j2
 st_drive_frontend_env: ''
 # Local path to the custom template to use for drive caddy env file.
 st_drive_caddy_env_template: drive/caddy_env.j2
-# Content of the default caddy_env_template, not used if st_drive_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST and CADDY_S3_BUCKET.
+# Content of the default caddy_env_template, not used if st_drive_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST and CADDY_S3_BUCKET. Optional: CADDY_ADMIN_IP_ALLOWLIST (space-separated CIDR list of client IPs allowed on the Django admin URL, default allows all) and CADDY_TRUSTED_PROXIES (space-separated CIDR list of proxies whose X-Forwarded-For sets the client IP, default private_ranges).
 st_drive_caddy_env: ''
 # Image repository for the drive caddy reverse-proxy.
 st_drive_caddy_image: docker.io/caddy

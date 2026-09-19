@@ -44,4 +44,8 @@
           CADDY_S3_PROTOCOL=https
           CADDY_S3_HOST=s3.example.com
           CADDY_S3_BUCKET=drive-media-storage
+          # Load balancer range: trusted proxy only (default: private_ranges).
+          # CADDY_TRUSTED_PROXIES=203.0.113.0/24
+          # Operator network allowed on the Django admin URL (default: allow all).
+          # CADDY_ADMIN_IP_ALLOWLIST=198.51.100.0/24
         st_drive_cadvisor_enabled: true

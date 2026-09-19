@@ -230,6 +230,39 @@ def test_drive_legacy_s3_indirection_replay_migrates_to_caddy(repo, monkeypatch)
     assert (repo / "drive/prod/drive/vars.yml").read_text() == vars_after_first_replay
 
 
+def test_drive_caddy_env_hand_written_allowlist_survives_modify_replay(
+    repo, monkeypatch
+):
+    """A hand-added CADDY_TRUSTED_PROXIES/CADDY_ADMIN_IP_ALLOWLIST pair in
+    st_drive_caddy_env survives a Modify replay, with no `# added by st-cli` marker."""
+    seed_creds(repo)
+    script_questionary(monkeypatch, drive_first_run_script())
+    bootstrap.bootstrap("drive", "prod")
+
+    data = tree.load_vars("drive", "prod", "drive")
+    blob = str(data["st_drive_caddy_env"])
+    blob += "CADDY_TRUSTED_PROXIES=203.0.113.0/24\nCADDY_ADMIN_IP_ALLOWLIST=198.51.100.0/24 192.0.2.0/24\n"
+    data["st_drive_caddy_env"] = LiteralScalarString(blob)
+    tree.save_vars("drive", "prod", "drive", data)
+
+    accept_defaults(
+        monkeypatch,
+        [
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("select", "Bootstrap collabora now?", "No — bootstrap later"),
+        ],
+    )
+    bootstrap.bootstrap("drive", "prod", replay=bootstrap.ReplayAction.MODIFY)
+
+    new_blob = str(tree.load_vars("drive", "prod", "drive")["st_drive_caddy_env"])
+    assert "CADDY_TRUSTED_PROXIES=203.0.113.0/24" in new_blob
+    assert "CADDY_ADMIN_IP_ALLOWLIST=198.51.100.0/24 192.0.2.0/24" in new_blob
+    assert "CADDY_S3_PROTOCOL=" in new_blob
+    assert "CADDY_S3_HOST=" in new_blob
+    assert "CADDY_S3_BUCKET=" in new_blob
+    assert "# added by st-cli" not in new_blob
+
+
 def test_workers_only_run_over_existing_core_skips_3way_select(repo, monkeypatch):
     """A `-c workers` re-run over an existing core skips the 3-way select and
     re-registers with no prompts."""

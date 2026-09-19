@@ -15,7 +15,7 @@ user unit. All sub-apps are disabled by default and must be explicitly enabled.
 
 | Sub-App | Description | Doc |
 |---------|-------------|-----|
-| **drive** | Core web application (frontend + backend) | This page |
+| **drive** | Core web application (caddy + frontend + backend) | This page |
 | **workers** | Celery background workers | [02-workers.md](02-workers.md) |
 | **collabora** | Collabora Online document editor | [03-collabora.md](03-collabora.md) |
 
@@ -58,7 +58,7 @@ See [roles/drive/REFERENCE.md](../../roles/drive/REFERENCE.md) for the complete 
 | `st_drive_uid` | Unix UID for the drive user | `1101` |
 | `st_drive_port` | Host port for the caddy edge | `50100` |
 | `st_drive_backend_env` | Backend environment content | _(empty)_ |
-| `st_drive_caddy_env` | Caddy env content: `CADDY_S3_PROTOCOL`, `CADDY_S3_HOST`, `CADDY_S3_BUCKET` for the media proxy | _(empty, required keys)_ |
+| `st_drive_caddy_env` | Caddy env content: `CADDY_S3_PROTOCOL`, `CADDY_S3_HOST`, `CADDY_S3_BUCKET` for the media proxy, plus optional `CADDY_ADMIN_IP_ALLOWLIST` / `CADDY_TRUSTED_PROXIES` | _(empty, required keys)_ |
 | `st_drive_backend_run_migrations` | Run Django migrations on deploy | `true` |
 
 ## Network & Ports
@@ -69,6 +69,42 @@ See [roles/drive/REFERENCE.md](../../roles/drive/REFERENCE.md) for the complete 
 
 Caddy listens on `50100` inside its own container and is the only container published to the
 host. The frontend and backend are only reachable from caddy via the Podman bridge network.
+
+## Django Admin IP Allowlist
+
+The caddy edge adds two optional environment variables. Set them as lines in `st_drive_caddy_env`.
+
+| Variable | Default | Description |
+|----------|---------|--------------|
+| `CADDY_ADMIN_IP_ALLOWLIST` | `0.0.0.0/0 ::/0` | Space-separated CIDR list of client IPs allowed on `/admin`, `/admin/*`, and `/admin;*`. Caddy answers 403 to a denied request. |
+| `CADDY_TRUSTED_PROXIES` | `private_ranges` | Space-separated CIDR list of upstream proxies whose `X-Forwarded-For` sets the client IP. |
+
+Example:
+
+```yaml
+st_drive_caddy_env: |
+  CADDY_S3_PROTOCOL=https
+  CADDY_S3_HOST=s3.example.com
+  CADDY_S3_BUCKET=drive-media-storage
+  # Load balancer range: trusted proxy only (default: private_ranges).
+  CADDY_TRUSTED_PROXIES=203.0.113.0/24
+  # Operator network allowed on the Django admin URL (default: allow all).
+  CADDY_ADMIN_IP_ALLOWLIST=198.51.100.0/24
+```
+
+Follow these rules:
+
+- If you set `CADDY_ADMIN_IP_ALLOWLIST`, add your own administration network. When the list
+  does not include it, you lose access to the Django admin.
+- Do not set `CADDY_ADMIN_IP_ALLOWLIST` to an empty value. An empty list denies every admin
+  request. Remove the line to allow all.
+- `CADDY_TRUSTED_PROXIES` must cover the load balancer. When it does not, Caddy uses the load
+  balancer IP as the client IP. The allowlist then applies to that IP, not to the client.
+- Do not keep the `private_ranges` default when untrusted machines share the private network
+  with caddy.
+- Caddy walks `X-Forwarded-For` right to left, so a client cannot set its own client IP.
+- `st-cli bootstrap` keeps these lines on a Modify or a silent replay. An Override replay
+  drops them. Add them back by hand.
 
 ## S3 Media Auth
 

@@ -30,7 +30,7 @@ st_meet_frontend_env: ''
 st_meet_frontend_logo_src: ''
 # Local path to the custom template to use for meet caddy env file.
 st_meet_caddy_env_template: meet/caddy_env.j2
-# Content of the default caddy_env_template, not used if st_meet_caddy_env_template is defined.
+# Content of the default caddy_env_template, not used if st_meet_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST and CADDY_S3_BUCKET. Optional: CADDY_ADMIN_IP_ALLOWLIST (space-separated CIDR list of client IPs allowed on the Django admin URL, default allows all) and CADDY_TRUSTED_PROXIES (space-separated CIDR list of proxies whose X-Forwarded-For sets the client IP, default private_ranges).
 st_meet_caddy_env: ''
 # Local path to the custom template to use for meet compose file.
 st_meet_compose_template: meet/compose.yaml.j2

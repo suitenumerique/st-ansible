@@ -38,7 +38,7 @@ Installs and configures the meet application from La Suite Territoriale on Debia
 | st_meet_frontend_env | Content of the default frontend_env_template, not used if st_meet_frontend_env_template is defined. | str | no |  |
 | st_meet_frontend_logo_src | Local path to a custom logo file (e.g. svg) to mount over the meet frontend logo. No validation is performed. Empty means use the image default. | str | no |  |
 | st_meet_caddy_env_template | Local path to the custom template to use for meet caddy env file. | str | no | meet/caddy_env.j2 |
-| st_meet_caddy_env | Content of the default caddy_env_template, not used if st_meet_caddy_env_template is defined. | str | no |  |
+| st_meet_caddy_env | Content of the default caddy_env_template, not used if st_meet_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST and CADDY_S3_BUCKET. Optional: CADDY_ADMIN_IP_ALLOWLIST (space-separated CIDR list of client IPs allowed on the Django admin URL, default allows all) and CADDY_TRUSTED_PROXIES (space-separated CIDR list of proxies whose X-Forwarded-For sets the client IP, default private_ranges). | str | no |  |
 | st_meet_compose_template | Local path to the custom template to use for meet compose file. | str | no | meet/compose.yaml.j2 |
 | st_meet_caddy_image | Image repository for the meet caddy reverse-proxy. | str | no | docker.io/caddy |
 | st_meet_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | 2.11.4-alpine |

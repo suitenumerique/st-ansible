@@ -38,7 +38,7 @@ Installs and configures the docs application from La Suite Territoriale on Debia
 | st_docs_frontend_env_template | Local path to the custom template to use for docs frontend env file. | str | no | docs/frontend_env.j2 |
 | st_docs_frontend_env | Content of the default frontend_env_template, not used if st_docs_frontend_env_template is defined. | str | no |  |
 | st_docs_caddy_env_template | Local path to the custom template to use for docs caddy env file. | str | no | docs/caddy_env.j2 |
-| st_docs_caddy_env | Content of the default caddy_env_template, not used if st_docs_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST, CADDY_S3_BUCKET and CADDY_YPROVIDER_ENDPOINTS (a space-separated host:port list of y-provider upstreams, load-balanced by document room). | str | no |  |
+| st_docs_caddy_env | Content of the default caddy_env_template, not used if st_docs_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST, CADDY_S3_BUCKET and CADDY_YPROVIDER_ENDPOINTS (a space-separated host:port list of y-provider upstreams, load-balanced by document room). Optional: CADDY_ADMIN_IP_ALLOWLIST (space-separated CIDR list of client IPs allowed on the Django admin URL, default allows all) and CADDY_TRUSTED_PROXIES (space-separated CIDR list of proxies whose X-Forwarded-For sets the client IP, default private_ranges). | str | no |  |
 | st_docs_compose_template | Local path to the custom template to use for docs compose file. | str | no | docs/compose.yaml.j2 |
 | st_docs_caddy_image | Image repository for the docs caddy reverse-proxy. | str | no | docker.io/caddy |
 | st_docs_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | 2.11.4-alpine |
