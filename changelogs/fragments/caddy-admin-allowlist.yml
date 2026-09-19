@@ -1,3 +1,0 @@
-minor_changes:
-  - "docs, drive, meet: the caddy edge reads two optional keys in ``st_<app>_caddy_env``: ``CADDY_ADMIN_IP_ALLOWLIST`` (space-separated CIDR list of client IPs allowed on ``/admin``, default allows all) and ``CADDY_TRUSTED_PROXIES`` (proxies whose ``X-Forwarded-For`` sets the client IP, default ``private_ranges``, the previous hard-coded value)."
-  - "docs, drive, meet: the caddy edge now walks ``X-Forwarded-For`` right to left (``trusted_proxies_strict``). A client can no longer set its own client IP with a prepended ``X-Forwarded-For`` entry. Django still receives the same ``X-Forwarded-For`` header as before."

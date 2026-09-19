@@ -187,3 +187,85 @@ releases:
     - renovate-pr-80.yml
     - renovate-pr-82.yml
     release_date: '2026-09-05'
+  0.4.0:
+    changes:
+      bugfixes:
+      - 'cli: ``st-cli reset -H <alias>`` redeploys only the selected host. It redeployed
+        the component on every host.'
+      - 'cli: a blank ``AWS_S3_REGION_NAME`` answer on a rebootstrap removes the key
+        and warns, instead of writing an empty value.'
+      minor_changes:
+      - Update dependency suitenumerique/docs to v5.6.1
+      - Update dependency suitenumerique/drive to v0.22.0
+      - Update dependency suitenumerique/meet to v1.31.0
+      - Update docker.io/collabora/code Docker tag to 26.04.3.2.1
+      - Update docker/build-push-action digest to c3c9e26
+      - Update docker/setup-buildx-action digest to f87e599
+      - Update docker/setup-qemu-action digest to 9901266
+      - 'cli: ``@openbao()`` markers typed into a provider prompt are expanded. ``st-cli
+        version`` prints the pin warning once.'
+      - 'cli: ``doctor`` diffs the committed env blobs against the current templates
+        and no longer reports ``st_*`` vars absent from the role spec.'
+      - 'cli: ``st-cli bootstrap`` on an existing unit replays the questionnaire pre-filled
+        from the committed tree and merges the result. Secrets are never rotated.'
+      - 'cli: ``st-cli deploy`` resolves every target host before it deploys a component.
+        A wrong ``-c`` and ``-H`` pair or an empty inventory now fails before any
+        deploy.'
+      - 'cli: ``st-cli upgrade`` no longer runs ``pipx upgrade`` itself. It prints
+        the install command and stops.'
+      - 'cli: ``upgrades.yml`` accepts ``version: next`` for the flag of an unreleased
+        change. ``make version`` replaces it with the release version. A ``next``
+        flag replays on every ``st-cli upgrade`` run and never blocks ``deploy``.'
+      - 'cli: ``upgrades.yml`` declares per-release rebootstrap flags (``apps``, ``components``,
+        ``full_replay``, ``warnings``) and a ``baseline`` stamp. ``doctor`` reports
+        them, ``deploy`` refuses to run until they are cleared, ``st-cli upgrade``
+        replays the flagged units and prints the manual steps.'
+      - 'cli: fix the README, ``CLAUDE.md`` and help texts. ``podman rmi`` removes
+        the image. ``st-cli upgrade`` does not upgrade the CLI itself. ``ST_CLI_NO_UPSTREAM_CHECK``
+        also disables the upstream gate of ``st-cli upgrade``.'
+      - 'cli: remove dead code, merge duplicate helpers, and trim the docstrings to
+        the why-only rule. ``pyproject.toml`` commits the ruff rule set. The ``ansible``
+        extra pins the same ``ansible-core`` as ``full``.'
+      - 'cli: the ``link`` key of a flag is optional. The CLI derives the CHANGELOG
+        anchor from the flag version.'
+      - 'cli: the drive bootstrap writes ``st_drive_caddy_env`` and literal S3 values,
+        like meet and docs. A 0.4.0 flag makes ``st-cli upgrade`` replay drive and
+        print the manual steps.'
+      - 'docs, drive, meet: the caddy edge now walks ``X-Forwarded-For`` right to
+        left (``trusted_proxies_strict``). A client can no longer set its own client
+        IP with a prepended ``X-Forwarded-For`` entry. Django still receives the same
+        ``X-Forwarded-For`` header as before.'
+      - 'docs, drive, meet: the caddy edge reads two optional keys in ``st_<app>_caddy_env``:
+        ``CADDY_ADMIN_IP_ALLOWLIST`` (space-separated CIDR list of client IPs allowed
+        on ``/admin``, default allows all) and ``CADDY_TRUSTED_PROXIES`` (proxies
+        whose ``X-Forwarded-For`` sets the client IP, default ``private_ranges``,
+        the previous hard-coded value).'
+      - 'docs: the example playbooks set the caddy env for drive and meet. Renovate
+        groups the caddy bumps in one PR.'
+      - 'drive: a ``drive-caddy`` container now owns ``st_drive_port`` and proxies
+        the frontend, the backend and the S3 media routes, like docs and meet. ``st_drive_nginx_template``
+        and the ``st_drive_s3_*`` vars are replaced by ``st_drive_caddy_env`` (``CADDY_S3_*``),
+        ``st_drive_caddy_image`` and ``st_drive_caddy_tag``.'
+      - 'drive: the collabora compose file no longer sets a healthcheck. The 26.04.3
+        image has no shell, and podman-compose 1.3.0 wraps every compose test in ``/bin/sh
+        -c``. Podman applies the ``HEALTHCHECK`` of the image (``coolwsd --probe``)
+        instead. A custom ``st_drive_collabora_compose_template`` must drop its ``healthcheck``
+        block too.'
+      release_summary: 'Added cli rebootstrap and improve upgrades, added an IP filtering
+        setup in front of Django Admins paths, bump drive, docs and meet.
+
+        '
+    fragments:
+    - bump-drive-0.22.0.yml
+    - caddy-admin-allowlist.yml
+    - cli-next-flag.yml
+    - cli-quality-review.yml
+    - cli-rebootstrap.yml
+    - drive-caddy-front.yml
+    - release_summary.yml
+    - renovate-pr-79.yml
+    - renovate-pr-80.yml
+    - renovate-pr-84.yml
+    - renovate-pr-90.yml
+    - renovate-pr-91.yml
+    release_date: '2026-09-19'

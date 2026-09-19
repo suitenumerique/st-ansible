@@ -40,7 +40,7 @@
 #                                         # replay cannot do; a list of strings
 baseline: "0.0.0"
 flags:
-  - version: "next"
+  - version: "0.4.0"
     apps: [drive]
     components: [drive]
     reason: "drive moved the media proxy from nginx to a caddy container fed by st_drive_caddy_env"

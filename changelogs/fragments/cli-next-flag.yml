@@ -1,3 +1,0 @@
-minor_changes:
-  - "cli: ``upgrades.yml`` accepts ``version: next`` for the flag of an unreleased change. ``make version`` replaces it with the release version. A ``next`` flag replays on every ``st-cli upgrade`` run and never blocks ``deploy``."
-  - "cli: the ``link`` key of a flag is optional. The CLI derives the CHANGELOG anchor from the flag version."
