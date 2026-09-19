@@ -30,7 +30,7 @@ Installs and configures the meet application from La Suite Territoriale on Debia
 | st_meet_port | The host published port for the meet frontend. | str | no | 50300 |
 | st_meet_frontend_image | Image repository for the meet frontend. | str | no | docker.io/lasuite/meet-frontend |
 | st_meet_backend_image | Image repository for the meet backend. | str | no | docker.io/lasuite/meet-backend |
-| st_meet_tag | Tag of the meet docker image to deploy. | str | no | v1.29.0 |
+| st_meet_tag | Tag of the meet docker image to deploy. | str | no | v1.31.0 |
 | st_meet_backend_env_template | Local path to the custom template to use for meet env file. | str | no | meet/backend_env.j2 |
 | st_meet_backend_env | Content of the default backend_env_template, not used if st_meet_backend_env_template is defined. | str | no |  |
 | st_meet_backend_run_migrations | Whether to run database migrations on meet backend startup. | bool | no | True |
