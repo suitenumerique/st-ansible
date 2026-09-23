@@ -27,7 +27,9 @@ for outbound SMTP. LiveKit also has its own public IP for WebRTC traffic.
      │      │     ├── workers (1)
      │      │     └── mpa (1)
      │      ├── mta-in (1+2)
-     │      └── meet (1+2)
+     │      ├── meet (1+2)
+     │      └── conversations (1+2)
+     │            └── workers (1)
      │
      ├─── socks-proxy (1+2, public IPs)
      │
@@ -52,6 +54,8 @@ for outbound SMTP. LiveKit also has its own public IP for WebRTC traffic.
 | meet | x | x | | x |
 | livekit | | x | | |
 | egress | | x | | |
+| conversations | x | x | | x |
+| conversations workers | x | x | | x |
 
 > [!NOTE]
 > LiveKit ships with a co-located valkey (redis-compatible) in its compose stack, and when egress runs on the
@@ -88,6 +92,8 @@ first host stays on the new version and the second can be debugged manually.
 | playbook_meet.yml | meet | 2 | 1 | meet |
 | playbook_livekit.yml | livekit | 1 | - | meet (livekit) |
 | playbook_egress.yml | egress | 1 | - | meet (egress) |
+| playbook_conversations.yml | conversations | 2 | 1 | conversations |
+| playbook_conversations_workers.yml | conversations_workers | 1 | - | conversations (workers) |
 
 ## Running
 

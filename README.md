@@ -35,6 +35,7 @@ You can find the documentation of the collection under the [docs/](docs/) direct
 - **[04-messages/](docs/04-messages/)** messages app, workers, mta-in, socks-proxy, mpa
 - **[05-projects/](docs/05-projects/)** projects app
 - **[06-docs/](docs/06-docs/)** docs app, workers, yprovider
+- **[09-conversations/](docs/09-conversations/)** conversations app, workers
 - **[monitoring.md](docs/monitoring.md)** cAdvisor + Grafana Alloy
 - **[backup.md](docs/backup.md)** Restic backup
 - **[troubleshooting.md](docs/troubleshooting.md)** common issues and debug commands
@@ -52,6 +53,7 @@ You can find the documentation of the collection under the [docs/](docs/) direct
 | meet | Meet video conferencing | [REFERENCE.md](roles/meet/REFERENCE.md) |
 | docs | Docs application | [REFERENCE.md](roles/docs/REFERENCE.md) |
 | projects | Projects application | [REFERENCE.md](roles/projects/REFERENCE.md) |
+| conversations | Conversations application | [REFERENCE.md](roles/conversations/REFERENCE.md) |
 | alloy | Grafana Alloy telemetry | [REFERENCE.md](roles/alloy/REFERENCE.md) |
 | restic | Restic backup | [REFERENCE.md](roles/restic/REFERENCE.md) |
 

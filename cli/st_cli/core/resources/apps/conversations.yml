@@ -1,0 +1,36 @@
+---
+app: conversations
+env_docs_url: "https://github.com/suitenumerique/conversations/blob/main/docs/env.md"
+arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/09-conversations"
+requires: [postgresql, redis, s3, oidc]
+components:
+  - key: conversations
+    role: suitenumerique.st.conversations
+    user: conversations
+    app_name: conversations
+    dir_var: st_conversations_dir
+    enabled_var: st_conversations_enabled
+    deploy_order: 20
+    is_core: true
+    # component-level ansible vars derived from questionnaire answers ({DOMAIN} etc.)
+    vars:
+      st_conversations_public_host: "{DOMAIN}"   # required by the conversations role (healthcheck Host header)
+      # Run DB migrations only once across a multi-host deploy. Plays are serial:1,
+      # so the role's run_once migrations task fires on every host — gate it to the
+      # first play host. Braces are quadrupled so str.format emits literal {{ }}.
+      st_conversations_backend_run_migrations: "{{{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}}}"
+    env_render:
+      backend:
+        blob_var: st_conversations_backend_env
+        templates:
+          - conversations.backend.env.j2
+  - key: workers
+    role: suitenumerique.st.conversations
+    user: conversations
+    app_name: workers
+    dir_var: st_conversations_workers_dir
+    enabled_var: st_conversations_workers_enabled
+    deploy_order: 30
+    is_core: false
+    is_worker: true
+dependencies: []

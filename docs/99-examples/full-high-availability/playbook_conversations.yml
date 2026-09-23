@@ -1,0 +1,53 @@
+---
+- name: "Deploy conversations."
+  hosts: conversations
+  serial: 1
+  tasks:
+    - name: "Install conversations base."
+      become: true
+      become_user: root
+      ansible.builtin.import_role:
+        name: suitenumerique.st.conversations
+
+    # NOTE: Splitting in two tasks is not mandatory, you could also play
+    # the whole thing as root by appending the variables on the first task.
+    # This setup is useful for CI/CD pipelines without root access.
+    - name: "Deploy conversations application."
+      become: true
+      become_user: conversations
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.conversations
+        tasks_from: deploy.yml
+      vars:
+        st_conversations_enabled: true
+        st_conversations_rollback_enabled: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+        st_conversations_public_host: conversations.example.com
+        st_conversations_tag: vx.y.z # check https://github.com/suitenumerique/conversations/releases
+        st_conversations_backend_run_migrations: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+        st_conversations_backend_env: |
+          DJANGO_CONFIGURATION=Production
+          DJANGO_SECRET_KEY=changeme
+          DB_HOST=db.example.com
+          DB_NAME=conversations
+          DB_USER=conversations
+          DB_PASSWORD=changeme
+          DB_PORT=5432
+          REDIS_URL=redis://redis.example.com:6379/1
+          CELERY_BROKER_URL=redis://redis.example.com:6379/0
+          CELERY_RESULT_BACKEND=redis://redis.example.com:6379/0
+          AWS_S3_ENDPOINT_URL=https://s3.example.com
+          AWS_S3_ACCESS_KEY_ID=conversations
+          AWS_S3_SECRET_ACCESS_KEY=changeme
+          AWS_STORAGE_BUCKET_NAME=conversations-media-storage
+          AI_BASE_URL=https://api.openai.com/v1
+          AI_MODEL=gpt-4o-mini
+          AI_API_KEY=changeme
+          # ... check https://github.com/suitenumerique/conversations/blob/main/docs/env.md
+        st_conversations_caddy_env: |
+          # Load balancer range: trusted proxy only (default: private_ranges).
+          # CADDY_TRUSTED_PROXIES=203.0.113.0/24
+          # Operator network allowed on the Django admin URL (default: allow all).
+          # CADDY_ADMIN_IP_ALLOWLIST=198.51.100.0/24
+        st_conversations_cadvisor_enabled: true

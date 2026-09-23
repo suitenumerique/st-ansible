@@ -1,0 +1,3 @@
+minor_changes:
+  - "conversations: add a ``conversations`` role that deploys the Conversations application (suitenumerique/conversations) as a caddy + frontend + backend core with a workers sub-app on the rootless podman base, with optional LLM catalog and theme files."
+  - "cli: add ``conversations`` app support to bootstrap: discrete ``DB_*`` database prompts, the ``AI_BASE_URL`` / ``AI_MODEL`` / ``AI_API_KEY`` LLM provider prompts, and ``CELERY_RESULT_BACKEND`` derived from ``REDIS_URL``."
