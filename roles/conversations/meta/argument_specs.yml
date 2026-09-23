@@ -1,0 +1,133 @@
+---
+argument_specs:
+  main:
+    short_description: "Installs and configures the Conversations application from La Suite Territoriale on Debian systems."
+    options:
+      st_conversations_public_host:
+        type: "str"
+        description: "The public hostname used to access the conversations application."
+      st_conversations_uid:
+        type: "int"
+        description: "UID of the `conversations` user, used for the podman role."
+        default: 1109
+      st_conversations_gid:
+        type: "int"
+        description: "GID of the `conversations` group, used for the podman role."
+        default: "{{ st_conversations_uid }}"
+      st_conversations_registries:
+        type: "list"
+        elements: "dict"
+        description: "Optional private container registries to login the `conversations` user onto."
+      st_conversations_frontend_image:
+        type: "str"
+        description: "Image repository for the conversations frontend."
+        default: "docker.io/lasuite/conversations-frontend"
+      st_conversations_backend_image:
+        type: "str"
+        description: "Image repository for the conversations backend."
+        default: "docker.io/lasuite/conversations-backend"
+      st_conversations_tag:
+        type: "str"
+        description: "Tag of the conversations docker images to deploy."
+        # renovate: datasource=github-releases depName=suitenumerique/conversations versioning=semver
+        default: "v0.0.24"
+      st_conversations_enabled:
+        type: "bool"
+        description: "Triggers the installation of the conversations application."
+        default: false
+      st_conversations_dir:
+        type: "str"
+        description: "Remote path to the base directory for conversations app."
+        default: "/opt/conversations/conversations"
+      st_conversations_port:
+        type: "str"
+        description: "The host published port for the conversations caddy edge."
+        default: "50900"
+      st_conversations_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the conversations deployment fails."
+        default: false
+      st_conversations_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for conversations compose file."
+        default: "conversations/compose.yaml.j2"
+      st_conversations_backend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for conversations backend env file."
+        default: "conversations/backend_env.j2"
+      st_conversations_backend_env:
+        type: "str"
+        description: "Content of the default backend_env_template, not used if st_conversations_backend_env_template is defined."
+        default: ''
+      st_conversations_backend_run_migrations:
+        type: "bool"
+        description: "Whether to run database migrations on conversations backend startup."
+        default: true
+      st_conversations_caddy_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for conversations caddy env file."
+        default: "conversations/caddy_env.j2"
+      st_conversations_caddy_env:
+        type: "str"
+        description: "Content of the default caddy_env_template, not used if st_conversations_caddy_env_template is defined. Every key is optional: CADDY_ADMIN_IP_ALLOWLIST (space-separated CIDR list of client IPs allowed on the Django admin URL, default allows all) and CADDY_TRUSTED_PROXIES (space-separated CIDR list of proxies whose X-Forwarded-For sets the client IP, default private_ranges)."
+        default: ""
+      st_conversations_caddy_image:
+        type: "str"
+        description: "Image repository for the conversations caddy reverse-proxy."
+        default: "docker.io/caddy"
+      st_conversations_caddy_tag:
+        type: "str"
+        description:
+          - "The tag of the caddy docker image to use."
+          - "See https://hub.docker.com/_/caddy/tags."
+        # renovate: datasource=docker depName=docker.io/caddy
+        default: "2.11.4-alpine"
+      st_conversations_llm_configuration_src:
+        type: "str"
+        description: "Local path of an LLM model catalog JSON. When set, the role mounts it read-only over `/app/conversations/configuration/llm/default.json` in the backend container. The backend caches the catalog at boot."
+        default: ""
+      st_conversations_theme_customization_src:
+        type: "str"
+        description: "Local path of a theme customization JSON. When set, the role mounts it read-only over `/app/conversations/configuration/theme/default.json` in the backend container."
+        default: ""
+      st_conversations_workers_enabled:
+        type: "bool"
+        description: "Triggers the installation of the conversations workers"
+        default: false
+      st_conversations_workers_dir:
+        type: "str"
+        description: "Remote path to the base directory for conversations workers."
+        default: "/opt/conversations/workers"
+      st_conversations_workers_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for conversations workers env file."
+        default: "workers/env.j2"
+      st_conversations_workers_env:
+        type: "str"
+        description: "Content of the default workers_env_template, not used if st_conversations_workers_env_template is defined."
+        default: '{{ st_conversations_backend_env }}'
+      st_conversations_workers_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the workers deployment fails."
+        default: false
+      st_conversations_workers_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for workers compose file."
+        default: workers/compose.yaml.j2
+      st_conversations_cadvisor_enabled:
+        type: "bool"
+        description: "Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool."
+        default: false
+      st_conversations_cadvisor_image:
+        type: "str"
+        description: "Image repository for the cadvisor container."
+        default: "ghcr.io/google/cadvisor"
+      st_conversations_cadvisor_tag:
+        type: "str"
+        description: "Tag of the cadvisor docker image to deploy."
+        # renovate: datasource=docker depName=ghcr.io/google/cadvisor
+        default: "v0.60.3"
+      st_conversations_cadvisor_port:
+        type: "str"
+        description: "The host published port of the cadvisor container."
+        default: "127.0.0.1:50999"

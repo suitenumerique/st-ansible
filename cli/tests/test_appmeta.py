@@ -10,7 +10,15 @@ from st_cli.core.models import Component
 
 
 def test_all_apps_load_with_core_and_components():
-    for app in ["meet", "drive", "messages", "keycloak", "docs", "projects"]:
+    for app in [
+        "meet",
+        "drive",
+        "messages",
+        "keycloak",
+        "docs",
+        "projects",
+        "conversations",
+    ]:
         a = appmeta.load_app(app)
         assert a.components
         assert a.core().is_core
@@ -114,7 +122,7 @@ def test_meet_and_livekit_component_vars_carry_public_host():
 def test_worker_component_metadata():
     """Each app exposes a first-class workers component (is_worker, app_name,
     enabled_var)."""
-    for app in ("drive", "messages", "meet", "docs"):
+    for app in ("drive", "messages", "meet", "docs", "conversations"):
         w = appmeta.load_app(app).worker()
         assert w is not None, f"{app} has no workers component"
         assert w.is_worker is True
@@ -240,10 +248,40 @@ def test_requires_declares_external_infra_per_app():
     Requirements checklist only lists what is relevant."""
     assert appmeta.load_app("projects").requires == ["postgresql", "oidc"]
     assert appmeta.load_app("keycloak").requires == ["postgresql"]
-    for app in ("drive", "meet", "messages"):
+    for app in ("drive", "meet", "messages", "conversations"):
         assert appmeta.load_app(app).requires == [
             "postgresql",
             "redis",
             "s3",
             "oidc",
         ], app
+
+
+def test_conversations_component_metadata():
+    """conversations has two components (core + workers), no dependencies, and
+    a backend env_render layer only: no caddy S3 keys, no frontend env."""
+    meta = appmeta.load_app("conversations")
+    assert {c.key for c in meta.components} == {"conversations", "workers"}
+    assert meta.dependencies == []
+
+    core = meta.core()
+    assert core.key == "conversations"
+    assert core.role == "suitenumerique.st.conversations"
+    assert core.user == "conversations"
+    assert core.dir_var == "st_conversations_dir"
+    assert core.enabled_var == "st_conversations_enabled"
+    assert core.deploy_order == 20
+
+    spec = meta.env_render_spec("conversations")
+    assert set(spec.keys()) == {"backend"}
+    assert spec["backend"]["blob_var"] == "st_conversations_backend_env"
+    assert spec["backend"]["templates"] == ["conversations.backend.env.j2"]
+
+    assert meta.component_vars("conversations")["st_conversations_public_host"] == (
+        "{DOMAIN}"
+    )
+
+    worker = meta.worker()
+    assert worker is not None
+    assert worker.deploy_order == 30
+    assert worker.implemented is True

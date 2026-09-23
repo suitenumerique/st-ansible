@@ -1222,6 +1222,66 @@ def test_ask_core_sets_login_redirect_url_failure_for_non_drive(monkeypatch):
     assert "RECORDING_ENABLE=True" in body
 
 
+def test_ask_core_conversations_forces_db_vars_and_prompts_llm(monkeypatch):
+    """`_ask_core` for conversations skips the DB-mode select (upstream reads
+    only DB_*), sets conversations.settings, prompts for the LLM provider
+    (AI_*), and derives CELERY_RESULT_BACKEND from REDIS_URL."""
+    sq = script_questionary(
+        monkeypatch,
+        [
+            ("text", "Public domain for conversations", "conversations.example.org"),
+            ("text", "DB_HOST", "db.example.org"),
+            ("text", "DB_NAME", "conversations"),
+            ("text", "DB_USER", "conversations"),
+            ("password", "DB_PASSWORD", "dbpass123"),
+            ("text", "DB_PORT", "5432"),
+            ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.fr-par.scw.cloud"),
+            ("text", "AWS_S3_ACCESS_KEY_ID", "convaccess"),
+            ("password", "AWS_S3_SECRET_ACCESS_KEY", "convsecretkey"),
+            ("text", "AWS_STORAGE_BUCKET_NAME", "conversations-media"),
+            ("text", "AWS_S3_REGION_NAME (optional)", "fr-par"),
+            ("text", "AI_BASE_URL", "https://api.openai.com/v1"),
+            ("text", "AI_MODEL", "gpt-4o-mini"),
+            ("password", "AI_API_KEY", "sk-test-key"),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "conversations-client-id"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", False),
+        ],
+    )
+    meta = appmeta.load_app("conversations")
+    answers = bootstrap._ask_core(meta, AnsibleVaultBackend())
+
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+    assert not any("Database configuration:" in msg for msg, _ in sq.select_calls), (
+        "the DB-mode select fired for a discrete-only app"
+    )
+
+    assert answers["DJANGO_SETTINGS_MODULE"] == "conversations.settings"
+    assert answers["DB_PASSWORD"] == "{{ vault_db_password }}"
+    assert "DATABASE_URL" not in answers
+    assert (
+        answers["LOGIN_REDIRECT_URL"] == "https://{{ st_conversations_public_host }}/"
+    )
+    assert answers["MEDIA_BASE_URL"] == "https://{{ st_conversations_public_host }}"
+    assert answers["CELERY_RESULT_BACKEND"] == "{{ vault_redis_url }}"
+    assert answers["AI_API_KEY"] == "{{ vault_ai_api_key }}"
+    assert "CADDY_S3_HOST" not in answers
+
+    rendered = envrender.render_env("conversations", "conversations", answers)
+    backend_body = rendered["st_conversations_backend_env"]
+    assert "DB_HOST=db.example.org" in backend_body
+    assert "DATABASE_URL=" not in backend_body
+    assert "AI_BASE_URL=https://api.openai.com/v1" in backend_body
+    assert "AI_MODEL=gpt-4o-mini" in backend_body
+    assert "AI_API_KEY={{ vault_ai_api_key }}" in backend_body
+    assert "CELERY_RESULT_BACKEND={{ vault_redis_url }}" in backend_body
+    assert "st_conversations_caddy_env" not in rendered
+
+
 def test_bootstrap_docs_full_deploys_yprovider(repo, monkeypatch):
     """Full `bootstrap docs prod` deploying yprovider on a single host generates
     and mirrors the shared secrets without re-prompting for them."""

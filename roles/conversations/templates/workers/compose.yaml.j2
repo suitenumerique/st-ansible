@@ -1,0 +1,15 @@
+---
+{{ ansible_managed | comment }}
+
+name: conversations_workers
+services:
+  worker:
+    container_name: conversations-worker
+    image: "{{ st_conversations_backend_image }}:{{ st_conversations_tag }}"
+    env_file: ./env
+    command: celery -A conversations.celery_app worker --task-events --beat -l INFO -c {{ ansible_processor_nproc }} --schedule=/tmp/celerybeat-schedule
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A conversations.celery_app inspect ping"]
+      interval: 1m
+      timeout: 10s
+      start_interval: 5s

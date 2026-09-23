@@ -39,3 +39,10 @@ livekit1 ansible_host=10.0.0.18
 
 [egress]
 egress1 ansible_host=10.0.0.19
+
+[conversations]
+conversations1 ansible_host=10.0.0.20
+conversations2 ansible_host=10.0.0.21
+
+[conversations_workers]
+conversations-workers1 ansible_host=10.0.0.22

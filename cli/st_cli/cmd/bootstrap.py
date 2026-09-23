@@ -90,7 +90,11 @@ _REQUIREMENT_LINES = {
 
 # Apps that carry upstream DJANGO_EMAIL_* settings; messages is skipped (no such
 # settings upstream) so its questionnaire never prompts for SMTP config.
-_EMAIL_APPS = {"drive", "meet", "docs"}
+_EMAIL_APPS = {"drive", "meet", "docs", "conversations"}
+
+# Upstream reads only the discrete DB_* vars and ignores DATABASE_URL, so
+# `_ask_db` shows no "Database configuration:" select for these apps.
+_DISCRETE_DB_APPS = {"conversations"}
 
 # Inverse of _ask_keycloak's "jdbc:postgresql://host:port/name" composition, so
 # the 3 separate DB prompts can be pre-filled from the single recovered
@@ -335,7 +339,7 @@ def _ask_oidc(answers: dict, backend: SecretBackend, component: str) -> None:
 
 
 def _ask_email(answers: dict, backend: SecretBackend, component: str, app: str) -> None:
-    """Prompt Django transactional email (SMTP) settings for drive / meet / docs.
+    """Prompt the Django transactional email (SMTP) settings of an app in _EMAIL_APPS.
 
     Skipped for ``messages`` (no ``DJANGO_EMAIL_*`` upstream). The confirm
     gate defaults to whether SMTP is already configured, so an Enter-through
@@ -405,21 +409,27 @@ def _ask_db(answers: dict, backend: SecretBackend, component: str, app: str) -> 
 
     The mode select defaults to the shape actually recovered. Switching mode
     does not clean up the old shape: ``envblob.merge`` never deletes a line,
-    so this warns the operator to remove the stale lines by hand.
+    so this warns the operator to remove the stale lines by hand. An app in
+    `_DISCRETE_DB_APPS` reads only DB_* upstream, so it never sees the select.
     """
     had_discrete = "DB_HOST" in answers
     had_url = "DATABASE_URL" in answers
-    default_mode = "discrete (DB_*)" if had_discrete else "DATABASE_URL"
-    mode = _ask_select(
-        "Database configuration:",
-        ["DATABASE_URL", "discrete (DB_*)"],
-        default=default_mode,
-        # A total recovery gap (neither shape recovered) is a genuine new
-        # question, not a mode switch. Silent mode must not auto-pick
-        # "DATABASE_URL" for it (see the docstring above for why that default
-        # exists at all).
-        auto=had_url or had_discrete,
-    )
+    if app in _DISCRETE_DB_APPS:
+        # A select counts as a decision in a silent replay and must not fire
+        # for a choice that does not exist.
+        mode = "discrete (DB_*)"
+    else:
+        default_mode = "discrete (DB_*)" if had_discrete else "DATABASE_URL"
+        mode = _ask_select(
+            "Database configuration:",
+            ["DATABASE_URL", "discrete (DB_*)"],
+            default=default_mode,
+            # A total recovery gap (neither shape recovered) is a genuine new
+            # question, not a mode switch. Silent mode must not auto-pick
+            # "DATABASE_URL" for it (see the docstring above for why that
+            # default exists at all).
+            auto=had_url or had_discrete,
+        )
     if mode.startswith("DATABASE_URL"):
         if had_discrete:
             ui.warn(
@@ -439,7 +449,7 @@ def _ask_db(answers: dict, backend: SecretBackend, component: str, app: str) -> 
                 answers, "DATABASE_URL", component=component, value=value
             )
         return
-    if had_url:
+    if had_url and app not in _DISCRETE_DB_APPS:
         ui.warn(
             "You switched from DATABASE_URL to discrete DB_* vars. "
             "The committed DATABASE_URL line, and its vault entry, stay in "
@@ -820,11 +830,11 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             "LOGIN_REDIRECT_URL_FAILURE": f"https://{host}/",
             "LOGOUT_REDIRECT_URL": f"https://{host}/",
         }
-    elif app == "drive":
-        # Public-facing URLs point at st_drive_public_host (resolved at
+    elif app in ("drive", "conversations"):
+        # Public-facing URLs point at st_<app>_public_host (resolved at
         # deploy), like meet above. DJANGO_ALLOWED_HOSTS/CSRF/CORS keep the
         # literal domain.
-        host = "{{ st_drive_public_host }}"
+        host = f"{{{{ st_{app}_public_host }}}}"
         derived = {
             "DJANGO_ALLOWED_HOSTS": domain,
             "DJANGO_CSRF_TRUSTED_ORIGINS": f"https://{domain}",
@@ -874,6 +884,9 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
         )
         backend.env_secret(answers, "REDIS_URL", component=core_key, value=redis_url)
     answers["CELERY_BROKER_URL"] = answers["REDIS_URL"]
+    if app == "conversations":
+        # Upstream waits on the document-parse task result, so it needs a result backend.
+        answers["CELERY_RESULT_BACKEND"] = answers["REDIS_URL"]
 
     # messages does NOT use the django-lasuite default S3 storage (AWS_S3_*). It
     # uses STORAGE_MESSAGE_* instead (see _ask_messages_storage), so skip the S3
@@ -975,6 +988,18 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             _recall(answers, "MESSAGES_TECHNICAL_DOMAIN"),
             placeholder="mail.example.org",
         )
+
+    if app == "conversations":
+        # Albert, Brave, the feature flags and the Docs integration stay hand-written lines.
+        answers["AI_BASE_URL"] = _ask(
+            "AI_BASE_URL",
+            _recall(answers, "AI_BASE_URL"),
+            placeholder="https://api.openai.com/v1",
+        )
+        answers["AI_MODEL"] = _ask(
+            "AI_MODEL", _recall(answers, "AI_MODEL"), placeholder="gpt-4o-mini"
+        )
+        _ask_secret(answers, backend, "AI_API_KEY", core_key)
 
     _ask_oidc(answers, backend, core_key)
     _ask_email(answers, backend, core_key, app)

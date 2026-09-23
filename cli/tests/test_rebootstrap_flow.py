@@ -12,6 +12,7 @@ import pytest
 from helpers import (
     ACCEPT_DEFAULT,
     accept_defaults,
+    conversations_first_run_script,
     docs_first_run_script,
     drive_first_run_script,
     livekit_script,
@@ -330,6 +331,67 @@ def test_wire_only_core_run_rejects_override_and_omits_it_from_select(
     ]
     assert select_choices, "the 3-way select did not appear"
     assert not any("Override" in c for c in select_choices[0])
+
+
+def test_conversations_round_trip_byte_identical(repo, monkeypatch):
+    """An Enter-through conversations rebootstrap never shows the DB-mode select,
+    writes discrete DB_* and the LLM/celery keys, and stays byte-identical
+    across a Modify replay and a later Silent replay."""
+    seed_creds(repo)
+    sq1 = script_questionary(monkeypatch, conversations_first_run_script())
+    bootstrap.bootstrap("conversations", "prod")
+    assert not sq1._scripts, f"unconsumed scripts: {sq1._scripts}"
+    assert not any("Database configuration:" in msg for msg, _ in sq1.select_calls), (
+        "the DB-mode select fired for a discrete-only app"
+    )
+
+    core_vars_before = (repo / "conversations/prod/conversations/vars.yml").read_text()
+    core_vault_before = (
+        repo / "conversations/prod/conversations/vault.yml"
+    ).read_bytes()
+
+    assert "DB_HOST=db.example.org" in core_vars_before
+    assert "DATABASE_URL=" not in core_vars_before
+    assert "AI_BASE_URL=https://api.openai.com/v1" in core_vars_before
+    assert "AI_API_KEY={{ vault_ai_api_key }}" in core_vars_before
+    assert "CELERY_RESULT_BACKEND={{ vault_redis_url }}" in core_vars_before
+    assert "st_conversations_caddy_env" not in core_vars_before
+
+    decrypted = vault.decrypt_to_dict(
+        paths.vault_path("conversations", "prod", "conversations")
+    )
+    assert decrypted["vault_ai_api_key"] == "sk-test-key"
+
+    sq2 = accept_defaults(monkeypatch)
+    bootstrap.bootstrap("conversations", "prod", replay=bootstrap.ReplayAction.MODIFY)
+    assert not sq2._scripts, f"unconsumed scripts: {sq2._scripts}"
+    assert not any("Database configuration:" in msg for msg, _ in sq2.select_calls), (
+        "the DB-mode select fired on a Modify replay"
+    )
+
+    assert (
+        repo / "conversations/prod/conversations/vars.yml"
+    ).read_text() == core_vars_before
+    assert (
+        repo / "conversations/prod/conversations/vault.yml"
+    ).read_bytes() == core_vault_before
+
+    m = manifest.load_manifest()
+    for u in m.units:
+        u.bootstrapped_with = "0.0.1"
+    manifest.save_manifest(m)
+
+    sq3 = script_questionary(monkeypatch, [])
+    bootstrap.bootstrap("conversations", "prod", replay=bootstrap.ReplayAction.SILENT)
+    assert not sq3._scripts, f"unconsumed scripts: {sq3._scripts}"
+    assert not sq3.select_calls, f"a select fired: {sq3.select_calls}"
+
+    assert (
+        repo / "conversations/prod/conversations/vars.yml"
+    ).read_text() == core_vars_before
+    assert (
+        repo / "conversations/prod/conversations/vault.yml"
+    ).read_bytes() == core_vault_before
 
 
 def test_messages_round_trip_byte_identical(repo, monkeypatch):
@@ -1735,6 +1797,35 @@ def test_db_mode_total_gap_surfaces_select_even_in_silent_mode(monkeypatch):
         bootstrap._ask_db(answers, backend, "meet", "meet")
     assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
     assert answers["DB_HOST"] == "db.example.org"
+
+
+def test_ask_db_discrete_only_app_never_shows_the_mode_select(monkeypatch):
+    """conversations reads only DB_*: the mode select never fires, on a first
+    run or on a later silent replay."""
+    from st_cli.core import prompts
+
+    backend = AnsibleVaultBackend()
+    answers: dict = {}
+    sq = script_questionary(
+        monkeypatch,
+        [
+            ("text", "DB_HOST", "db.example.org"),
+            ("text", "DB_NAME", "conversations"),
+            ("text", "DB_USER", "conversations"),
+            ("password", "DB_PASSWORD", "pw"),
+            ("text", "DB_PORT", "5432"),
+        ],
+    )
+    bootstrap._ask_db(answers, backend, "conversations", "conversations")
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+    assert not sq.select_calls, f"a select fired: {sq.select_calls}"
+    assert answers["DB_HOST"] == "db.example.org"
+
+    sq2 = script_questionary(monkeypatch, [])
+    with prompts.silent_replay():
+        bootstrap._ask_db(answers, backend, "conversations", "conversations")
+    assert not sq2._scripts, f"unconsumed scripts: {sq2._scripts}"
+    assert not sq2.select_calls, f"a select fired: {sq2.select_calls}"
 
 
 def test_egress_redis_password_blank_legacy_store_is_reprompted(repo, monkeypatch):

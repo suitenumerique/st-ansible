@@ -1,0 +1,52 @@
+---
+{{ ansible_managed | comment }}
+
+name: conversations
+services:
+  caddy:
+    container_name: conversations-caddy
+    image: "{{ st_conversations_caddy_image }}:{{ st_conversations_caddy_tag }}"
+    env_file: ./caddy_env
+    volumes:
+      - {{ st_conversations_dir }}/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "{{ st_conversations_port }}:50900"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:50900/__lbheartbeat__"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+
+  frontend:
+    container_name: conversations-frontend
+    image: "{{ st_conversations_frontend_image }}:{{ st_conversations_tag }}"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  backend:
+    container_name: conversations-backend
+    image: "{{ st_conversations_backend_image }}:{{ st_conversations_tag }}"
+    env_file: ./backend_env
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "--header", "'Host: {{ st_conversations_public_host }}'", "http://127.0.0.1:8000/__heartbeat__"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 10s
+{% if (st_conversations_llm_configuration_src is defined and st_conversations_llm_configuration_src | length > 0) or (st_conversations_theme_customization_src is defined and st_conversations_theme_customization_src | length > 0) %}
+    volumes:
+{% if st_conversations_llm_configuration_src is defined and st_conversations_llm_configuration_src | length > 0 %}
+      - {{ st_conversations_dir }}/llm.json:/app/conversations/configuration/llm/default.json:ro
+{% endif %}
+{% if st_conversations_theme_customization_src is defined and st_conversations_theme_customization_src | length > 0 %}
+      - {{ st_conversations_dir }}/theme.json:/app/conversations/configuration/theme/default.json:ro
+{% endif %}
+{% endif %}
