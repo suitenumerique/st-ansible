@@ -43,16 +43,27 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_workers_env | Content of the default workers_env_template, not used if st_messages_workers_env_template is defined. | str | no | {{ st_messages_backend_env }} |
 | st_messages_workers_rollback_enabled | Whether or not to trigger the rollback tasks if the workers deployment fails. | bool | no | False |
 | st_messages_workers_compose_template | Local path to the custom template to use for messages workers compose file. | str | no | workers/compose.yaml.j2 |
-| st_messages_mta_in_enabled | Triggers the installation of the mta-in. | bool | no | False |
-| st_messages_mta_in_image | Image repository for mta-in. | str | no | ghcr.io/suitenumerique/messages-mta-in |
-| st_messages_mta_in_tag | Tag of the mta-in docker image to deploy. | str | no | 0.9.0 |
-| st_messages_mta_in_dir | Remote path to the base directory for mta-in app. | str | no | /opt/messages/mta-in |
-| st_messages_mta_in_port | The host published port for the mta-in SMTP endpoint. | str | no | 50425 |
-| st_messages_mta_in_env_template | Local path to the custom template to use for mta-in env file. | str | no | mta_in/env.j2 |
-| st_messages_mta_in_env | Content of the default mta_in_env_template, not used if st_messages_mta_in_env_template is defined. | str | no |  |
-| st_messages_mta_in_starttls_certificate_path | Path of the starttls certificate on the remote host. The certificate must be in the smtpd_tls_chain_files format, see https://www.postfix.org/postconf.5.html#smtpd_tls_chain_files. The file must be accessible by the `messages` user. | str | no |  |
-| st_messages_mta_in_compose_template | Local path to the custom template to use for mta-in compose file. | str | no | mta_in/compose.yaml.j2 |
-| st_messages_mta_in_rollback_enabled | Whether or not to trigger the rollback tasks if the mta-in deployment fails. | bool | no | False |
+| st_messages_mta_in_enabled | DEPRECATED (use st_messages_pymta_enabled): triggers the installation of the mta-in. | bool | no | False |
+| st_messages_mta_in_image | DEPRECATED (use st_messages_pymta_image): image repository for mta-in. | str | no | ghcr.io/suitenumerique/messages-mta-in |
+| st_messages_mta_in_tag | DEPRECATED (use st_messages_pymta_tag): tag of the mta-in docker image to deploy. | str | no | 0.9.0 |
+| st_messages_mta_in_dir | DEPRECATED (use st_messages_pymta_dir): remote path to the base directory for mta-in app. | str | no | /opt/messages/mta-in |
+| st_messages_mta_in_port | DEPRECATED (use st_messages_pymta_port): the host published port for the mta-in SMTP endpoint. | str | no | 50425 |
+| st_messages_mta_in_env_template | DEPRECATED (use st_messages_pymta_env_template): local path to the custom template to use for mta-in env file. | str | no | mta_in/env.j2 |
+| st_messages_mta_in_env | DEPRECATED (use st_messages_pymta_env): content of the default mta_in_env_template, not used if st_messages_mta_in_env_template is defined. | str | no |  |
+| st_messages_mta_in_starttls_certificate_path | DEPRECATED (use st_messages_pymta_starttls_certificate_path). Path of the starttls certificate on the remote host. The certificate must be in the smtpd_tls_chain_files format, see https://www.postfix.org/postconf.5.html#smtpd_tls_chain_files. The file must be accessible by the `messages` user. | str | no |  |
+| st_messages_mta_in_compose_template | DEPRECATED (use st_messages_pymta_compose_template): local path to the custom template to use for mta-in compose file. | str | no | mta_in/compose.yaml.j2 |
+| st_messages_mta_in_rollback_enabled | DEPRECATED (use st_messages_pymta_rollback_enabled): whether or not to trigger the rollback tasks if the mta-in deployment fails. | bool | no | False |
+| st_messages_pymta_enabled | Triggers the installation of pymta, the Python inbound MTA that replaces mta-in. | bool | no | False |
+| st_messages_pymta_image | Image repository for pymta. | str | no | ghcr.io/suitenumerique/messages-mta-in-py |
+| st_messages_pymta_tag | Tag of the pymta docker image to deploy. | str | no | 0.9.0 |
+| st_messages_pymta_dir | Remote path to the base directory for pymta app. | str | no | /opt/messages/pymta |
+| st_messages_pymta_port | The host port pymta listens on for SMTP (`PYMTA_SMTP_BIND_PORT`). pymta runs with `network_mode: host`, so this is a port on the host network stack, not a published port. | str | no | 50425 |
+| st_messages_pymta_metrics_port | The host port of the pymta Prometheus metrics endpoint (`PYMTA_METRICS_BIND_PORT`). The role binds it to `127.0.0.1` only. Set it to `0` to disable the endpoint. | str | no | 50426 |
+| st_messages_pymta_env_template | Local path to the custom template to use for pymta env file. | str | no | pymta/env.j2 |
+| st_messages_pymta_env | Content of the default pymta_env_template, not used if st_messages_pymta_env_template is defined. Do not set `PYMTA_SMTP_BIND_PORT`, `PYMTA_METRICS_BIND_HOST`, `PYMTA_METRICS_BIND_PORT`, `PYMTA_TLS_CERT_FILE` or `PYMTA_TLS_KEY_FILE` here. The compose `environment` block owns them and overrides the env file. | str | no |  |
+| st_messages_pymta_starttls_certificate_path | Path of the STARTTLS PEM file on the remote host (private key followed by the certificate chain). The role bind-mounts it at `/starttls_certificate.pem` and sets `PYMTA_TLS_CERT_FILE` and `PYMTA_TLS_KEY_FILE` to that path. The file must be readable by the container user (uid 65532), see docs/04-messages/06-pymta.md. | str | no |  |
+| st_messages_pymta_compose_template | Local path to the custom template to use for pymta compose file. | str | no | pymta/compose.yaml.j2 |
+| st_messages_pymta_rollback_enabled | Whether or not to trigger the rollback tasks if the pymta deployment fails. | bool | no | False |
 | st_messages_socks_proxy_enabled | Triggers the installation of the socks-proxy. | bool | no | False |
 | st_messages_socks_proxy_image | Image repository for socks-proxy. | str | no | ghcr.io/suitenumerique/messages-socks-proxy |
 | st_messages_socks_proxy_tag | Tag of the socks-proxy docker image to deploy. | str | no | 0.9.0 |

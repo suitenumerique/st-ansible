@@ -32,7 +32,7 @@ You can find the documentation of the collection under the [docs/](docs/) direct
 - **[01-drive/](docs/01-drive/)** drive app, workers, collabora
 - **[02-keycloak/](docs/02-keycloak/)** keycloak identity provider
 - **[03-meet/](docs/03-meet/)** meet app, livekit, egress (recording)
-- **[04-messages/](docs/04-messages/)** messages app, workers, mta-in, socks-proxy, mpa
+- **[04-messages/](docs/04-messages/)** messages app, workers, pymta, socks-proxy, mpa
 - **[05-projects/](docs/05-projects/)** projects app
 - **[06-docs/](docs/06-docs/)** docs app, workers, yprovider
 - **[monitoring.md](docs/monitoring.md)** cAdvisor + Grafana Alloy

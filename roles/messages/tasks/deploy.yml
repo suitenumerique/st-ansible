@@ -14,6 +14,11 @@
   when: st_messages_mta_in_enabled
   tags: ['messages_mta_in']
 
+- name: "Deploy pymta."
+  ansible.builtin.import_tasks: deploy/pymta.yml
+  when: st_messages_pymta_enabled
+  tags: ['messages_pymta']
+
 - name: "Deploy socks-proxy."
   ansible.builtin.import_tasks: deploy/socks_proxy.yml
   when: st_messages_socks_proxy_enabled

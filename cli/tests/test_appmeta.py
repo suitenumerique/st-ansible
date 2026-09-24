@@ -55,9 +55,12 @@ def test_dependency_graph():
     assert ("drive", "collabora") in [
         (d.of, d.on) for d in appmeta.load_app("drive").dependencies
     ]
-    assert {"mta-in", "mpa", "socks-proxy"} <= {
+    assert {"mta-in", "pymta", "mpa", "socks-proxy"} <= {
         c.key for c in appmeta.load_app("messages").components
     }
+    messages_deps = appmeta.load_app("messages").dependencies
+    assert {d.on for d in messages_deps} == {"pymta", "mpa", "socks-proxy"}
+    assert messages_deps[0].on == "pymta"
     # egress is a meet dependency (the livekit dep stays dependencies[0]).
     meet_deps = appmeta.load_app("meet").dependencies
     assert ("meet", "egress") in [(d.of, d.on) for d in meet_deps]
