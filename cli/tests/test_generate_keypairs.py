@@ -14,8 +14,9 @@ import pytest
 from helpers import script_questionary
 
 from st_cli.cmd import generate_keypairs
-from st_cli.core import keypairs, tree
+from st_cli.core import keypairs, manifest, tree
 from st_cli.core.errors import StCliError
+from st_cli.core.models import SecretConfig, StCliManifest
 
 
 def _capture_ui(monkeypatch):
@@ -105,6 +106,65 @@ def test_generate_merges_existing_issuer_keys(repo, monkeypatch):
     assert "file-scanner/prod/file-scanner/vars.yml" in guidance
     assert "st-cli deploy file-scanner prod" in guidance
     assert "st-cli bootstrap" not in guidance
+
+
+def test_signing_key_not_bootstrapped(repo, monkeypatch):
+    """--signing-key mints one seed with no questionnaire; before bootstrap the
+    guidance says bootstrap generates it on the ansible-vault backend, and both
+    printed halves form a consistent Ed25519 pair."""
+    notes, values, _ = _capture_ui(monkeypatch)
+    generate_keypairs.generate("file-scanner", "prod", signing_key=True)
+
+    guidance = notes[0]
+    assert "JWT_SIGNING_KEY" in guidance
+    assert "st-cli bootstrap file-scanner prod` generates one itself" in guidance
+    assert "/.well-known/jwks.json" in guidance
+    assert "no copy" in guidance
+    assert "Rotating" not in guidance  # no JWT_SIGNING_KID to rotate away from
+
+    private, public = values
+    seed = base64.urlsafe_b64decode(private + "=")
+    assert keypairs.derive_public_key(seed) == base64.urlsafe_b64decode(public + "=")
+
+
+def test_signing_key_bootstrapped_ansible_vault_mentions_rotation(repo, monkeypatch):
+    """With a bootstrapped unit on the default backend, the guidance routes the
+    seed through `st-cli secrets` + deploy and warns to relabel JWT_SIGNING_KID."""
+    data = tree.load_vars("file-scanner", "prod", "file-scanner")
+    data["st_file_scanner_env"] = (
+        "JWT_SIGNING_KEY={{ vault_jwt_signing_key }}\nJWT_SIGNING_KID=v1\n"
+    )
+    tree.save_vars("file-scanner", "prod", "file-scanner", data)
+    notes, values, _ = _capture_ui(monkeypatch)
+    generate_keypairs.generate("file-scanner", "prod", signing_key=True)
+
+    guidance = notes[0]
+    assert "st-cli secrets file-scanner prod" in guidance
+    assert "vault_jwt_signing_key" in guidance
+    assert "JWT_SIGNING_KID=v1" in guidance
+    # OpenBao is only named by the "nothing is written" promise, not as a target
+    assert "store it in OpenBao" not in guidance
+    assert len(values) == 2  # seed + public half
+
+
+def test_signing_key_hashi_vault_points_at_openbao(repo, monkeypatch):
+    """On the hashi_vault backend the guidance says to store the seed in OpenBao
+    and point the lookup at it — never to write a vault.yml."""
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.19",
+            "0.0.19",
+            [],
+            [SecretConfig("file-scanner", "prod", "hashi_vault")],
+        )
+    )
+    notes, _, _ = _capture_ui(monkeypatch)
+    generate_keypairs.generate("file-scanner", "prod", signing_key=True)
+
+    guidance = notes[0]
+    assert "store it in OpenBao" in guidance
+    assert "asks for JWT_SIGNING_KEY" in guidance
+    assert "st-cli secrets" not in guidance
 
 
 def test_generate_rejects_other_apps(repo, monkeypatch):

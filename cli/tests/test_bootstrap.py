@@ -625,17 +625,19 @@ def test_bootstrap_projects_writes_env_blob_and_vault(repo, monkeypatch):
 
 def test_bootstrap_file_scanner_writes_env_blob_and_vault(repo, monkeypatch):
     """Full `bootstrap file-scanner prod` runs the file-scanner questionnaire (no
-    DOMAIN/DB/S3/OIDC prompts): the env blob wires the bundled clamav/redis compose
-    services, carries the caller public keys verbatim, refs the generated webhook
-    signing seed + /metrics token as {{ vault_* }}, and skips ALLOWED_URL_HOSTS
-    when left blank. The generated secrets land in vault.yml as 32 random bytes
-    base64url (43 chars — a valid Ed25519 seed for JWT_SIGNING_KEY)."""
+    DOMAIN/DB/S3/OIDC prompts): the env blob wires the bundled clamav compose
+    service, refs the external dramatiq broker + the generated webhook signing seed
+    and /metrics token as {{ vault_* }}, carries the caller public keys verbatim,
+    and skips ALLOWED_URL_HOSTS when left blank. The generated secrets land in
+    vault.yml as 32 random bytes base64url (43 chars — a valid Ed25519 seed for
+    JWT_SIGNING_KEY)."""
     seed_creds(repo)
     script_questionary(
         monkeypatch,
         [
             ("select", "Secret backend:", "ansible-vault"),
             ("text", "file-scanner host(s)", "10.0.0.20"),
+            ("text", "WORKER_BROKER_URL", "redis://:pw@redis.example.org:6379/3"),
             ("text", "JWT_ISSUER_KEYS", "transferts:pubkeyAAA"),
             ("text", "JWT_SIGNING_KID", "v1"),
             ("confirm", "PROMETHEUS_API_KEY", True),
@@ -651,9 +653,10 @@ def test_bootstrap_file_scanner_writes_env_blob_and_vault(repo, monkeypatch):
     # dash-normalised cadvisor toggle (st_file-scanner_* would be an invalid var)
     assert "st_file_scanner_cadvisor_enabled" in body
     assert "st_file-scanner" not in body
-    # fixed wiring to the in-compose clamav/redis services
+    # fixed wiring to the in-compose clamav service; the broker is external and
+    # can embed a password, so it is routed through the vault like REDIS_URL
     assert "CLAMAV_HOSTS=clamav:3310" in body
-    assert "WORKER_BROKER_URL=redis://redis:6379/0" in body
+    assert "WORKER_BROKER_URL={{ vault_worker_broker_url }}" in body
     assert "JWT_ISSUER_KEYS=transferts:pubkeyAAA" in body
     assert "JWT_SIGNING_KEY={{ vault_jwt_signing_key }}" in body
     assert "JWT_SIGNING_KID=v1" in body
@@ -666,6 +669,7 @@ def test_bootstrap_file_scanner_writes_env_blob_and_vault(repo, monkeypatch):
     fvault = vault.decrypt_to_dict(
         paths.vault_path("file-scanner", "prod", "file-scanner")
     )
+    assert fvault["vault_worker_broker_url"] == "redis://:pw@redis.example.org:6379/3"
     assert len(fvault["vault_jwt_signing_key"]) == 43  # token_urlsafe(32)
     assert len(fvault["vault_prometheus_api_key"]) == 43
 
@@ -687,6 +691,7 @@ def test_ask_file_scanner_allowlist_reuses_hosts_for_ssrf(repo, monkeypatch):
     script_questionary(
         monkeypatch,
         [
+            ("text", "WORKER_BROKER_URL", "redis://redis.example.org:6379/0"),
             ("text", "JWT_ISSUER_KEYS", "transferts:pubkeyAAA"),
             ("text", "JWT_SIGNING_KID", "v1"),
             ("confirm", "PROMETHEUS_API_KEY", False),
@@ -1246,14 +1251,16 @@ def test_bootstrap_intro_requirements_tailored_for_file_scanner(
     repo, monkeypatch, capfd
 ):
     """An app with a manifest ``requirements:`` list gets a tailored checklist in
-    the Requirements box: file-scanner shows IPs + caller public keys and NONE of
-    the generic PostgreSQL/Redis/S3/ProConnect lines (its stack is self-contained)."""
+    the Requirements box: file-scanner shows IPs, its external Redis broker and the
+    caller public keys — and NONE of the generic PostgreSQL/S3/ProConnect lines
+    (the rest of its stack is self-contained)."""
     seed_creds(repo)
     script_questionary(
         monkeypatch,
         [
             ("select", "Secret backend:", "ansible-vault"),
             ("text", "file-scanner host(s)", "10.0.0.20"),
+            ("text", "WORKER_BROKER_URL", "redis://:pw@redis.example.org:6379/3"),
             ("text", "JWT_ISSUER_KEYS", "transferts:pubkeyAAA"),
             ("text", "JWT_SIGNING_KID", "v1"),
             ("confirm", "PROMETHEUS_API_KEY", True),
@@ -1269,6 +1276,7 @@ def test_bootstrap_intro_requirements_tailored_for_file_scanner(
     flat = " ".join(intro.replace("│", " ").split())
     assert "Requirements" in flat
     assert "JWT_ISSUER_KEYS" in flat
+    assert "WORKER_BROKER_URL" in flat
     assert "PostgreSQL" not in flat
     assert "S3" not in flat
     assert "partenaires.proconnect.gouv.fr" not in flat

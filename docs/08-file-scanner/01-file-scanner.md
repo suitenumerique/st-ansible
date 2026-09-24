@@ -18,19 +18,18 @@ file-scanner-worker (ghcr.io/suitenumerique/file-scanner)
   └── python -m worker — dramatiq worker running async scans + webhook delivery
 file-scanner-clamav (docker.io/clamav/clamav)
   └── clamd on port 3310 (compose-internal only) + freshclam signature updater
-file-scanner-redis  (docker.io/library/redis)
-  └── dramatiq broker between the API and the worker (compose-internal only)
 ```
 
-All four services run in a single compose unit (`/opt/file-scanner/file-scanner`),
-mirroring the upstream `docker-compose.yml`. Scans stream to clamd over the network
-(INSTREAM), so no filesystem is shared between the containers.
+All three services run in a single compose unit (`/opt/file-scanner/file-scanner`).
+Scans stream to clamd over the network (INSTREAM), so no filesystem is shared between
+the containers. The dramatiq broker the API and the worker talk through is an
+**external Redis** (`WORKER_BROKER_URL`), like every other Redis in this collection —
+the upstream `docker-compose.yml` bundles one, this role does not.
 
 > [!NOTE]
-> Unlike the Django apps of the suite, file-scanner needs **no external services at
-> all**: no PostgreSQL, no S3, and its Redis broker and ClamAV daemon are bundled in
-> the stack. The service is stateless — async results are pushed to the caller via a
-> signed webhook, nothing is persisted.
+> Redis aside, file-scanner needs no external service: no PostgreSQL, no S3, no IdP,
+> and its ClamAV daemon is bundled in the stack. The service is stateless — async
+> results are pushed to the caller via a signed webhook, nothing is persisted.
 
 > [!NOTE]
 > The worker is **not optional**: without it, `scan-async` requests are accepted
@@ -53,10 +52,16 @@ caller's **public** key looked up by the token's `iss` claim:
   [`deploy/scripts/new-issuer.py`](https://github.com/suitenumerique/file-scanner/blob/main/deploy/scripts/new-issuer.py)
   does the same, one keypair at a time.) With no issuer keys configured, every
   request is rejected.
-- `JWT_SIGNING_KEY` signs the outgoing webhooks; `st-cli` **generates** it (32 random
-  bytes, base64url — a valid Ed25519 seed) and stores it in the vault. Receivers
-  verify webhooks against `/.well-known/jwks.json`, where the key is advertised under
-  the `JWT_SIGNING_KID` label (default `v1`; change it when rotating the key).
+- `JWT_SIGNING_KEY` signs the outgoing webhooks; `st-cli bootstrap` **generates** it
+  (32 random bytes, base64url — a valid Ed25519 seed) and stores it in the vault.
+  Receivers verify webhooks against `/.well-known/jwks.json`, where the key is
+  advertised under the `JWT_SIGNING_KID` label (default `v1`; change it when rotating
+  the key). To mint one yourself — rotating the key, or running the
+  [hashi_vault backend](../../cli/README.md#secret-backends), which generates nothing
+  and expects the secret to pre-exist in OpenBao — use
+  `st-cli generate-keypairs file-scanner <env> --signing-key`: it prints the seed and
+  the public half it will advertise, and (like the caller keypairs) writes nothing
+  anywhere.
 
 ## Wiring with Transfers
 
@@ -87,6 +92,7 @@ worker's SSRF guard refuses to download from private addresses.
 | RAM | 3 GB minimum (clamd loads the full signature DB in memory) |
 | Disk | 2 GB for images + the ClamAV signature volume |
 | Network | Outbound HTTPS (signature updates + fetching the URLs to scan) |
+| Redis | External Redis 7+, the dramatiq broker (`WORKER_BROKER_URL`) |
 | Database / S3 / IdP | **None** |
 
 ## Variable Reference
@@ -98,7 +104,7 @@ complete variable reference.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `st_file_scanner_enabled` | Enable file-scanner (API + worker + clamav + redis) | `false` |
+| `st_file_scanner_enabled` | Enable file-scanner (API + worker + clamav) | `false` |
 | `st_file_scanner_tag` | file-scanner docker image tag | see REFERENCE.md |
 | `st_file_scanner_port` | Host port (maps to the API's uvicorn 8090) | `50800` |
 | `st_file_scanner_uid` | Unix UID for the file-scanner user | `1108` |
@@ -113,8 +119,8 @@ complete variable reference.
 | `st_file_scanner_port` | `50800` | 8090 (API) |
 | `st_file_scanner_cadvisor_port` | `127.0.0.1:50899` | 8080 (cadvisor) |
 
-clamd (3310) and the Redis broker stay on the compose network — nothing but the API
-port is published on the host.
+clamd (3310) stays on the compose network — nothing but the API port is published on
+the host. The broker is reached outbound, on whatever `WORKER_BROKER_URL` points at.
 
 ## Monitoring
 

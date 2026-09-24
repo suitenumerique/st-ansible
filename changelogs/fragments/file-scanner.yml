@@ -1,17 +1,20 @@
 minor_changes:
   - file_scanner role - add a ``file_scanner`` role deploying the file-scanner
     antivirus service (suitenumerique/file-scanner) - a FastAPI REST API and a
-    dramatiq worker with a bundled ClamAV daemon and Redis broker, all in one
-    compose unit on the rootless podman base. Fully self-contained (no external
-    PostgreSQL/Redis/S3); used by Transfers to scan completed uploads.
+    dramatiq worker with a bundled ClamAV daemon, all in one compose unit on the
+    rootless podman base. Unlike the upstream ``docker-compose.yml`` the role
+    bundles no Redis - the dramatiq broker is an external Redis 7+ prompted at
+    bootstrap (``WORKER_BROKER_URL``, routed through the secret backend since it
+    can embed a password), consistent with every other app of the collection. No
+    PostgreSQL, S3 or IdP needed; used by Transfers to scan completed uploads.
   - st-cli - add ``file-scanner`` app support to bootstrap with its own non-Django
-    questionnaire (caller public keys in ``JWT_ISSUER_KEYS``, generated Ed25519
-    webhook signing seed and /metrics bearer token kept in the vault, optional
-    ``ALLOWED_URL_HOSTS`` allowlist). Inventory group names are dash-normalised
+    questionnaire (external dramatiq broker URL, caller public keys in
+    ``JWT_ISSUER_KEYS``, generated Ed25519 webhook signing seed and /metrics
+    bearer token kept in the vault, optional ``ALLOWED_URL_HOSTS`` allowlist). Inventory group names are dash-normalised
     (``[file_scanner]``, alias ``file_scanner1``) so ansible stops warning about
     invalid group characters. The pre-bootstrap Requirements box is now
     app-tailored via a ``requirements`` list in each app manifest (file-scanner
-    shows no PostgreSQL/Redis/S3/IdP lines, keycloak no Redis/S3/OIDC ones,
+    shows only its hosts, broker and caller keys, keycloak no Redis/S3/OIDC ones,
     messages adds OpenSearch and MX/SPF/DKIM DNS prep, meet the LiveKit/TURN
     domains); the list is mandatory per app manifest, replacing the old generic
     one.
@@ -20,4 +23,8 @@ minor_changes:
     crypto dependency) - asks an issuer name per keypair and prints a wiring
     summary with the ``JWT_ISSUER_KEYS`` value (merged with the bootstrapped
     unit's existing keys) and each caller's private key, shown once and never
-    stored.
+    stored. Its ``-s/--signing-key`` flag mints file-scanner's own webhook
+    signing seed (``JWT_SIGNING_KEY``) instead, printing the seed and the public
+    half advertised at ``/.well-known/jwks.json`` - for the ``hashi_vault``
+    backend, which generates nothing, and for key rotation (``bootstrap``
+    generates that seed itself on the ansible-vault backend).

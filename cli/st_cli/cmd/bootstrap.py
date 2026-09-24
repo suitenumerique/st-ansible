@@ -800,17 +800,32 @@ def _ask_file_scanner(
     """Collect the file-scanner core answers → the ``st_file_scanner_env`` blob.
 
     file-scanner is not a Django app: a FastAPI API + dramatiq worker pair whose
-    compose stack bundles its own clamav daemon and Redis broker, so there is no
-    DOMAIN/DB/S3/OIDC questionnaire — callers (e.g. the transfers backend) reach
-    it at ``http://<host>:<st_file_scanner_port>``. Callers are trusted via their
-    *public* Ed25519 keys (``JWT_ISSUER_KEYS``, plain config); the secrets are
-    the webhook signing seed (generated — 32 random bytes base64url IS a valid
-    Ed25519 seed) and the optional ``/metrics`` bearer token (generated too, on
-    by default: the API port is published on the host, and the ``api_client``
-    metric label leaks caller identities to anyone who can scrape it).
+    compose stack bundles its own clamav daemon, so there is no DOMAIN/DB/S3/OIDC
+    questionnaire — callers (e.g. the transfers backend) reach it at
+    ``http://<host>:<st_file_scanner_port>``. The only external service is the
+    Redis the two containers use as their dramatiq broker
+    (``WORKER_BROKER_URL``); like the other apps' ``REDIS_URL`` it can embed a
+    password, so it routes through the secret backend whole. Callers are trusted
+    via their *public* Ed25519 keys (``JWT_ISSUER_KEYS``, plain config); the
+    secrets are the webhook signing seed (generated — 32 random bytes base64url
+    IS a valid Ed25519 seed) and the optional ``/metrics`` bearer token
+    (generated too, on by default: the API port is published on the host, and
+    the ``api_client`` metric label leaks caller identities to anyone who can
+    scrape it).
     """
     core_key = meta.core().key
     answers = dict(answers) if answers else {}
+    broker_url = (
+        _ask(
+            "WORKER_BROKER_URL (dramatiq broker, redis://[user:password@]host:port/db)",
+            "redis://redis:6379/0",
+        )
+        if backend.prompts_values()
+        else None
+    )
+    backend.env_secret(
+        answers, "WORKER_BROKER_URL", component=core_key, value=broker_url
+    )
     answers["JWT_ISSUER_KEYS"] = _ask(
         "JWT_ISSUER_KEYS (comma-separated iss:base64url-ed25519-pubkey pairs)",
         placeholder="transferts:8sicDCDZLZY5SPNNjr4aBwwh0Dyrqr7Ca9neK_nA6Eg",

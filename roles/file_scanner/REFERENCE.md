@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.file_scanner
-Version: 0.3.0
+Version: 0.3.1
 
 This role deploys the file-scanner antivirus service for La Suite Territoriale applications on a rootless podman base on Debian systems.
 
@@ -29,8 +29,6 @@ Installs and configures the file-scanner service from La Suite Territoriale on D
 | st_file_scanner_tag | Tag of the file-scanner docker image to deploy. | str | no | 0.1.1 |
 | st_file_scanner_clamav_image | Image repository for the bundled ClamAV daemon. | str | no | docker.io/clamav/clamav |
 | st_file_scanner_clamav_tag | Tag of the ClamAV docker image to deploy. | str | no | 1.4 |
-| st_file_scanner_redis_image | Image repository for the bundled Redis broker (dramatiq queue between the API and the worker). | str | no | docker.io/library/redis |
-| st_file_scanner_redis_tag | Tag of the Redis docker image to deploy. | str | no | 7-alpine |
 | st_file_scanner_dir | Remote path to the base directory for the file-scanner app. | str | no | /opt/file-scanner/file-scanner |
 | st_file_scanner_port | The host published port for the file-scanner API (maps to the container's uvicorn port 8090). | str | no | 50800 |
 | st_file_scanner_rollback_enabled | Whether or not to trigger the rollback tasks if the file-scanner deployment fails. | bool | no | False |

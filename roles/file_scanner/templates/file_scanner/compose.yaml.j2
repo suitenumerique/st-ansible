@@ -16,8 +16,6 @@ services:
     depends_on:
       clamav:
         condition: service_healthy
-      redis:
-        condition: service_started
 
   worker:
     container_name: file-scanner-worker
@@ -29,8 +27,6 @@ services:
     depends_on:
       clamav:
         condition: service_healthy
-      redis:
-        condition: service_started
     # The image's HEALTHCHECK probes the web API on :8090, which this worker
     # does not serve; disable it (see the transfers workers unit for the full
     # podman-compose shell-less-image rationale).
@@ -57,13 +53,6 @@ services:
       timeout: 5s
       retries: 30
       start_period: 120s
-
-  # dramatiq broker between the API and the worker (Redis 7+ for the
-  # redis-streams consumer groups). Queue state only — scan results are pushed
-  # via webhook (stateless service), so no persistence volume is needed.
-  redis:
-    container_name: file-scanner-redis
-    image: "{{ st_file_scanner_redis_image }}:{{ st_file_scanner_redis_tag }}"
 
 volumes:
   clamav_data:

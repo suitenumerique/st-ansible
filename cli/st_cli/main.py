@@ -126,14 +126,24 @@ def secrets(
 def generate_keypairs(
     app_name: str = typer.Argument(..., metavar="APP"),
     env: str = typer.Argument(...),
+    signing_key: bool = typer.Option(
+        False,
+        "--signing-key",
+        "-s",
+        help="Mint the webhook signing seed (JWT_SIGNING_KEY) instead of caller keypairs.",
+    ),
 ):
     """Mint Ed25519 caller keypair(s) for APP/ENV (file-scanner JWT auth).
 
     Asks an issuer name per keypair, then prints a wiring summary: the
     iss:pubkey fragments for the scanner's JWT_ISSUER_KEYS and, for each caller,
     the private key to hand over (shown once — st-cli stores no copy).
+
+    -s/--signing-key mints file-scanner's own webhook signing seed instead
+    (JWT_SIGNING_KEY): bootstrap generates that one on the ansible-vault
+    backend, so this is for the hashi_vault backend and for key rotation.
     """
-    _run(lambda: generate_keypairs_mod.generate(app_name, env))
+    _run(lambda: generate_keypairs_mod.generate(app_name, env, signing_key))
 
 
 @app.command()
