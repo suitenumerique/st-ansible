@@ -176,6 +176,14 @@ def _ask_secret(
     backend.env_secret(answers, key, component=component, value=value)
 
 
+def _warn_cleared(key: str) -> None:
+    """Warn that a now-blank optional key leaves a stale committed line behind."""
+    ui.warn(
+        f"{key} cleared — the merge never deletes committed lines: "
+        f"remove the {key}= line from vars.yml by hand."
+    )
+
+
 def _ask_optional(answers: dict, key: str, label: str) -> None:
     """Ask an optional text field.
 
@@ -186,10 +194,7 @@ def _ask_optional(answers: dict, key: str, label: str) -> None:
     if value:
         answers[key] = value
     elif answers.pop(key, None):
-        ui.warn(
-            f"{key} cleared — the merge never deletes committed lines: "
-            f"remove the {key}= line from vars.yml by hand."
-        )
+        _warn_cleared(key)
 
 
 def _warn_cleared_password(backend: SecretBackend, key: str) -> None:
@@ -389,12 +394,14 @@ def _ask_transfers_scanner(
     defaults, editable at the prompt).
     """
     if not _confirm(
-        "Configure the file-scanner (antivirus) integration?", default=False
+        "Configure the file-scanner (antivirus) integration?",
+        default=_recall_bool(answers, "CLAMAV_SCAN_ENABLED", False),
     ):
         return
     answers["CLAMAV_SCAN_ENABLED"] = "true"
     answers["CLAMAV_SERVICE_URL"] = _ask(
         "CLAMAV_SERVICE_URL (file-scanner REST base URL, no trailing slash)",
+        _recall(answers, "CLAMAV_SERVICE_URL"),
         placeholder="http://10.0.0.20:50800",
     )
     # Base URL of THIS backend as the scanner reaches it (webhook callback).
@@ -403,21 +410,33 @@ def _ask_transfers_scanner(
     answers["SCAN_WEBHOOK_BASE_URL"] = _ask(
         "SCAN_WEBHOOK_BASE_URL (this backend, as reachable FROM the scanner "
         "— usually the public transfers URL)",
+        _recall(answers, "SCAN_WEBHOOK_BASE_URL"),
         placeholder="https://transfers.example.org",
     )
     # EdDSA (Ed25519) private key minting request-bound scan JWTs — a secret.
-    value = _password("SCAN_JWT_PRIVATE_KEY") if backend.prompts_values() else None
-    backend.env_secret(
-        answers, "SCAN_JWT_PRIVATE_KEY", component=component, value=value
+    # Minted out-of-band (`st-cli generate-keypairs file-scanner <env>`), so it
+    # is prompted, never generated here.
+    _ask_secret(answers, backend, "SCAN_JWT_PRIVATE_KEY", component)
+    answers["SCAN_JWT_ISSUER"] = _ask(
+        "SCAN_JWT_ISSUER", _recall(answers, "SCAN_JWT_ISSUER", "transferts")
     )
-    answers["SCAN_JWT_ISSUER"] = _ask("SCAN_JWT_ISSUER", "transferts")
-    answers["SCAN_JWT_AUDIENCE"] = _ask("SCAN_JWT_AUDIENCE", "file-scanner")
-    answers["SCAN_JWT_TTL"] = _ask("SCAN_JWT_TTL (seconds)", "300")
-    answers["SCAN_MAX_FILE_SIZE"] = _ask("SCAN_MAX_FILE_SIZE (bytes)", "2147483648")
+    answers["SCAN_JWT_AUDIENCE"] = _ask(
+        "SCAN_JWT_AUDIENCE", _recall(answers, "SCAN_JWT_AUDIENCE", "file-scanner")
+    )
+    answers["SCAN_JWT_TTL"] = _ask(
+        "SCAN_JWT_TTL (seconds)", _recall(answers, "SCAN_JWT_TTL", "300")
+    )
+    answers["SCAN_MAX_FILE_SIZE"] = _ask(
+        "SCAN_MAX_FILE_SIZE (bytes)",
+        _recall(answers, "SCAN_MAX_FILE_SIZE", "2147483648"),
+    )
     answers["SCAN_PRESIGNED_URL_EXPIRY"] = _ask(
-        "SCAN_PRESIGNED_URL_EXPIRY (seconds)", "3600"
+        "SCAN_PRESIGNED_URL_EXPIRY (seconds)",
+        _recall(answers, "SCAN_PRESIGNED_URL_EXPIRY", "3600"),
     )
-    answers["SCAN_PENDING_REAP_MINUTES"] = _ask("SCAN_PENDING_REAP_MINUTES", "15")
+    answers["SCAN_PENDING_REAP_MINUTES"] = _ask(
+        "SCAN_PENDING_REAP_MINUTES", _recall(answers, "SCAN_PENDING_REAP_MINUTES", "15")
+    )
 
 
 def _ask_cadvisor(label: str, default: bool = True) -> bool:
@@ -814,41 +833,41 @@ def _ask_file_scanner(
     scrape it).
     """
     core_key = meta.core().key
+    seeded = bool(answers)
     answers = dict(answers) if answers else {}
-    broker_url = (
-        _ask(
+    # The broker URL can embed a password (redis://user:password@host), so it
+    # routes through the secret backend whole, like the Django apps' REDIS_URL.
+    _ask_secret(
+        answers,
+        backend,
+        "WORKER_BROKER_URL",
+        core_key,
+        gen=lambda: _ask(
             "WORKER_BROKER_URL (dramatiq broker, redis://[user:password@]host:port/db)",
             "redis://redis:6379/0",
-        )
-        if backend.prompts_values()
-        else None
-    )
-    backend.env_secret(
-        answers, "WORKER_BROKER_URL", component=core_key, value=broker_url
+        ),
     )
     answers["JWT_ISSUER_KEYS"] = _ask(
         "JWT_ISSUER_KEYS (comma-separated iss:base64url-ed25519-pubkey pairs)",
+        _recall(answers, "JWT_ISSUER_KEYS"),
         placeholder="transferts:8sicDCDZLZY5SPNNjr4aBwwh0Dyrqr7Ca9neK_nA6Eg",
     )
-    backend.env_secret(
-        answers,
-        "JWT_SIGNING_KEY",
-        component=core_key,
-        value=secrets.gen_token() if backend.prompts_values() else None,
+    _ask_secret(answers, backend, "JWT_SIGNING_KEY", core_key, gen=secrets.gen_token)
+    answers["JWT_SIGNING_KID"] = _ask(
+        "JWT_SIGNING_KID (webhook key label)",
+        _recall(answers, "JWT_SIGNING_KID", "v1"),
     )
-    answers["JWT_SIGNING_KID"] = _ask("JWT_SIGNING_KID (webhook key label)", "v1")
     if _confirm(
-        "Protect /metrics with a bearer token (PROMETHEUS_API_KEY)?", default=True
+        "Protect /metrics with a bearer token (PROMETHEUS_API_KEY)?",
+        default="PROMETHEUS_API_KEY" in answers if seeded else True,
     ):
-        backend.env_secret(
-            answers,
-            "PROMETHEUS_API_KEY",
-            component=core_key,
-            value=secrets.gen_token() if backend.prompts_values() else None,
+        _ask_secret(
+            answers, backend, "PROMETHEUS_API_KEY", core_key, gen=secrets.gen_token
         )
     allowed = _ask(
         "ALLOWED_URL_HOSTS (optional allowlist of scannable URL hosts, e.g. your "
         "S3 host; blank = any host may be submitted)",
+        _recall(answers, "ALLOWED_URL_HOSTS"),
         required=False,
     )
     # SSRF bypass: only needed when a scannable host resolves to a private IP
@@ -861,17 +880,20 @@ def _ask_file_scanner(
         if _confirm(
             "Do these hosts resolve to private IPs from the scanner hosts "
             "(e.g. an internal S3 endpoint)? Sets SSRF_ALLOWED_HOSTS to the same list.",
-            default=False,
+            default=answers.get("SSRF_ALLOWED_HOSTS") == allowed,
         ):
             answers["SSRF_ALLOWED_HOSTS"] = allowed
+        elif answers.pop("SSRF_ALLOWED_HOSTS", None):
+            _warn_cleared("SSRF_ALLOWED_HOSTS")
     else:
-        ssrf = _ask(
+        if answers.pop("ALLOWED_URL_HOSTS", None):
+            _warn_cleared("ALLOWED_URL_HOSTS")
+        _ask_optional(
+            answers,
+            "SSRF_ALLOWED_HOSTS",
             "SSRF_ALLOWED_HOSTS (optional: hosts allowed to resolve to private IPs, "
             "e.g. an internal S3 endpoint)",
-            required=False,
         )
-        if ssrf:
-            answers["SSRF_ALLOWED_HOSTS"] = ssrf
     return answers
 
 

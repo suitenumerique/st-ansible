@@ -14,6 +14,7 @@ from helpers import (
     accept_defaults,
     docs_first_run_script,
     drive_first_run_script,
+    file_scanner_first_run_script,
     livekit_script,
     meet_first_run_script,
     messages_first_run_script,
@@ -26,6 +27,7 @@ from helpers import (
     seed_meet_egress_unit,
     seed_meet_unit,
     set_flags,
+    transfers_first_run_script,
     with_answers,
 )
 from ruamel.yaml.scalarstring import LiteralScalarString
@@ -388,6 +390,67 @@ def test_projects_round_trip_byte_identical(repo, monkeypatch):
     assert (repo / "projects/prod/projects/vault.yml").read_bytes() == core_vault_before
     assert (
         vault.decrypt_to_dict(paths.vault_path("projects", "prod", "projects"))
+        == decrypted_before
+    )
+
+
+def test_transfers_round_trip_byte_identical_with_scanner(repo, monkeypatch):
+    """An Enter-through transfers rebootstrap leaves vars.yml and vault.yml
+    byte-identical, the optional file-scanner block included: its gate defaults
+    to the committed CLAMAV_SCAN_ENABLED and SCAN_JWT_PRIVATE_KEY is never
+    re-prompted or rotated."""
+    seed_creds(repo)
+    sq1 = script_questionary(monkeypatch, transfers_first_run_script(scanner=True))
+    bootstrap.bootstrap("transfers", "prod")
+    assert not sq1._scripts, f"unconsumed scripts: {sq1._scripts}"
+
+    vars_before = (repo / "transfers/prod/transfers/vars.yml").read_text()
+    vault_before = (repo / "transfers/prod/transfers/vault.yml").read_bytes()
+    decrypted_before = vault.decrypt_to_dict(
+        paths.vault_path("transfers", "prod", "transfers")
+    )
+    assert "CLAMAV_SCAN_ENABLED=true" in vars_before
+    assert decrypted_before["vault_scan_jwt_private_key"] == "scanprivkey"
+
+    sq2 = accept_defaults(monkeypatch)
+    bootstrap.bootstrap("transfers", "prod", replay=bootstrap.ReplayAction.MODIFY)
+    assert not sq2._scripts, f"unconsumed scripts: {sq2._scripts}"
+    # a recovered secret is never asked again
+    assert not sq2.asked("password", "SCAN_JWT_PRIVATE_KEY")
+
+    assert (repo / "transfers/prod/transfers/vars.yml").read_text() == vars_before
+    assert (repo / "transfers/prod/transfers/vault.yml").read_bytes() == vault_before
+    assert (
+        vault.decrypt_to_dict(paths.vault_path("transfers", "prod", "transfers"))
+        == decrypted_before
+    )
+
+
+def test_file_scanner_round_trip_byte_identical(repo, monkeypatch):
+    """An Enter-through file-scanner rebootstrap leaves vars.yml and vault.yml
+    byte-identical: the generated webhook signing seed, the /metrics token and
+    the broker URL are recovered, never regenerated."""
+    seed_creds(repo)
+    sq1 = script_questionary(monkeypatch, file_scanner_first_run_script())
+    bootstrap.bootstrap("file-scanner", "prod")
+    assert not sq1._scripts, f"unconsumed scripts: {sq1._scripts}"
+
+    unit = repo / "file-scanner/prod/file-scanner"
+    vars_before = (unit / "vars.yml").read_text()
+    vault_before = (unit / "vault.yml").read_bytes()
+    decrypted_before = vault.decrypt_to_dict(
+        paths.vault_path("file-scanner", "prod", "file-scanner")
+    )
+    assert len(decrypted_before["vault_jwt_signing_key"]) == 43  # token_urlsafe(32)
+
+    sq2 = accept_defaults(monkeypatch)
+    bootstrap.bootstrap("file-scanner", "prod", replay=bootstrap.ReplayAction.MODIFY)
+    assert not sq2._scripts, f"unconsumed scripts: {sq2._scripts}"
+
+    assert (unit / "vars.yml").read_text() == vars_before
+    assert (unit / "vault.yml").read_bytes() == vault_before
+    assert (
+        vault.decrypt_to_dict(paths.vault_path("file-scanner", "prod", "file-scanner"))
         == decrypted_before
     )
 

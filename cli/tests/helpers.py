@@ -630,6 +630,102 @@ def projects_first_run_script(
     return script
 
 
+def transfers_first_run_script(
+    *,
+    host: str = "10.0.0.9",
+    domain: str = "transfers.example.org",
+    smtp: bool = False,
+    scanner: bool = False,
+    cadvisor: bool = True,
+) -> list[tuple]:
+    """Build a first-run transfers script (a django-lasuite app, like drive).
+
+    ``scanner=True`` walks the optional file-scanner (antivirus) block.
+    """
+    script = [
+        ("select", "Secret backend:", "ansible-vault"),
+        ("text", "transfers host(s)", host),
+        ("text", "workers (leave blank", ""),
+        ("text", "Public domain for transfers", domain),
+        ("select", "Database configuration:", "DATABASE_URL"),
+        ("text", "DATABASE_URL", "postgres://transfers"),
+        ("text", "REDIS_URL", "redis://redis:6379/0"),
+        ("text", "AWS_S3_ENDPOINT_URL", "https://s3.fr-par.scw.cloud"),
+        ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
+        ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
+        ("text", "AWS_STORAGE_BUCKET_NAME", "transfers-prod"),
+        ("text", "AWS_S3_REGION_NAME (optional)", "fr-par"),
+        ("text", "DRIVE_BASE_URL", "https://drive.example.org"),
+        ("select", "Identity provider:", "keycloak"),
+        ("text", "Keycloak base URL", "https://idp.example.org"),
+        ("text", "Keycloak realm", "master"),
+        ("text", "OIDC_RP_CLIENT_ID", "transfers-client"),
+        ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+    ]
+    script.append(("confirm", "Configure the file-scanner", scanner))
+    if scanner:
+        script += [
+            ("text", "CLAMAV_SERVICE_URL", "http://10.0.0.20:50800"),
+            ("text", "SCAN_WEBHOOK_BASE_URL", f"https://{domain}"),
+            ("password", "SCAN_JWT_PRIVATE_KEY", "scanprivkey"),
+            ("text", "SCAN_JWT_ISSUER", "transferts"),
+            ("text", "SCAN_JWT_AUDIENCE", "file-scanner"),
+            ("text", "SCAN_JWT_TTL", "300"),
+            ("text", "SCAN_MAX_FILE_SIZE", "2147483648"),
+            ("text", "SCAN_PRESIGNED_URL_EXPIRY", "3600"),
+            ("text", "SCAN_PENDING_REAP_MINUTES", "15"),
+        ]
+    if smtp:
+        script += [
+            ("confirm", "Configure transactional email (SMTP) settings?", True),
+            ("text", "DJANGO_EMAIL_HOST", "smtp.example.org"),
+            ("text", "DJANGO_EMAIL_PORT", "587"),
+            ("text", "DJANGO_EMAIL_HOST_USER (optional)", ""),
+            ("password", "DJANGO_EMAIL_HOST_PASSWORD", "smtp-pass"),
+            ("confirm", "DJANGO_EMAIL_USE_TLS?", True),
+            ("confirm", "DJANGO_EMAIL_USE_SSL?", False),
+            ("text", "DJANGO_EMAIL_FROM", f"noreply@{domain}"),
+            ("text", "DJANGO_EMAIL_BRAND_NAME (optional)", ""),
+        ]
+    else:
+        script.append(
+            ("confirm", "Configure transactional email (SMTP) settings?", False)
+        )
+    script.append(("confirm", "cadvisor", cadvisor))
+    return script
+
+
+def file_scanner_first_run_script(
+    *,
+    host: str = "10.0.0.20",
+    metrics: bool = True,
+    allowed: str = "",
+    ssrf: str = "",
+    cadvisor: bool = True,
+) -> list[tuple]:
+    """Build a first-run file-scanner script (a FastAPI + dramatiq pair, so no
+    DOMAIN/DB/S3/OIDC prompts).
+
+    ``allowed`` set walks the "private IPs?" yes/no instead of the free-text
+    SSRF prompt; ``ssrf`` then says whether that answer is yes.
+    """
+    script = [
+        ("select", "Secret backend:", "ansible-vault"),
+        ("text", "file-scanner host(s)", host),
+        ("text", "WORKER_BROKER_URL", "redis://:pw@redis.example.org:6379/3"),
+        ("text", "JWT_ISSUER_KEYS", "transferts:pubkeyAAA"),
+        ("text", "JWT_SIGNING_KID", "v1"),
+        ("confirm", "PROMETHEUS_API_KEY", metrics),
+        ("text", "ALLOWED_URL_HOSTS", allowed),
+    ]
+    if allowed:
+        script.append(("confirm", "private IPs", bool(ssrf)))
+    else:
+        script.append(("text", "SSRF_ALLOWED_HOSTS", ssrf))
+    script.append(("confirm", "cadvisor", cadvisor))
+    return script
+
+
 def with_answers(script: list[tuple], overrides: dict[str, object]) -> list[tuple]:
     """Return a copy of ``script`` with each tuple's answer replaced when a
     key in ``overrides`` is a substring of that tuple's prompt."""
