@@ -2,7 +2,13 @@
 app: projects
 env_docs_url: "https://github.com/suitenumerique/projects/blob/main/docker-compose.yml"
 arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/05-projects"
-requires: [postgresql, oidc]
+# projects is a Sails app: no Redis/S3 needed for a single instance (S3 uploads
+# are opt-in; Redis + S3 become mandatory only when scaling horizontally).
+requirements:
+  - "[bold]IP[/bold] or hostname of the VM(s)"
+  - "[bold]PostgreSQL[/bold] host and credentials"
+  - "[bold]Identity provider[/bold] URLs and credentials (ProConnect Integration: create an app at https://partenaires.proconnect.gouv.fr/)"
+  - "Optionally: an S3 bucket + credentials for uploads, and a Redis — both required when scaling to several instances"
 components:
   - key: projects
     role: suitenumerique.st.projects

@@ -1,0 +1,114 @@
+---
+argument_specs:
+  main:
+    short_description: "Installs and configures the Transfers application from La Suite Territoriale on Debian systems."
+    options:
+      st_transfers_public_host:
+        type: "str"
+        description: "The public hostname used to access the transfers application."
+      st_transfers_uid:
+        type: "int"
+        description: "UID of the `transfers` user, used for the podman role."
+        default: 1107
+      st_transfers_gid:
+        type: "int"
+        description: "GID of the `transfers` group, used for the podman role."
+        default: "{{ st_transfers_uid }}"
+      st_transfers_registries:
+        type: "list"
+        elements: "dict"
+        description: "Optional private container registries to login the `transfers` user onto."
+      st_transfers_frontend_image:
+        type: "str"
+        description: "Image repository for the transfers frontend."
+        default: "ghcr.io/suitenumerique/transfers-frontend"
+      st_transfers_backend_image:
+        type: "str"
+        description: "Image repository for the transfers backend."
+        default: "ghcr.io/suitenumerique/transfers-backend"
+      st_transfers_tag:
+        type: "str"
+        description: "Tag of the transfers docker images to deploy."
+        # renovate: datasource=github-releases depName=suitenumerique/transfers versioning=semver
+        default: "0.1.0"
+      st_transfers_enabled:
+        type: "bool"
+        description: "Triggers the installation of the transfers application."
+        default: false
+      st_transfers_dir:
+        type: "str"
+        description: "Remote path to the base directory for transfers app."
+        default: "/opt/transfers/transfers"
+      st_transfers_port:
+        type: "str"
+        description: "The host published port for the transfers frontend (maps to the container's Caddy port 8080)."
+        default: "50700"
+      st_transfers_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the transfers deployment fails."
+        default: false
+      st_transfers_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for transfers compose file."
+        default: "transfers/compose.yaml.j2"
+      st_transfers_backend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for transfers backend env file."
+        default: "transfers/backend_env.j2"
+      st_transfers_backend_env:
+        type: "str"
+        description: "Content of the default backend_env_template, not used if st_transfers_backend_env_template is defined."
+        default: ''
+      st_transfers_backend_run_migrations:
+        type: "bool"
+        description: "Whether to run database migrations on transfers backend startup."
+        default: true
+      st_transfers_frontend_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for transfers frontend env file."
+        default: "transfers/frontend_env.j2"
+      st_transfers_frontend_env:
+        type: "str"
+        description: "Content of the default frontend_env_template, not used if st_transfers_frontend_env_template is defined."
+        default: ''
+      st_transfers_workers_enabled:
+        type: "bool"
+        description: "Triggers the installation of the transfers workers (Celery worker with embedded beat scheduler)."
+        default: false
+      st_transfers_workers_dir:
+        type: "str"
+        description: "Remote path to the base directory for transfers workers."
+        default: "/opt/transfers/workers"
+      st_transfers_workers_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for transfers workers env file."
+        default: "workers/env.j2"
+      st_transfers_workers_env:
+        type: "str"
+        description: "Content of the default workers_env_template, not used if st_transfers_workers_env_template is defined."
+        default: '{{ st_transfers_backend_env }}'
+      st_transfers_workers_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the workers deployment fails."
+        default: false
+      st_transfers_workers_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for workers compose file."
+        default: workers/compose.yaml.j2
+      st_transfers_cadvisor_enabled:
+        type: "bool"
+        description: "Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool."
+        default: false
+      st_transfers_cadvisor_image:
+        type: "str"
+        description: "Image repository for the cadvisor container."
+        default: "ghcr.io/google/cadvisor"
+      st_transfers_cadvisor_tag:
+        type: "str"
+        description: "Tag of the cadvisor docker image to deploy."
+        # renovate: datasource=docker depName=ghcr.io/google/cadvisor
+        default: "v0.60.3"
+      st_transfers_cadvisor_port:
+        type: "str"
+        description: "The host published port of the cadvisor container."
+        default: "127.0.0.1:50799"

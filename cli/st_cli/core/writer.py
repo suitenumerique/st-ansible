@@ -197,9 +197,10 @@ def cadvisor_var(app: str) -> str:
     """The per-app cadvisor toggle var name (`st_<app>_cadvisor_enabled`).
 
     Uniform across every component of the app; only the vars.yml it lands in
-    differs.
+    differs. Dashes in the app name (``file-scanner``) are normalised:
+    ansible var names can't carry them.
     """
-    return f"st_{app}_cadvisor_enabled"
+    return f"st_{app.replace('-', '_')}_cadvisor_enabled"
 
 
 def write_core(

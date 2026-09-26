@@ -1,0 +1,91 @@
+---
+argument_specs:
+  main:
+    short_description: "Installs and configures the file-scanner service from La Suite Territoriale on Debian systems."
+    options:
+      st_file_scanner_uid:
+        type: "int"
+        description: "UID of the `file-scanner` user, used for the podman role."
+        default: 1108
+      st_file_scanner_gid:
+        type: "int"
+        description: "GID of the `file-scanner` group, used for the podman role."
+        default: "{{ st_file_scanner_uid }}"
+      st_file_scanner_registries:
+        type: "list"
+        elements: "dict"
+        description: "Optional private container registries to login the `file-scanner` user onto."
+      st_file_scanner_enabled:
+        type: "bool"
+        description: "Triggers the installation of the file-scanner application."
+        default: false
+      st_file_scanner_image:
+        type: "str"
+        description: "Image repository for file-scanner (one image runs both the web API and the worker)."
+        default: "ghcr.io/suitenumerique/file-scanner"
+      st_file_scanner_tag:
+        type: "str"
+        description: "Tag of the file-scanner docker image to deploy."
+        # renovate: datasource=github-releases depName=suitenumerique/file-scanner versioning=semver extractVersion=^v(?<version>.+)$
+        default: "0.1.1"
+      st_file_scanner_clamav_image:
+        type: "str"
+        description: "Image repository for the bundled ClamAV daemon."
+        default: "docker.io/clamav/clamav"
+      st_file_scanner_clamav_tag:
+        type: "str"
+        description: "Tag of the ClamAV docker image to deploy."
+        # renovate: datasource=docker depName=clamav/clamav
+        default: "1.4"
+      st_file_scanner_dir:
+        type: "str"
+        description: "Remote path to the base directory for the file-scanner app."
+        default: "/opt/file-scanner/file-scanner"
+      st_file_scanner_port:
+        type: "str"
+        description: "The host published port for the file-scanner API (maps to the container's uvicorn port 8090)."
+        default: "50800"
+      st_file_scanner_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the file-scanner deployment fails."
+        default: false
+      st_file_scanner_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for file-scanner compose file."
+        default: "file_scanner/compose.yaml.j2"
+      st_file_scanner_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for file-scanner env file."
+        default: "file_scanner/env.j2"
+      st_file_scanner_env:
+        type: "str"
+        description: "Content of the default env_template, not used if st_file_scanner_env_template is defined."
+        default: ""
+      st_file_scanner_clamav_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for the clamav env file."
+        default: "file_scanner/clamav_env.j2"
+      st_file_scanner_clamav_env:
+        type: "str"
+        description: "Content of the default clamav_env_template, not used if st_file_scanner_clamav_env_template is defined. The clamav image applies `CLAMD_CONF_<Option>=<value>` and `FRESHCLAM_CONF_<Option>=<value>` lines to clamd.conf / freshclam.conf at startup. The default raises clamd's size caps above the scanner's 2 GiB MAX_URL_SIZE: below StreamMaxLength a too-big file dies mid-INSTREAM, and below MaxFileSize/MaxScanSize it is skipped and reported CLEAN unscanned. clamd spools each INSTREAM to its temporary directory, so the clamav container needs that much free disk."
+        default: |
+          CLAMD_CONF_StreamMaxLength=2200M
+          CLAMD_CONF_MaxFileSize=2200M
+          CLAMD_CONF_MaxScanSize=2200M
+      st_file_scanner_cadvisor_enabled:
+        type: "bool"
+        description: "Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool."
+        default: false
+      st_file_scanner_cadvisor_image:
+        type: "str"
+        description: "Image repository for the cadvisor container."
+        default: "ghcr.io/google/cadvisor"
+      st_file_scanner_cadvisor_tag:
+        type: "str"
+        description: "Tag of the cadvisor docker image to deploy."
+        # renovate: datasource=docker depName=ghcr.io/google/cadvisor
+        default: "v0.60.3"
+      st_file_scanner_cadvisor_port:
+        type: "str"
+        description: "The host published port of the cadvisor container."
+        default: "127.0.0.1:50899"
