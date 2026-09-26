@@ -90,7 +90,7 @@ worker's SSRF guard refuses to download from private addresses.
 |-------------|-------|
 | Platform | Debian Trixie |
 | RAM | 3 GB minimum (clamd loads the full signature DB in memory) |
-| Disk | 2 GB for images + the ClamAV signature volume |
+| Disk | 2 GB for the images + the ClamAV signature volume, **plus** temporary spool: clamd writes each INSTREAM to its temp directory, so up to `CLAMD_CONF_StreamMaxLength` (2200M by default) per scan running in parallel. Size for your peak concurrency, or cap it with `CLAMD_CONF_MaxThreads` in `st_file_scanner_clamav_env` |
 | Network | Outbound HTTPS (signature updates + fetching the URLs to scan) |
 | Redis | External Redis 7+, the dramatiq broker (`WORKER_BROKER_URL`) |
 | Database / S3 / IdP | **None** |
@@ -160,14 +160,14 @@ scanned**. The role therefore ships `st_file_scanner_clamav_env` with all three
 raised to `2200M` (matching upstream's compose); the clamav image applies each
 `CLAMD_CONF_<Option>=<value>` line to `clamd.conf` at startup (same for
 `FRESHCLAM_CONF_<Option>`), so any clamd/freshclam option can be tuned through
-this blob in `vars.yml`:
+this list in `vars.yml`, one `KEY=value` line per element:
 
 ```yaml
-st_file_scanner_clamav_env: |
-  CLAMD_CONF_StreamMaxLength=2200M
-  CLAMD_CONF_MaxFileSize=2200M
-  CLAMD_CONF_MaxScanSize=2200M
-  FRESHCLAM_CONF_Checks=24
+st_file_scanner_clamav_env:
+  - CLAMD_CONF_StreamMaxLength=2200M
+  - CLAMD_CONF_MaxFileSize=2200M
+  - CLAMD_CONF_MaxScanSize=2200M
+  - FRESHCLAM_CONF_Checks=24
 ```
 
 Note: clamd spools each INSTREAM to its temporary directory before scanning, so
