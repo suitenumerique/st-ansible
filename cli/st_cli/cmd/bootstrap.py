@@ -423,19 +423,28 @@ def _ask_transfers_scanner(
     answers["SCAN_JWT_AUDIENCE"] = _ask(
         "SCAN_JWT_AUDIENCE", _recall(answers, "SCAN_JWT_AUDIENCE", "file-scanner")
     )
-    answers["SCAN_JWT_TTL"] = _ask(
-        "SCAN_JWT_TTL (seconds)", _recall(answers, "SCAN_JWT_TTL", "300")
+    # Upstream defaults every knob below, so each stays optional: a blank answer
+    # writes no line and the app keeps its own value. Writing them at their
+    # default would pin our copy and mask a later change upstream (SCAN_JWT_TTL
+    # especially — a longer TTL widens the compromise window of a scan token).
+    _ask_optional(
+        answers, "SCAN_JWT_TTL", "SCAN_JWT_TTL (seconds, optional; upstream 300)"
     )
-    answers["SCAN_MAX_FILE_SIZE"] = _ask(
-        "SCAN_MAX_FILE_SIZE (bytes)",
-        _recall(answers, "SCAN_MAX_FILE_SIZE", "2147483648"),
+    _ask_optional(
+        answers,
+        "SCAN_MAX_FILE_SIZE",
+        "SCAN_MAX_FILE_SIZE (bytes, optional; upstream 2 GiB — bigger files are "
+        "flagged not-scanned, never claimed clean)",
     )
-    answers["SCAN_PRESIGNED_URL_EXPIRY"] = _ask(
-        "SCAN_PRESIGNED_URL_EXPIRY (seconds)",
-        _recall(answers, "SCAN_PRESIGNED_URL_EXPIRY", "3600"),
+    _ask_optional(
+        answers,
+        "SCAN_PRESIGNED_URL_EXPIRY",
+        "SCAN_PRESIGNED_URL_EXPIRY (seconds, optional; upstream 3600)",
     )
-    answers["SCAN_PENDING_REAP_MINUTES"] = _ask(
-        "SCAN_PENDING_REAP_MINUTES", _recall(answers, "SCAN_PENDING_REAP_MINUTES", "15")
+    _ask_optional(
+        answers,
+        "SCAN_PENDING_REAP_MINUTES",
+        "SCAN_PENDING_REAP_MINUTES (optional; upstream 15)",
     )
 
 

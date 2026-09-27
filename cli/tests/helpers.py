@@ -636,11 +636,13 @@ def transfers_first_run_script(
     domain: str = "transfers.example.org",
     smtp: bool = False,
     scanner: bool = False,
+    scan_ttl: str = "",
     cadvisor: bool = True,
 ) -> list[tuple]:
     """Build a first-run transfers script (a django-lasuite app, like drive).
 
-    ``scanner=True`` walks the optional file-scanner (antivirus) block.
+    ``scanner=True`` walks the optional file-scanner (antivirus) block;
+    ``scan_ttl`` deviates from the upstream SCAN_JWT_TTL default (blank keeps it).
     """
     script = [
         ("select", "Secret backend:", "ansible-vault"),
@@ -670,10 +672,11 @@ def transfers_first_run_script(
             ("password", "SCAN_JWT_PRIVATE_KEY", "scanprivkey"),
             ("text", "SCAN_JWT_ISSUER", "transferts"),
             ("text", "SCAN_JWT_AUDIENCE", "file-scanner"),
-            ("text", "SCAN_JWT_TTL", "300"),
-            ("text", "SCAN_MAX_FILE_SIZE", "2147483648"),
-            ("text", "SCAN_PRESIGNED_URL_EXPIRY", "3600"),
-            ("text", "SCAN_PENDING_REAP_MINUTES", "15"),
+            # optional tuning knobs: blank keeps the upstream defaults
+            ("text", "SCAN_JWT_TTL", scan_ttl),
+            ("text", "SCAN_MAX_FILE_SIZE", ""),
+            ("text", "SCAN_PRESIGNED_URL_EXPIRY", ""),
+            ("text", "SCAN_PENDING_REAP_MINUTES", ""),
         ]
     if smtp:
         script += [

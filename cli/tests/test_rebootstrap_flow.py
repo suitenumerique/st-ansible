@@ -400,7 +400,9 @@ def test_transfers_round_trip_byte_identical_with_scanner(repo, monkeypatch):
     to the committed CLAMAV_SCAN_ENABLED and SCAN_JWT_PRIVATE_KEY is never
     re-prompted or rotated."""
     seed_creds(repo)
-    sq1 = script_questionary(monkeypatch, transfers_first_run_script(scanner=True))
+    sq1 = script_questionary(
+        monkeypatch, transfers_first_run_script(scanner=True, scan_ttl="120")
+    )
     bootstrap.bootstrap("transfers", "prod")
     assert not sq1._scripts, f"unconsumed scripts: {sq1._scripts}"
 
@@ -411,6 +413,14 @@ def test_transfers_round_trip_byte_identical_with_scanner(repo, monkeypatch):
     )
     assert "CLAMAV_SCAN_ENABLED=true" in vars_before
     assert decrypted_before["vault_scan_jwt_private_key"] == "scanprivkey"
+    # a deviated knob is written, the ones left blank keep the app's own default
+    assert "SCAN_JWT_TTL=120" in vars_before
+    for key in (
+        "SCAN_MAX_FILE_SIZE",
+        "SCAN_PRESIGNED_URL_EXPIRY",
+        "SCAN_PENDING_REAP_MINUTES",
+    ):
+        assert key not in vars_before, key
 
     sq2 = accept_defaults(monkeypatch)
     bootstrap.bootstrap("transfers", "prod", replay=bootstrap.ReplayAction.MODIFY)

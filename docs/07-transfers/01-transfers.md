@@ -124,7 +124,7 @@ integration?"*; answering yes collects:
 | `SCAN_WEBHOOK_BASE_URL` | Base URL of this backend **as reachable from the scanner host** (webhook callback). The backend port is not published — use the public transfers URL (the frontend Caddy proxies `/api` to the backend), e.g. `https://transfers.example.org` |
 | `SCAN_JWT_PRIVATE_KEY` | EdDSA (Ed25519) private key minting request-bound scan JWTs — **secret** (routed through the vault). Mint the keypair with `st-cli generate-keypairs file-scanner <env>` (or the scanner's `deploy/scripts/new-issuer.py`) and register the public key on the scanner's `JWT_ISSUER_KEYS` |
 | `SCAN_JWT_ISSUER` / `SCAN_JWT_AUDIENCE` | JWT `iss` / `aud` claims (defaults `transferts` / `file-scanner`) |
-| `SCAN_JWT_TTL`, `SCAN_MAX_FILE_SIZE`, `SCAN_PRESIGNED_URL_EXPIRY`, `SCAN_PENDING_REAP_MINUTES` | Tuning knobs (upstream defaults pre-filled) |
+| `SCAN_JWT_TTL`, `SCAN_MAX_FILE_SIZE`, `SCAN_PRESIGNED_URL_EXPIRY`, `SCAN_PENDING_REAP_MINUTES` | Optional tuning knobs. Upstream defaults them (300s, 2 GiB, 3600s, 15 min), so leaving a prompt blank writes no line and the app keeps its own value — answer only to deviate. Writing them at their default would pin our copy and hide a later change upstream |
 
 The keys land in `st_transfers_backend_env`, which the worker unit reuses — so the
 scan-submit and stale-scan reap Celery tasks see the same config. The scanner service
