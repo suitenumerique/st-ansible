@@ -1,0 +1,4 @@
+minor_changes:
+  - "Update ghcr.io/suitenumerique/messages Docker tag to 0.10.0"
+  - "Update docker.io/rspamd/rspamd Docker tag to 4.2.0"
+  - "Update docker.io/valkey/valkey Docker tag to v9.1.2"
