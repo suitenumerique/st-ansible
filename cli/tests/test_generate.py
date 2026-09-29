@@ -341,3 +341,35 @@ def test_generate_stale_cleanup_preserves_sibling_env_playbook(repo):
     # the real stale playbook was regenerated (overwritten, not left as 'STALE')
     assert stale_real.exists()
     assert stale_real.read_text() != "STALE\n"
+
+
+def test_legacy_mta_in_unit_still_resolves_for_deploy_and_generate(repo):
+    """An old .st-cli.yml with an `mta-in` unit still deploys and generates.
+
+    `mta-in` left `dependencies:` when pymta replaced it. It stays in
+    `components:` for exactly this tree.
+    """
+    seed_creds(repo)
+    manifest.save_manifest(
+        StCliManifest(
+            "0.0.19",
+            "0.0.19",
+            [
+                UnitState("messages", "prod", "messages", "managed"),
+                UnitState("messages", "prod", "mta-in", "managed"),
+            ],
+        )
+    )
+    for comp in ("messages", "mta-in"):
+        tree.save_vars(
+            "messages", "prod", comp, tree.load_vars("messages", "prod", comp)
+        )
+        tree.write_hosts("messages", "prod", comp, comp, ["10.0.0.7"])
+
+    _m, units = manifest.managed_units("messages", "prod", None)
+    assert [u.component for u in units] == ["mta-in", "messages"]
+
+    generate.generate_all("messages", "prod")
+    pb = generate.playbook_path("messages", "prod", "mta-in")
+    assert pb.exists()
+    assert "st_messages_mta_in_enabled: true" in pb.read_text()

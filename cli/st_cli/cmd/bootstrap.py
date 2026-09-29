@@ -949,9 +949,9 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
         )
 
     if app == "messages":
-        # MDA_API_SECRET is a messages-core secret (mta-in is only a consumer).
+        # MDA_API_SECRET is a messages-core secret (pymta is only a consumer).
         # Generate it here so it exists whenever messages is bootstrapped,
-        # independent of whether mta-in is deployed, skipped, or external.
+        # independent of whether pymta is deployed, skipped, or external.
         _ask_secret(
             answers, backend, "MDA_API_SECRET", core_key, gen=secrets.gen_secret
         )
@@ -993,7 +993,7 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
 def _ask_messages_provider(
     provider_key, answers, backend, hosts, core_key, app, env, pvars
 ):
-    """messages mta-in / socks-proxy / mpa: collect provider-local env values,
+    """messages pymta / socks-proxy / mpa: collect provider-local env values,
     route their secrets, and build each provider's computed consumer value
     (MTA_OUT_DIRECT_PROXIES, SPAM_CONFIG), never prompted.
     """
@@ -1001,7 +1001,7 @@ def _ask_messages_provider(
     # recovery. This covers both a full run and a standalone `-c <provider>` run.
     for k, v in recover.recover(app, env, provider_key).items():
         answers.setdefault(k, v)
-    if provider_key == "mta-in":
+    if provider_key == "pymta":
         # DOMAIN feeds MDA_API_BASE_URL; present in full bootstrap, prompt if
         # standalone.
         if not answers.get("DOMAIN"):
@@ -1009,13 +1009,13 @@ def _ask_messages_provider(
                 "Public domain for messages (for MDA_API_BASE_URL)",
                 placeholder="messages.example.org",
             )
-        answers["MYHOSTNAME"] = _ask(
-            "MX public hostname (MYHOSTNAME) for mta-in",
-            _recall(answers, "MYHOSTNAME"),
+        answers["PYMTA_SMTP_HOSTNAME"] = _ask(
+            "MX public hostname (PYMTA_SMTP_HOSTNAME) for pymta",
+            _recall(answers, "PYMTA_SMTP_HOSTNAME"),
             placeholder="mx.example.org",
         )
         # MDA_API_SECRET is owned by the messages core (generated in
-        # _ask_core). Mirror it into mta-in's own vault: the live core
+        # _ask_core). Mirror it into pymta's own vault: the live core
         # buffer, else the on-disk messages vault, else prompt the operator.
         if backend.prompts_values():
             v = backend.component_secrets(core_key).get("vault_mda_api_secret")
@@ -2092,7 +2092,7 @@ def _handle_dependency(
                 rule.get("answer_key") and value is not None
             ):  # expose the raw value to provider component_vars
                 answers[rule["answer_key"]] = value
-        if meta.app == "messages" and provider.key in ("mta-in", "mpa", "socks-proxy"):
+        if meta.app == "messages" and provider.key in ("pymta", "mpa", "socks-proxy"):
             _ask_messages_provider(
                 provider.key, answers, backend, hosts, core.key, meta.app, env, pvars
             )
@@ -2267,7 +2267,7 @@ def _confirm_override(app: str, env: str) -> None:
         "redeploy. A secret owned by a kept provider (for example the "
         "LiveKit API key/secret pair) is re-imported unchanged, never "
         "rotated. A managed dependency that mirrors this core's secrets "
-        "(for example messages' mta-in copy of MDA_API_SECRET) is replayed "
+        "(for example messages' pymta copy of MDA_API_SECRET) is replayed "
         "automatically in the same run, so it picks up the regenerated "
         "value. Continue?",
         default=False,

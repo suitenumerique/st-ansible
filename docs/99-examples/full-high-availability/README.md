@@ -12,7 +12,8 @@
 
 Each service runs on two or more hosts behind an external load balancer, connected to
 external databases and storage. The socks-proxies hold their own public IPs (one per host)
-for outbound SMTP. LiveKit also has its own public IP for WebRTC traffic.
+for outbound SMTP. LiveKit also has its own public IP for WebRTC traffic. The external LB
+forwards port `:25` to pymta with the PROXY protocol.
 
 ```text
   Internet
@@ -26,7 +27,7 @@ for outbound SMTP. LiveKit also has its own public IP for WebRTC traffic.
      │      ├── messages (1+2)
      │      │     ├── workers (1)
      │      │     └── mpa (1)
-     │      ├── mta-in (1+2)
+     │      ├── pymta (1+2)
      │      └── meet (1+2)
      │
      ├─── socks-proxy (1+2, public IPs)
@@ -43,7 +44,7 @@ for outbound SMTP. LiveKit also has its own public IP for WebRTC traffic.
 | keycloak | x | | | |
 | messages | x | x | x | x |
 | messages workers | x | x | x | x |
-| mta-in | | | | |
+| pymta | | | | |
 | mpa | | | | |
 | socks-proxy | | | | |
 | drive | x | x | | x |
@@ -78,7 +79,7 @@ first host stays on the new version and the second can be debugged manually.
 |----------|-------|-------|--------|------|
 | playbook_keycloak.yml | keycloak | 2 | 1 | keycloak |
 | playbook_messages.yml | messages | 2 | 1 | messages |
-| playbook_mtain.yml | mta_in | 2 | 1 | messages (mta-in) |
+| playbook_pymta.yml | pymta | 2 | 1 | messages (pymta) |
 | playbook_messages_workers.yml | messages_workers | 1 | - | messages (workers) |
 | playbook_socks_proxy.yml | socks_proxy | 2 | 1 | messages (socks-proxy) |
 | playbook_mpa.yml | mpa | 1 | - | messages (mpa) |

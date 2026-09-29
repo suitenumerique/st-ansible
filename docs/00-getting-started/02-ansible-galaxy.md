@@ -40,7 +40,7 @@ Split roles across hosts by targeting different inventory groups:
       vars:
         st_messages_enabled: true
         st_messages_mpa_enabled: true
-        st_messages_mta_in_enabled: true
+        st_messages_pymta_enabled: true
 
 - hosts: drive_servers
   become: true
@@ -106,8 +106,8 @@ multiple roles can run **on the same host** without conflicting. The defaults ar
 
 Each role owns a `50<n>00`–`50<n>99` port block (where `<n>` is the role's index — drive
 `1`, keycloak `2`, meet `3`, messages `4`, docs `6`). The frontend sits at `50<n>00`, auxiliary
-services increment from there (e.g. `messages` mpa/rspamd on `50402`–`50404`, mta-in on
-`50425`), and cAdvisor is
+services increment from there (e.g. `messages` mpa/rspamd on `50402`–`50404`, pymta on `50425`,
+its metrics on `50426`), and cAdvisor is
 pinned at `50<n>99`. This layout leaves room to grow: an 11th–20th role would carry into
 `51<n>00` (and UIDs into `111<n>`). You can still override any `st_<role>_uid` or
 `st_<role>_port` to fit your own numbering scheme:

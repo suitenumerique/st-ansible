@@ -1,4 +1,11 @@
 ---
+- name: "Warn that mta-in is deprecated."
+  ansible.builtin.debug:
+    msg: >-
+      mta-in (Postfix) is deprecated and will be removed in a future release.
+      Set st_messages_pymta_enabled and unset st_messages_mta_in_enabled.
+      See docs/04-messages/06-pymta.md.
+
 - name: "Create mta-in application."
   ansible.builtin.import_role:
     name: suitenumerique.st.podman

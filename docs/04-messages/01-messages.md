@@ -17,9 +17,10 @@ user unit. All sub-apps are disabled by default and must be explicitly enabled.
 |---------|-------------|-----|
 | **messages** | Core web application (frontend + backend) | This page |
 | **workers** | Celery background workers | [02-workers.md](02-workers.md) |
-| **mta-in** | Inbound mail transfer agent (Postfix) | [03-mta-in.md](03-mta-in.md) |
+| **mta-in** | Inbound mail transfer agent (Postfix, DEPRECATED) | [03-mta-in.md](03-mta-in.md) |
 | **socks-proxy** | SOCKS proxy | [04-socks-proxy.md](04-socks-proxy.md) |
 | **mpa** | Mail Processing Agent (rspamd + clamav + valkey) | [05-mpa.md](05-mpa.md) |
+| **pymta** | Inbound mail transfer agent (Python) | [06-pymta.md](06-pymta.md) |
 
 ## Container Stack
 

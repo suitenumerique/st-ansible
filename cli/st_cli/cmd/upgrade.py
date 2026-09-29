@@ -89,6 +89,7 @@ def upgrade() -> None:
         all_groups.setdefault((n.app, n.env), []).append(n)
 
     replayed = False
+    failed: list[str] = []
     manual_steps: list[tuple[str, str, str, str]] = []  # (app, env, version, text)
     if groups:
         # Resolve app availability first: a group this CLI version cannot
@@ -139,9 +140,14 @@ def upgrade() -> None:
                 replayed = True
             else:
                 for n in group:
-                    bootstrap_mod.bootstrap(
-                        app, env, component=n.component, replay=mode
-                    )
+                    try:
+                        bootstrap_mod.bootstrap(
+                            app, env, component=n.component, replay=mode
+                        )
+                    except StCliError as exc:
+                        ui.warn(f"{app}/{env}/{n.component}: skipped — {exc}")
+                        failed.append(f"{app}/{env}/{n.component}")
+                        continue
                     replayed = True
                 ui.warn(
                     f"{app}/{env}: no core tree here (provider-only repo) — "
@@ -157,7 +163,13 @@ def upgrade() -> None:
         ui.warn("Manual steps for this upgrade:")
         for app, env, version, text in manual_steps:
             ui.warn(f"  {app}/{env} {version}: {text}")
-    if changed or replayed:
+    # A failed replay leaves its unit flagged, and `st-cli deploy` refuses a
+    # flagged unit once the pin is realigned. Do not tell the operator to deploy.
+    if failed:
+        ui.warn("These units stay flagged — fix the error above, then re-run upgrade:")
+        for unit in failed:
+            ui.warn(f"  {unit}")
+    elif changed or replayed:
         ui.success(
             "upgrade complete — run `st-cli deploy <app> <env>` to roll the new tags."
         )

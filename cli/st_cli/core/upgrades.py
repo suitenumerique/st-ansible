@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 from . import appmeta, tree
+from .errors import StCliError
 from .models import (
     MODE_EXTERNAL,
     NewComponentOffer,
@@ -126,12 +127,18 @@ def needed(
     baseline = load_baseline()
     baseline_v = parse_version(baseline)
     out: list[UpgradeNeed] = []
+    replayable_by_app: dict[str, set[str] | None] = {}
     for u in m.units:
         if u.mode == MODE_EXTERNAL:
             continue
         if app is not None and u.app != app:
             continue
         if env is not None and u.env != env:
+            continue
+        replayable = replayable_by_app.setdefault(u.app, replayable_components(u.app))
+        # A deprecated unit such as messages' mta-in has no replay path, so it
+        # must not stay flagged and block deploy.
+        if replayable is not None and u.component not in replayable:
             continue
         current = parse_version(u.bootstrapped_with or "0.0.0")
         if baseline_v > current:
@@ -227,6 +234,23 @@ def offerable_components(app: str) -> set[str]:
     if app == "meet":
         targets.discard("egress")
     return targets
+
+
+def replayable_components(app: str) -> set[str] | None:
+    """Return the component keys `bootstrap` accepts as a target.
+
+    `None` when the app manifest does not load, so the caller keeps its own
+    "app not shipped" reporting.
+    """
+    try:
+        meta = appmeta.load_app(app)
+    except StCliError:
+        return None
+    keys = {meta.core().key} | {d.on for d in meta.dependencies}
+    worker = meta.worker()
+    if worker is not None and worker.implemented:
+        keys.add(worker.key)
+    return keys
 
 
 def new_component_offers(

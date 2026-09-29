@@ -22,7 +22,8 @@ podman (base role)
 ├── messages
 │   ├── messages (web app)
 │   ├── workers (Celery workers)
-│   ├── mta-in (inbound mail transfer agent)
+│   ├── pymta (inbound mail transfer agent)
+│   ├── mta-in (deprecated Postfix inbound MTA)
 │   ├── socks-proxy
 │   └── mpa (Mail Processing Agent, rspamd stack)
 ├── drive

@@ -1,6 +1,6 @@
 ---
-- name: "Deploy mta-in."
-  hosts: mta_in
+- name: "Deploy pymta."
+  hosts: pymta
   serial: 1
   tasks:
     - name: "Install messages base."
@@ -12,7 +12,7 @@
     # NOTE: Splitting in two tasks is not mandatory, you could also play
     # the whole thing as root by appending the variables on the first task.
     # This setup is useful for CI/CD pipelines without root access.
-    - name: "Deploy mta-in application."
+    - name: "Deploy pymta application."
       become: true
       become_user: messages
       become_method: ansible.builtin.sudo
@@ -21,11 +21,14 @@
         name: suitenumerique.st.messages
         tasks_from: deploy.yml
       vars:
-        st_messages_mta_in_enabled: true
-        st_messages_mta_in_rollback_enabled: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
-        st_messages_mta_in_tag: vx.y.z # check https://github.com/suitenumerique/messages/releases
-        st_messages_mta_in_env: |
+        st_messages_pymta_enabled: true
+        st_messages_pymta_rollback_enabled: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+        st_messages_pymta_tag: vx.y.z # check https://github.com/suitenumerique/messages/releases
+        st_messages_pymta_env: |
           MDA_API_SECRET=changeme
-          MDA_API_BASE_URL=https://messages.example.com
-          MYHOSTNAME=mx.example.com
+          MDA_API_BASE_URL=https://messages.example.com/api/v1.0/
+          PYMTA_SMTP_HOSTNAME=mx.example.com
+          PYMTA_ENABLE_PROXY_PROTOCOL=haproxy
+          # The external LB must send the PROXY protocol header. Set its address here.
+          PYMTA_TRUSTED_PROXIES=<lb ip>
           # ... check https://github.com/suitenumerique/messages/blob/main/docs/env.md#mta-settings

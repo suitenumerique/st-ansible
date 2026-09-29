@@ -26,6 +26,9 @@ components:
         blob_var: st_messages_frontend_env
         templates:
           - messages.frontend.env.j2
+  # DEPRECATED: kept so an existing .st-cli.yml mta-in unit still resolves for
+  # deploy, remote, generate and upgrade. It is not a dependency target, so
+  # bootstrap never offers it.
   - key: mta-in
     role: suitenumerique.st.messages
     user: messages
@@ -39,6 +42,19 @@ components:
         MDA_API_SECRET={MDA_API_SECRET}
         MDA_API_BASE_URL=https://{DOMAIN}/api/v1.0/
         MYHOSTNAME={MYHOSTNAME}
+  - key: pymta
+    role: suitenumerique.st.messages
+    user: messages
+    app_name: pymta
+    dir_var: st_messages_pymta_dir
+    enabled_var: st_messages_pymta_enabled
+    deploy_order: 10
+    is_core: false
+    vars:
+      st_messages_pymta_env: |
+        MDA_API_SECRET={MDA_API_SECRET}
+        MDA_API_BASE_URL=https://{DOMAIN}/api/v1.0/
+        PYMTA_SMTP_HOSTNAME={PYMTA_SMTP_HOSTNAME}
   - key: mpa
     role: suitenumerique.st.messages
     user: messages
@@ -71,9 +87,9 @@ components:
     is_worker: true
 dependencies:
   - of: messages
-    on: mta-in
+    on: pymta
     # MDA_API_SECRET is owned by the messages core (generated in _ask_core) and
-    # mirrored into mta-in's vault at deploy — not originated here.
+    # mirrored into pymta's vault at deploy — not originated here.
     shared: []
   - of: messages
     on: mpa

@@ -1,5 +1,11 @@
 # MTA-In (Mail Transfer Agent Inbound)
 
+> [!WARNING]
+> **DEPRECATED.** [pymta](06-pymta.md), the pure-Python inbound MTA, replaces mta-in (Postfix).
+> The `st_messages_mta_in_*` variables still work for existing installs. The role prints a
+> deprecation warning at deploy time and `st-cli bootstrap` no longer offers mta-in.
+> See [Migrating from mta-in](06-pymta.md#migrating-from-mta-in).
+
 An inbound Postfix-based mail transfer agent. Receives incoming email and forwards it to the Messages backend for processing.
 
 ## Container Stack

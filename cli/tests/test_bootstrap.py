@@ -729,18 +729,18 @@ def test_bootstrap_summary_no_secrets_hint_for_hashi_vault(repo, monkeypatch, ca
 
 def test_bootstrap_messages_optional_deps_skippable(repo, monkeypatch):
     """Declining the optional `mpa` and `socks-proxy` deps registers no
-    vars.yml or manifest unit for them; `mta-in` and the core still bootstrap."""
+    vars.yml or manifest unit for them; `pymta` and the core still bootstrap."""
     seed_creds(repo)
     script_questionary(
         monkeypatch,
         messages_first_run_script()
         + [
-            ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
-            ("text", "mta-in host(s)", "10.0.0.7"),
-            # mta-in's shared rule is `generate: secret`, so no prompt for it;
-            # the helper still prompts MYHOSTNAME for the mta-in env blob.
-            ("text", "MYHOSTNAME", "mx.example.org"),
-            ("confirm", "cadvisor", True),  # mta-in cadvisor
+            ("select", "Bootstrap pymta now?", "Yes — bootstrap now"),
+            ("text", "pymta host(s)", "10.0.0.7"),
+            # pymta declares no shared rule, so nothing is prompted for it;
+            # the helper still prompts PYMTA_SMTP_HOSTNAME for the pymta env blob.
+            ("text", "PYMTA_SMTP_HOSTNAME", "mx.example.org"),
+            ("confirm", "cadvisor", True),  # pymta cadvisor
             ("select", "Bootstrap mpa now?", "No — bootstrap later"),
             ("select", "Bootstrap socks-proxy now?", "No — bootstrap later"),
         ],
@@ -751,29 +751,29 @@ def test_bootstrap_messages_optional_deps_skippable(repo, monkeypatch):
     assert not paths.vars_path("messages", "prod", "mpa").exists()
     assert not paths.vars_path("messages", "prod", "socks-proxy").exists()
 
-    assert paths.vars_path("messages", "prod", "mta-in").exists()
+    assert paths.vars_path("messages", "prod", "pymta").exists()
     assert paths.vars_path("messages", "prod", "messages").exists()
 
     m = manifest.load_manifest()
     by_comp = {u.component: u for u in m.units}
-    assert "mta-in" in by_comp and by_comp["mta-in"].mode == "managed"
+    assert "pymta" in by_comp and by_comp["pymta"].mode == "managed"
     assert "messages" in by_comp and by_comp["messages"].mode == "managed"
     assert "mpa" not in by_comp
     assert "socks-proxy" not in by_comp
 
 
 def test_bootstrap_messages_provider_vars_deploy(repo, monkeypatch):
-    """Deploying mta-in, mpa, and socks-proxy renders each provider's env blob
+    """Deploying pymta, mpa, and socks-proxy renders each provider's env blob
     and mirrors its secrets into every vault."""
     seed_creds(repo)
     script_questionary(
         monkeypatch,
         messages_first_run_script()
         + [
-            ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
-            ("text", "mta-in host(s)", "10.0.0.7"),
-            ("text", "MYHOSTNAME", "mx.example.org"),
-            ("confirm", "cadvisor", True),  # mta-in cadvisor
+            ("select", "Bootstrap pymta now?", "Yes — bootstrap now"),
+            ("text", "pymta host(s)", "10.0.0.7"),
+            ("text", "PYMTA_SMTP_HOSTNAME", "mx.example.org"),
+            ("confirm", "cadvisor", True),  # pymta cadvisor
             ("select", "Bootstrap mpa now?", "Yes — bootstrap now"),
             ("text", "mpa host(s)", "10.0.0.8"),
             (
@@ -791,18 +791,18 @@ def test_bootstrap_messages_provider_vars_deploy(repo, monkeypatch):
 
     bootstrap.bootstrap("messages", "prod")
 
-    mtain_env = tree.load_vars("messages", "prod", "mta-in")["st_messages_mta_in_env"]
-    assert "MDA_API_SECRET={{ vault_mda_api_secret }}" in mtain_env
-    assert "MDA_API_BASE_URL=https://messages.example.org/api/v1.0/" in mtain_env
-    assert "MYHOSTNAME=mx.example.org" in mtain_env
+    pymta_env = tree.load_vars("messages", "prod", "pymta")["st_messages_pymta_env"]
+    assert "MDA_API_SECRET={{ vault_mda_api_secret }}" in pymta_env
+    assert "MDA_API_BASE_URL=https://messages.example.org/api/v1.0/" in pymta_env
+    assert "PYMTA_SMTP_HOSTNAME=mx.example.org" in pymta_env
 
-    # MDA_API_SECRET mirrors into both mta-in's and messages' vaults with the same
+    # MDA_API_SECRET mirrors into both pymta's and messages' vaults with the same
     # value.
-    mtain_vault = vault.decrypt_to_dict(paths.vault_path("messages", "prod", "mta-in"))
+    pymta_vault = vault.decrypt_to_dict(paths.vault_path("messages", "prod", "pymta"))
     msgs_vault = vault.decrypt_to_dict(paths.vault_path("messages", "prod", "messages"))
-    assert "vault_mda_api_secret" in mtain_vault
+    assert "vault_mda_api_secret" in pymta_vault
     assert "vault_mda_api_secret" in msgs_vault
-    assert mtain_vault["vault_mda_api_secret"] == msgs_vault["vault_mda_api_secret"]
+    assert pymta_vault["vault_mda_api_secret"] == msgs_vault["vault_mda_api_secret"]
 
     # mpa secrets follow the vault-ref split: vars.yml carries {{ vault_mpa_* }}
     # refs, and the real values live under vault_mpa_* in mpa's vault.yml.
@@ -849,38 +849,38 @@ def test_bootstrap_messages_provider_vars_deploy(repo, monkeypatch):
     assert msgs_vault["vault_mpa_auth_bearer"] == mpa_vault["vault_mpa_auth_bearer"]
 
 
-def test_bootstrap_messages_mta_in_standalone_prompts_mda_api_secret(repo, monkeypatch):
-    """`-c mta-in` with no existing messages core vault prompts the operator
+def test_bootstrap_messages_pymta_standalone_prompts_mda_api_secret(repo, monkeypatch):
+    """`-c pymta` with no existing messages core vault prompts the operator
     for MDA_API_SECRET instead of leaking a literal placeholder into vars.yml."""
     seed_creds(repo)
     sq = script_questionary(
         monkeypatch,
         [
             ("select", "Secret backend:", "ansible-vault"),
-            ("text", "mta-in host(s)", "10.0.0.7"),
-            # standalone -c mta-in leaves answers["DOMAIN"] unset, so it prompts.
+            ("text", "pymta host(s)", "10.0.0.7"),
+            # standalone -c pymta leaves answers["DOMAIN"] unset, so it prompts.
             ("text", "Public domain for messages", "messages.example.org"),
-            ("text", "MYHOSTNAME", "mx.example.org"),
+            ("text", "PYMTA_SMTP_HOSTNAME", "mx.example.org"),
             # no core vault on disk, so MDA_API_SECRET is prompted, not leaked as a
             # placeholder.
             ("password", "MDA_API_SECRET", "shared-secret-from-core"),
-            ("confirm", "cadvisor", True),  # mta-in cadvisor
+            ("confirm", "cadvisor", True),  # pymta cadvisor
         ],
     )
 
-    bootstrap.bootstrap("messages", "prod", component="mta-in")
+    bootstrap.bootstrap("messages", "prod", component="pymta")
 
     # the env blob carries a real {{ vault_mda_api_secret }} ref, not the literal
     # placeholder a silent-skip regression would leave behind.
-    mtain_env = tree.load_vars("messages", "prod", "mta-in")["st_messages_mta_in_env"]
-    assert "MDA_API_SECRET={{ vault_mda_api_secret }}" in mtain_env
-    assert "{MDA_API_SECRET}" not in mtain_env
-    assert "MDA_API_BASE_URL=https://messages.example.org/api/v1.0/" in mtain_env
-    assert "MYHOSTNAME=mx.example.org" in mtain_env
+    pymta_env = tree.load_vars("messages", "prod", "pymta")["st_messages_pymta_env"]
+    assert "MDA_API_SECRET={{ vault_mda_api_secret }}" in pymta_env
+    assert "{MDA_API_SECRET}" not in pymta_env
+    assert "MDA_API_BASE_URL=https://messages.example.org/api/v1.0/" in pymta_env
+    assert "PYMTA_SMTP_HOSTNAME=mx.example.org" in pymta_env
 
-    assert vault.is_encrypted(paths.vault_path("messages", "prod", "mta-in"))
-    mtain_vault = vault.decrypt_to_dict(paths.vault_path("messages", "prod", "mta-in"))
-    assert mtain_vault["vault_mda_api_secret"] == "shared-secret-from-core"
+    assert vault.is_encrypted(paths.vault_path("messages", "prod", "pymta"))
+    pymta_vault = vault.decrypt_to_dict(paths.vault_path("messages", "prod", "pymta"))
+    assert pymta_vault["vault_mda_api_secret"] == "shared-secret-from-core"
 
     # a regression that skips the prompt would leave this script unconsumed.
     assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
@@ -888,8 +888,18 @@ def test_bootstrap_messages_mta_in_standalone_prompts_mda_api_secret(repo, monke
     assert not paths.vars_path("messages", "prod", "messages").exists()
 
     m = manifest.load_manifest()
-    assert [u.component for u in m.units] == ["mta-in"]
+    assert [u.component for u in m.units] == ["pymta"]
     assert m.units[0].mode == "managed"
+
+
+def test_bootstrap_messages_mta_in_is_not_a_valid_target(repo, monkeypatch):
+    """`-c mta-in` is refused: bootstrap only offers pymta now."""
+    seed_creds(repo)
+    script_questionary(monkeypatch, [])
+    with pytest.raises(StCliError) as exc:
+        bootstrap.bootstrap("messages", "prod", component="mta-in")
+    assert "unknown component 'mta-in'" in str(exc.value)
+    assert "pymta" in str(exc.value)
 
 
 def test_bootstrap_messages_socks_proxy_hashi_vault_derives_mta_proxies(
@@ -956,10 +966,10 @@ def test_bootstrap_messages_socks_proxy_hashi_vault_derives_mta_proxies(
             ),
             ("select", "Outbound mail mode", "direct"),
             ("confirm", "cadvisor", True),  # core cadvisor, last core question
-            ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
-            ("text", "mta-in host(s)", "10.0.0.7"),
-            ("text", "MYHOSTNAME", "mx.example.org"),
-            ("confirm", "cadvisor", True),  # mta-in cadvisor
+            ("select", "Bootstrap pymta now?", "Yes — bootstrap now"),
+            ("text", "pymta host(s)", "10.0.0.7"),
+            ("text", "PYMTA_SMTP_HOSTNAME", "mx.example.org"),
+            ("confirm", "cadvisor", True),  # pymta cadvisor
             ("select", "Bootstrap mpa now?", "Yes — bootstrap now"),
             ("text", "mpa host(s)", "10.0.0.8"),
             (
@@ -1023,10 +1033,10 @@ def test_bootstrap_messages_storage_blobs_offload(repo, monkeypatch):
         monkeypatch,
         messages_first_run_script(blobs_offload=True)
         + [
-            ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
-            ("text", "mta-in host(s)", "10.0.0.7"),
-            ("text", "MYHOSTNAME", "mx.example.org"),
-            ("confirm", "cadvisor", True),  # mta-in cadvisor
+            ("select", "Bootstrap pymta now?", "Yes — bootstrap now"),
+            ("text", "pymta host(s)", "10.0.0.7"),
+            ("text", "PYMTA_SMTP_HOSTNAME", "mx.example.org"),
+            ("confirm", "cadvisor", True),  # pymta cadvisor
             ("select", "Bootstrap mpa now?", "No — bootstrap later"),
             ("select", "Bootstrap socks-proxy now?", "No — bootstrap later"),
         ],
@@ -1075,10 +1085,10 @@ def test_bootstrap_messages_relay_outbound_mode(repo, monkeypatch):
         monkeypatch,
         messages_first_run_script(outbound="relay")
         + [
-            ("select", "Bootstrap mta-in now?", "Yes — bootstrap now"),
-            ("text", "mta-in host(s)", "10.0.0.7"),
-            ("text", "MYHOSTNAME", "mx.example.org"),
-            ("confirm", "cadvisor", True),  # mta-in cadvisor
+            ("select", "Bootstrap pymta now?", "Yes — bootstrap now"),
+            ("text", "pymta host(s)", "10.0.0.7"),
+            ("text", "PYMTA_SMTP_HOSTNAME", "mx.example.org"),
+            ("confirm", "cadvisor", True),  # pymta cadvisor
             ("select", "Bootstrap mpa now?", "Yes — bootstrap now"),
             ("text", "mpa host(s)", "10.0.0.8"),
             ("confirm", "cadvisor", True),  # mpa cadvisor, secrets are generated

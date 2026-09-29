@@ -26,7 +26,7 @@ All services communicate via the Podman bridge network. Only Caddy publishes por
 | Platform | Debian Trixie |
 | RAM | 2 GB minimum (clamav is memory-hungry) |
 | Disk | 4 GB minimum (clamav signature database ~1.5 GB) |
-| Network | Caddy port reachable from mta-in or upstream |
+| Network | Caddy port reachable from pymta or upstream |
 
 ## Variable Reference
 

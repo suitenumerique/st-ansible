@@ -260,7 +260,7 @@ Re-running `bootstrap` on an existing deployment asks what to do. It offers a
   services until you redeploy. A secret owned by a kept provider, for example
   the LiveKit API key/secret pair, is re-imported unchanged. Override never
   rotates it. A managed unit that mirrors a core-owned secret, for example
-  messages' mta-in copy of `MDA_API_SECRET`, is replayed in the same run and
+  messages' pymta copy of `MDA_API_SECRET`, is replayed in the same run and
   picks up the regenerated value. st-cli asks for a hard confirmation before it
   does any of this. Override needs the full `st-cli bootstrap <app> <env>` run.
   A wire-only `-c <core>` run does not offer it.

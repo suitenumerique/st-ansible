@@ -1,0 +1,7 @@
+minor_changes:
+  - "messages: add the ``pymta`` component (``ghcr.io/suitenumerique/messages-mta-in-py``), a pure-Python inbound MTA that replaces mta-in. It runs with ``network_mode: host``. The role sets ``PYMTA_SMTP_BIND_PORT`` from ``st_messages_pymta_port`` (default ``50425``), binds the metrics endpoint to ``127.0.0.1`` on ``st_messages_pymta_metrics_port`` (default ``50426``), and enables STARTTLS from ``st_messages_pymta_starttls_certificate_path``."
+  - "cli: ``st-cli bootstrap messages`` bootstraps ``pymta`` instead of ``mta-in``. The pymta env blob asks for ``PYMTA_SMTP_HOSTNAME``."
+  - "docs: add ``docs/04-messages/06-pymta.md``. The full-high-availability example deploys pymta (``playbook_pymta.yml``) instead of mta-in."
+deprecated_features:
+  - "messages: the ``mta-in`` (Postfix) component and its ``st_messages_mta_in_*`` variables are deprecated in favour of ``pymta``. The role prints a warning when ``st_messages_mta_in_enabled`` is true. See ``docs/04-messages/06-pymta.md`` for the migration steps."
+  - "cli: ``st-cli bootstrap`` no longer offers ``mta-in`` and ``-c mta-in`` is not a valid target. Existing ``mta-in`` units still work with ``deploy``, ``remote``, ``generate`` and ``upgrade``."
