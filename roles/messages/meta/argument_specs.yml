@@ -27,7 +27,7 @@ argument_specs:
         type: "str"
         description: "Tag of the messages docker images to deploy."
         # renovate: datasource=github-releases depName=suitenumerique/messages versioning=semver extractVersion=^v(?<version>.+)$
-        default: "0.9.0"
+        default: "0.10.0"
       st_messages_enabled:
         type: "bool"
         description: "Triggers the installation of the messages application."
@@ -212,7 +212,7 @@ argument_specs:
           - "The tag of the rspamd docker image to use."
           - "See https://hub.docker.com/r/rspamd/rspamd/tags."
         # renovate: datasource=docker depName=docker.io/rspamd/rspamd
-        default: "4.1.4"
+        default: "4.2.0"
       st_messages_mpa_rspamd_controller_password:
         type: "str"
         description: "Password of the rspamd controller webui."
@@ -307,7 +307,7 @@ argument_specs:
           - "The tag of the valkey docker image to use."
           - "See https://hub.docker.com/r/valkey/valkey/tags."
         # renovate: datasource=docker depName=docker.io/valkey/valkey
-        default: "9.1.1"
+        default: "9.1.2"
       st_messages_mpa_rollback_enabled:
         type: "bool"
         description: "Whether or not to trigger the rollback tasks if the mpa deployment fails."

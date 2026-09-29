@@ -26,7 +26,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_registries | Optional private container registries to login the `messages` user onto. | list of 'dict' | no |  |
 | st_messages_frontend_image | Image repository for the messages frontend. | str | no | ghcr.io/suitenumerique/messages-frontend |
 | st_messages_backend_image | Image repository for the messages backend. | str | no | ghcr.io/suitenumerique/messages-backend |
-| st_messages_tag | Tag of the messages docker images to deploy. | str | no | 0.9.0 |
+| st_messages_tag | Tag of the messages docker images to deploy. | str | no | 0.10.0 |
 | st_messages_enabled | Triggers the installation of the messages application. | bool | no | False |
 | st_messages_dir | Remote path to the base directory for messages app. | str | no | /opt/messages/messages |
 | st_messages_port | The host published port for the messages frontend. | str | no | 50400 |
@@ -69,7 +69,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mpa_caddy_port | The host published port for the caddy /checkv2 endpoint. | str | no | 50402 |
 | st_messages_mpa_caddy_healthcheck_port | The host published port for the caddy /healthcheck endpoint. | str | no | 50403 |
 | st_messages_mpa_rspamd_image | Image repository for the mpa rspamd. | str | no | docker.io/rspamd/rspamd |
-| st_messages_mpa_rspamd_tag | The tag of the rspamd docker image to use. See https://hub.docker.com/r/rspamd/rspamd/tags. | str | no | 4.1.4 |
+| st_messages_mpa_rspamd_tag | The tag of the rspamd docker image to use. See https://hub.docker.com/r/rspamd/rspamd/tags. | str | no | 4.2.0 |
 | st_messages_mpa_rspamd_controller_password | Password of the rspamd controller webui. | str | no |  |
 | st_messages_mpa_rspamd_controller_port | The host published port for the rspamd controller/webui. | str | no | 50404 |
 | st_messages_mpa_rspamd_add_header_score | The score triggering the add_header action on Messages. | str | no | 4 |
@@ -89,7 +89,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mpa_clamav_tag | The tag of the clamav docker image to use. See https://hub.docker.com/r/clamav/clamav/tags. | str | no | 1.5.4 |
 | st_messages_mpa_clamav_config_template | Local path to the clamd.conf template. | str | no | mpa/clamd.conf.j2 |
 | st_messages_mpa_valkey_image | Image repository for the mpa valkey. | str | no | docker.io/valkey/valkey |
-| st_messages_mpa_valkey_tag | The tag of the valkey docker image to use. See https://hub.docker.com/r/valkey/valkey/tags. | str | no | 9.1.1 |
+| st_messages_mpa_valkey_tag | The tag of the valkey docker image to use. See https://hub.docker.com/r/valkey/valkey/tags. | str | no | 9.1.2 |
 | st_messages_mpa_rollback_enabled | Whether or not to trigger the rollback tasks if the mpa deployment fails. | bool | no | False |
 | st_messages_mpa_compose_template | Local path to the custom template to use for mpa compose file. | str | no | mpa/compose.yaml.j2 |
 | st_messages_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
