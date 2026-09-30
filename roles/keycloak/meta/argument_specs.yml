@@ -27,22 +27,36 @@ argument_specs:
         type: "str"
         description: "Tag of the keycloak docker image to deploy."
         # renovate: datasource=github-releases depName=suitenumerique/messages versioning=semver extractVersion=^v(?<version>.+)$
-        default: "0.9.0"
+        default: "0.10.0"
       st_keycloak_env_template:
         type: "str"
         description: "Local path to the custom template to use for keycloak env file."
         default: "keycloak/env.j2"
       st_keycloak_env:
         type: "str"
-        description: "Content of the default keycloak_env_template, not used if st_keycloak_env_template is defined."
+        description:
+          - "Content of the default keycloak_env_template, not used if st_keycloak_env_template is defined."
+          - "Do not set `PORT`, `KC_HTTP_PORT` or `KC_HTTP_MANAGEMENT_PORT` here. The compose `environment` block owns them and overrides the env file."
       st_keycloak_compose_template:
         type: "str"
         description: "Local path to the custom template to use for keycloak compose file."
         default: keycloak/compose.yaml.j2
       st_keycloak_port:
         type: "str"
-        description: "Host port Keycloak listens on when running with network_mode: host."
+        description: "Host port Caddy listens on in front of Keycloak, when running with network_mode: host."
         default: "50200"
+      st_keycloak_http_port:
+        type: "str"
+        description:
+          - "Host port Keycloak listens on behind Caddy (`KC_HTTP_PORT`), when running with network_mode: host."
+          - "The image binds it to `127.0.0.1`. Caddy connects to it."
+        default: "50201"
+      st_keycloak_management_port:
+        type: "str"
+        description:
+          - "Host port of the Keycloak management interface for `/health` and `/metrics` (`KC_HTTP_MANAGEMENT_PORT`), when running with network_mode: host."
+          - "The image binds it on all interfaces. The firewall must block it from the internet."
+        default: "50202"
       st_keycloak_start_command:
         type: "str"
         description: "When using the default compose template, specify the `command` to use to start keycloak."

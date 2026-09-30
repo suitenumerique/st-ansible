@@ -455,9 +455,14 @@ def _ask_db(answers: dict, backend: SecretBackend, component: str, app: str) -> 
 def _ask_keycloak(meta, backend: SecretBackend, answers: dict | None = None) -> dict:
     """Collect the keycloak core answers into the ``st_keycloak_env`` blob.
 
-    Keycloak is not a Django app: no DOMAIN/Redis/S3/OIDC/email questionnaire.
-    ``KC_DB_URL`` is recovered as one composed string and decomposed back into
-    the 3 DB prompts by `_KC_DB_URL_RE`.
+    Keycloak is not a Django app: its role consumes a single free-form
+    ``st_keycloak_env`` blob (no DOMAIN/Redis/S3/OIDC/email questionnaire). The
+    ``messages-keycloak`` image bakes in ``KC_DB=postgres``, features, metrics and
+    health at build time, and sets the HTTP and proxy settings as image defaults, so
+    we only prompt for what the operator must supply at runtime: the DB connection,
+    the public hostname, and the admin bootstrap credentials.
+    Passwords route through the secret backend exactly like the Django apps'
+    ``DB_PASSWORD`` (``{{ vault_* }}`` ref in the blob, real value in vault.yml).
     """
     core_key = meta.core().key
     answers = dict(answers) if answers else {}

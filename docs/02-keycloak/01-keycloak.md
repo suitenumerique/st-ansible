@@ -7,8 +7,15 @@ It provides SSO authentication for Messages, Drive, and other platform component
 
 ```text
 keycloak (ghcr.io/suitenumerique/messages-keycloak)
-  └── Keycloak on port 8080
+  ├── Caddy on port 50200 (st_keycloak_port), admin IP allowlist
+  │     └── Keycloak on 127.0.0.1:50201 (st_keycloak_http_port)
+  └── Keycloak management (health, metrics) on port 50202 (st_keycloak_management_port)
 ```
+
+The image sets the Keycloak HTTP and proxy settings. The image binds Keycloak to the
+loopback interface, so Caddy is its intended peer. With `network_mode: host`, this
+loopback is the host loopback. See the warning in [Network & Ports](#network--ports).
+The role requires image tag 0.10.0 or later, which ships the Caddy front (messages PR #793).
 
 The image is a customized Keycloak distribution from the Suite Territoriale project.
 
@@ -36,7 +43,9 @@ See [roles/keycloak/REFERENCE.md](../../roles/keycloak/REFERENCE.md) for the com
 |----------|-------------|---------|
 | `st_keycloak_enabled` | Enable Keycloak | `false` |
 | `st_keycloak_tag` | Docker image tag | see REFERENCE.md |
-| `st_keycloak_port` | Host port (maps to container 8080) | `50200` |
+| `st_keycloak_port` | Host port Caddy listens on | `50200` |
+| `st_keycloak_http_port` | Host port Keycloak listens on behind Caddy | `50201` |
+| `st_keycloak_management_port` | Host port of the management interface (`/health`, `/metrics`) | `50202` |
 | `st_keycloak_uid` | Unix UID for the keycloak user | `1102` |
 | `st_keycloak_env` | Environment content | _(empty)_ |
 | `st_keycloak_start_command` | Keycloak start command | `start --optimized` |
@@ -44,9 +53,73 @@ See [roles/keycloak/REFERENCE.md](../../roles/keycloak/REFERENCE.md) for the com
 
 ## Network & Ports
 
-| Variable | Default | Container port |
-|----------|---------|---------------|
-| `st_keycloak_port` | `50200` | 8080 |
+The container uses `network_mode: host`. It binds these ports on the host.
+
+| Variable | Default port | Interface | Service |
+|----------|---------------|-----------|---------|
+| `st_keycloak_port` | `50200` | all | Caddy. The load balancer targets this port. |
+| `st_keycloak_http_port` | `50201` | `127.0.0.1` only | Keycloak (`KC_HTTP_PORT`). Caddy connects to it. |
+| `st_keycloak_management_port` | `50202` | all | Keycloak management (`KC_HTTP_MANAGEMENT_PORT`): `/health` and `/metrics` |
+
+> [!WARNING]
+> The firewall must block port 50202 (`st_keycloak_management_port`) from the internet. This port has no authentication.
+
+> [!WARNING]
+> The container uses `network_mode: host`, so port 50201 is on the host loopback interface.
+> A local process can reach Keycloak on port 50201 and bypass the Caddy allowlist.
+> Keycloak also trusts the `X-Forwarded-For` header from any local process.
+> Do not run untrusted workloads on the Keycloak host.
+
+## Admin Console IP Allowlist
+
+The image adds two optional environment variables. Set them as lines in `st_keycloak_env`.
+
+| Variable | Default | Description |
+|----------|---------|--------------|
+| `KEYCLOAK_ADMIN_IP_ALLOWLIST` | `0.0.0.0/0 ::/0` | Space-separated CIDR list of client IPs allowed on `/admin`, `/admin/*`, `/realms/master`, and `/realms/master/*`. Caddy answers 403 to denied requests. |
+| `KEYCLOAK_TRUSTED_PROXIES` | _(empty)_ | Space-separated CIDR list of upstream proxies whose `X-Forwarded-For` sets the client IP. The keyword `private_ranges` includes all private ranges. Do not use `private_ranges` when untrusted machines share the private network with Caddy. |
+
+Example:
+
+```yaml
+st_keycloak_env: |
+  # Load balancer range: trusted proxy only.
+  KEYCLOAK_TRUSTED_PROXIES=203.0.113.0/24
+  # Operator network and Messages backend network.
+  KEYCLOAK_ADMIN_IP_ALLOWLIST=198.51.100.0/24 192.0.2.0/24
+```
+
+Follow these rules:
+
+- If you set `KEYCLOAK_ADMIN_IP_ALLOWLIST`, add your own administration network. When the
+  list does not include it, you lose access to the admin console and to `kcadm`.
+- If you set `KEYCLOAK_ADMIN_IP_ALLOWLIST` and Messages runs with `IDENTITY_PROVIDER=keycloak`,
+  add the network of the Messages backend. The Messages backend calls the admin REST API
+  `/admin/realms/<realm>/*` with its service account. When the list does not include the
+  backend network, the identity sync fails with 403.
+- Do not set `KEYCLOAK_ADMIN_IP_ALLOWLIST` to an empty value. An empty list denies every admin
+  request.
+- Set `KEYCLOAK_TRUSTED_PROXIES` to the load balancer ranges. When the list is empty, Caddy
+  uses the load balancer IP as the client IP. The allowlist then applies to the load
+  balancer IP, not to the client. Keycloak also records the load balancer IP in events and
+  in brute force detection.
+
+See the upstream documentation for details:
+[Keycloak production image proxy (Caddy)](https://github.com/suitenumerique/messages/blob/main/docs/env.md#keycloak-production-image-proxy-caddy).
+
+## Environment Constraints
+
+The image sets the following values. `st_keycloak_env` must not set `KC_HTTP_HOST`, `KC_HTTP_ENABLED`,
+`KC_PROXY_HEADERS`, or `KC_PROXY_TRUSTED_ADDRESSES`. Set `KC_HOSTNAME` to the public URL.
+
+The compose `environment:` block sets `PORT`, `KC_HTTP_PORT` and `KC_HTTP_MANAGEMENT_PORT` from
+`st_keycloak_port`, `st_keycloak_http_port` and `st_keycloak_management_port`. The block owns
+these keys and overrides the env file. Do not set these keys in `st_keycloak_env`. Change the
+role variables instead. You can set `KC_HTTP_MANAGEMENT_HOST=127.0.0.1` in `st_keycloak_env` to
+bind the management port to the loopback interface.
+
+A custom `st_keycloak_compose_template` must set `PORT` for the port Caddy listens on. It must
+also set `KC_HTTP_PORT` and `KC_HTTP_MANAGEMENT_PORT` from the role variables.
 
 ## Data & Volumes
 
@@ -57,6 +130,7 @@ Keycloak stores its state in an external PostgreSQL database. No persistent bind
 The default start command is `start --optimized`, which assumes that you're using LST keycloak docker image
 (or that your Keycloak image has been pre-built). You can change this via `st_keycloak_start_command`
 (e.g. `start-dev` for development, or `start --hostname-strict=false` for custom hostname setups).
+The image starts Caddy only for the `start` and `start-dev` commands.
 
 ## Troubleshooting
 
@@ -77,3 +151,7 @@ journalctl --user -u keycloak.service --since "3 hours ago"
 # Containers
 podman-compose -f /opt/keycloak/keycloak/compose.yaml ps
 ```
+
+> [!NOTE]
+> You can ignore the log line "Keycloak is running inside a container, but is not PID 1".
+> The image entrypoint runs Caddy and Keycloak together, so Keycloak is not PID 1.

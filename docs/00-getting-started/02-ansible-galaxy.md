@@ -106,11 +106,11 @@ multiple roles can run **on the same host** without conflicting. The defaults ar
 
 Each role owns a `50<n>00`–`50<n>99` port block (where `<n>` is the role's index — drive
 `1`, keycloak `2`, meet `3`, messages `4`, docs `6`). The frontend sits at `50<n>00`, auxiliary
-services increment from there (e.g. `messages` mpa/rspamd on `50402`–`50404`, pymta on `50425`,
-its metrics on `50426`), and cAdvisor is
-pinned at `50<n>99`. This layout leaves room to grow: an 11th–20th role would carry into
-`51<n>00` (and UIDs into `111<n>`). You can still override any `st_<role>_uid` or
-`st_<role>_port` to fit your own numbering scheme:
+services increment from there (e.g. `keycloak` on `50201`–`50202`, `messages` mpa/rspamd on
+`50402`–`50404`, pymta on `50425`, its metrics on `50426`), and cAdvisor is pinned at `50<n>99`.
+This layout leaves room to grow: an 11th–20th role would carry into `51<n>00` (and UIDs into
+`111<n>`). You can still override any `st_<role>_uid` or `st_<role>_port` to fit your own
+numbering scheme:
 
 ```yaml
 st_keycloak_uid: 1102
@@ -122,6 +122,11 @@ st_keycloak_port: 50200
 > It runs with `network_mode: host` and binds fixed ports (7880/7881/5349/3478 and UDP
 > 50000-60000) directly on the host, so it must run on a dedicated host with a dedicated
 > public IP. See [../03-meet/02-livekit.md](../03-meet/02-livekit.md).
+>
+> **Note — Keycloak:** the `keycloak` role runs with `network_mode: host`, so its ports are
+> bound on the host network stack, not published: `50200` (Caddy), `50201` (Keycloak, loopback
+> only) and `50202` (management, all interfaces).
+> See [../02-keycloak/01-keycloak.md](../02-keycloak/01-keycloak.md#network--ports).
 
 ## Customizing Deployments
 
