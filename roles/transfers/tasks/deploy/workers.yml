@@ -1,0 +1,14 @@
+---
+- name: "Create transfers workers application."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "transfers"
+    st_podman_application_name: "workers"
+    st_podman_application_dir: "{{ st_transfers_workers_dir }}"
+    st_podman_application_rollback_enabled: "{{ st_transfers_workers_rollback_enabled }}"
+    st_podman_application_compose_template: "{{ st_transfers_workers_compose_template }}"
+    st_podman_application_files:
+      - src: "{{ st_transfers_workers_env_template }}"
+        dest: "env"

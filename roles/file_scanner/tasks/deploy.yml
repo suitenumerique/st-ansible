@@ -1,0 +1,16 @@
+---
+- name: "Deploy file-scanner."
+  ansible.builtin.import_tasks: deploy/file_scanner.yml
+  when: st_file_scanner_enabled
+  tags: ['file_scanner_file_scanner']
+
+- name: "Create cadvisor application."
+  when: st_file_scanner_cadvisor_enabled
+  tags: ['file_scanner_cadvisor']
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "file-scanner"
+    st_podman_application_name: "cadvisor"
+    st_podman_application_compose_template: monitoring/compose_cadvisor.yaml.j2

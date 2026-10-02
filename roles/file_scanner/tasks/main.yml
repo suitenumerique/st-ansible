@@ -1,0 +1,12 @@
+---
+- name: "Import Suite Territoriale podman role."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+  vars:
+    st_podman_user: "file-scanner"
+    st_podman_uid: "{{ st_file_scanner_uid }}"
+    st_podman_gid: "{{ st_file_scanner_gid }}"
+    st_podman_registries: "{{ st_file_scanner_registries | default([]) }}"
+
+- name: "Deploy file-scanner."
+  ansible.builtin.import_tasks: deploy.yml
