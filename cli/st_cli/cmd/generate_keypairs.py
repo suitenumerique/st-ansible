@@ -135,7 +135,7 @@ def generate(app: str, env: str, signing_key: bool = False) -> None:
     ui.info(f"Minting caller keypair(s) for {app}/{env}.")
     pairs: list[tuple[str, str, str]] = []  # (iss, private, public)
     while True:
-        iss = _ask("Issuer name (the calling app's `iss` claim)", "transferts")
+        iss = _ask("Issuer name (the calling app's `iss` claim)", "transfers")
         if ":" in iss or "," in iss:
             # ':' and ',' are the JWT_ISSUER_KEYS delimiters — re-prompt.
             ui.warn("Issuer name must not contain ':' or ','.")

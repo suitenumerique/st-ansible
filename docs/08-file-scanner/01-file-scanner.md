@@ -46,7 +46,7 @@ caller's **public** key looked up by the token's `iss` claim:
 
 - `JWT_ISSUER_KEYS` (prompted at bootstrap) lists the accepted callers as
   comma-separated `iss:base64url-pubkey` pairs, e.g.
-  `transferts:<transfers-pubkey>`. Onboard a caller with
+  `transfers:<transfers-pubkey>`. Onboard a caller with
   `st-cli generate-keypairs file-scanner <env>`: it asks an issuer name per
   keypair and prints the private key to hand to that caller (shown once, never
   stored) plus the ready-to-paste `JWT_ISSUER_KEYS` value — merged with the
@@ -74,8 +74,10 @@ maps onto this service as follows:
 |----------------|-------------------|
 | `CLAMAV_SERVICE_URL` = `http://<file-scanner-host>:50800` | the published API port (`st_file_scanner_port`) |
 | `SCAN_JWT_PRIVATE_KEY` (private half, in the transfers vault) | public half registered in `JWT_ISSUER_KEYS` |
-| `SCAN_JWT_ISSUER` (default `transferts`) | the `iss` prefix of that `JWT_ISSUER_KEYS` entry |
+| `SCAN_JWT_ISSUER` (default `transfers`) | the `iss` prefix of that `JWT_ISSUER_KEYS` entry |
 | `SCAN_JWT_AUDIENCE` (default `file-scanner`) | `JWT_AUDIENCE` (upstream default `file-scanner`) |
+| `SCAN_API_VERSION` (default `v2.0`) | the API path the submissions use — the scanner must serve that version **before** transfers is upgraded |
+| `SCAN_SCANNERS` (optional) | engine names, checked against the scanner's `DEFAULT_SCANNERS` / `EXAV_HOSTS` |
 | `SCAN_WEBHOOK_BASE_URL` | must be reachable **from the scanner host** (webhook callback) |
 
 Transfers submits a presigned S3 URL for the scanner to download, so the scanner host

@@ -13,7 +13,7 @@ transfers-frontend (ghcr.io/suitenumerique/transfers-frontend)
       serves the built SPA and reverse-proxies /api, /admin, /static,
       /__heartbeat__ → transfers-backend:8000
 transfers-backend  (ghcr.io/suitenumerique/transfers-backend)
-  └── gunicorn (transferts.wsgi) on port 8000
+  └── gunicorn (transfers.wsgi) on port 8000
 transfers-worker   (ghcr.io/suitenumerique/transfers-backend)
   └── python worker.py — a Celery worker with the beat scheduler embedded
 ```
@@ -22,12 +22,7 @@ The frontend and backend run in a single compose unit (`/opt/transfers/transfers
 worker is a separate, optionally-enabled unit (`/opt/transfers/workers`). The frontend
 image bundles Caddy, so — unlike the Drive role — there is **no `nginx.conf`** template:
 the reverse-proxy config is baked into the image and only its runtime targets are set
-through env (`TRANSFERTS_FRONTEND_BACKEND_SERVER`).
-
-> [!NOTE]
-> The application's Python package is `transferts` (French spelling), so
-> `DJANGO_SETTINGS_MODULE=transferts.settings` and the Celery app is
-> `transferts.celery_app` — even though the app/role is named `transfers`.
+through env (`TRANSFERS_FRONTEND_BACKEND_SERVER`).
 
 > [!NOTE]
 > This collection provisions neither PostgreSQL, Redis, nor object storage. You must
@@ -91,10 +86,10 @@ know the bucket:
 - the backend reads the standard django-lasuite S3 settings — `AWS_S3_ENDPOINT_URL`,
   `AWS_S3_ACCESS_KEY_ID`, `AWS_S3_SECRET_ACCESS_KEY`, `AWS_S3_REGION_NAME`,
   `AWS_S3_SIGNATURE_VERSION` and the bucket `AWS_STORAGE_BUCKET_NAME`;
-- the frontend Caddy sets `TRANSFERTS_FRONTEND_S3_ORIGIN` so its Content-Security-Policy
+- the frontend Caddy sets `TRANSFERS_FRONTEND_S3_ORIGIN` so its Content-Security-Policy
   allows the browser to fetch presigned URLs from your S3 endpoint.
 
-`st-cli bootstrap transfers` derives `TRANSFERTS_FRONTEND_S3_ORIGIN` from the S3
+`st-cli bootstrap transfers` derives `TRANSFERS_FRONTEND_S3_ORIGIN` from the S3
 endpoint you enter, so the two stay in sync.
 
 ## Background jobs (Celery)
@@ -123,8 +118,22 @@ integration?"*; answering yes collects:
 | `CLAMAV_SERVICE_URL` | Base URL of the file-scanner REST service, reachable from the backend **and** worker (e.g. `http://10.0.0.20:50800`). Each submission carries the scan JWT and a presigned S3 URL, so plain HTTP only belongs on a private network — bootstrap warns when the URL is not `https://` |
 | `SCAN_WEBHOOK_BASE_URL` | Base URL of this backend **as reachable from the scanner host** (webhook callback). The backend port is not published — use the public transfers URL (the frontend Caddy proxies `/api` to the backend), e.g. `https://transfers.example.org` |
 | `SCAN_JWT_PRIVATE_KEY` | EdDSA (Ed25519) private key minting request-bound scan JWTs — **secret** (routed through the vault). Mint the keypair with `st-cli generate-keypairs file-scanner <env>` (or the scanner's `deploy/scripts/new-issuer.py`) and register the public key on the scanner's `JWT_ISSUER_KEYS` |
-| `SCAN_JWT_ISSUER` / `SCAN_JWT_AUDIENCE` | JWT `iss` / `aud` claims (defaults `transferts` / `file-scanner`) |
-| `SCAN_JWT_TTL`, `SCAN_MAX_FILE_SIZE`, `SCAN_PRESIGNED_URL_EXPIRY`, `SCAN_PENDING_REAP_MINUTES` | Optional tuning knobs. Upstream defaults them (300s, 2 GiB, 3600s, 15 min), so leaving a prompt blank writes no line and the app keeps its own value — answer only to deviate. Writing them at their default would pin our copy and hide a later change upstream |
+| `SCAN_JWT_ISSUER` / `SCAN_JWT_AUDIENCE` | JWT `iss` / `aud` claims (defaults `transfers` / `file-scanner`) |
+| `SCAN_SCANNERS` | Optional comma-separated engine names sent with every submission (`clamav`, `exav`, …). Empty leaves the choice to the scanner's own `DEFAULT_SCANNERS`. Naming several runs them all, and a file is clean only if every engine cleared it — see [08-file-scanner](../08-file-scanner/01-file-scanner.md#second-engine-exav) |
+| `SCAN_API_VERSION` | file-scanner API version the submissions and callbacks use. Defaults to `v2.0`, which this service is the only shape it parses — so **the scanner must serve v2.0 before this app is upgraded**, see the note below |
+| `SCAN_JWT_TTL`, `SCAN_MAX_FILE_SIZE`, `SCAN_PRESIGNED_URL_EXPIRY`, `SCAN_PENDING_REAP_MINUTES` | Optional tuning knobs. Upstream defaults them (300s, 2147483645 bytes, 3600s, 15 min), so leaving a prompt blank writes no line and the app keeps its own value — answer only to deviate. Writing them at their default would pin our copy and hide a later change upstream |
+
+> [!IMPORTANT]
+> **Upgrade the scanner first.** Transfers submits to the file-scanner's `v2.0` API
+> (`SCAN_API_VERSION`) and no longer parses the `v1.0` shape, so a scanner that only
+> serves `v1.0` answers 404 on every submission and downloads stay gated. Deploy a
+> file-scanner serving v2.0, then bump transfers — never the other way round.
+>
+> `SCAN_MAX_FILE_SIZE` counts the same bytes as the scanner's `MAX_URL_SIZE` (the
+> plaintext for an encrypted file; the wire adds the chunking overhead): keep the two
+> equal. Both default to 2147483645, the most clamav scans in one file, so leaving
+> both alone is already consistent — which is why the bootstrap questionnaire only
+> writes the key when you deviate.
 
 The keys land in `st_transfers_backend_env`, which the worker unit reuses — so the
 scan-submit and stale-scan reap Celery tasks see the same config. The scanner service

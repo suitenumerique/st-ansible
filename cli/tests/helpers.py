@@ -670,7 +670,7 @@ def transfers_first_run_script(
             ("text", "CLAMAV_SERVICE_URL", "http://10.0.0.20:50800"),
             ("text", "SCAN_WEBHOOK_BASE_URL", f"https://{domain}"),
             ("password", "SCAN_JWT_PRIVATE_KEY", "scanprivkey"),
-            ("text", "SCAN_JWT_ISSUER", "transferts"),
+            ("text", "SCAN_JWT_ISSUER", "transfers"),
             ("text", "SCAN_JWT_AUDIENCE", "file-scanner"),
             # optional tuning knobs: blank keeps the upstream defaults
             ("text", "SCAN_JWT_TTL", scan_ttl),
@@ -716,7 +716,7 @@ def file_scanner_first_run_script(
         ("select", "Secret backend:", "ansible-vault"),
         ("text", "file-scanner host(s)", host),
         ("text", "WORKER_BROKER_URL", "redis://:pw@redis.example.org:6379/3"),
-        ("text", "JWT_ISSUER_KEYS", "transferts:pubkeyAAA"),
+        ("text", "JWT_ISSUER_KEYS", "transfers:pubkeyAAA"),
         ("text", "JWT_SIGNING_KID", "v1"),
         ("confirm", "PROMETHEUS_API_KEY", metrics),
         ("text", "ALLOWED_URL_HOSTS", allowed),

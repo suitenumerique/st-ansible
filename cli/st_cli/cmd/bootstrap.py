@@ -427,7 +427,7 @@ def _ask_transfers_scanner(
     # is prompted, never generated here.
     _ask_secret(answers, backend, "SCAN_JWT_PRIVATE_KEY", component)
     answers["SCAN_JWT_ISSUER"] = _ask(
-        "SCAN_JWT_ISSUER", _recall(answers, "SCAN_JWT_ISSUER", "transferts")
+        "SCAN_JWT_ISSUER", _recall(answers, "SCAN_JWT_ISSUER", "transfers")
     )
     answers["SCAN_JWT_AUDIENCE"] = _ask(
         "SCAN_JWT_AUDIENCE", _recall(answers, "SCAN_JWT_AUDIENCE", "file-scanner")
@@ -442,8 +442,8 @@ def _ask_transfers_scanner(
     _ask_optional(
         answers,
         "SCAN_MAX_FILE_SIZE",
-        "SCAN_MAX_FILE_SIZE (bytes, optional; upstream 2 GiB — bigger files are "
-        "flagged not-scanned, never claimed clean)",
+        "SCAN_MAX_FILE_SIZE (bytes, optional; upstream 2147483645 — bigger files "
+        "are flagged not-scanned, never claimed clean)",
     )
     _ask_optional(
         answers,
@@ -868,7 +868,7 @@ def _ask_file_scanner(
     answers["JWT_ISSUER_KEYS"] = _ask(
         "JWT_ISSUER_KEYS (comma-separated iss:base64url-ed25519-pubkey pairs)",
         _recall(answers, "JWT_ISSUER_KEYS"),
-        placeholder="transferts:8sicDCDZLZY5SPNNjr4aBwwh0Dyrqr7Ca9neK_nA6Eg",
+        placeholder="transfers:8sicDCDZLZY5SPNNjr4aBwwh0Dyrqr7Ca9neK_nA6Eg",
     )
     _ask_secret(answers, backend, "JWT_SIGNING_KEY", core_key, gen=secrets.gen_token)
     answers["JWT_SIGNING_KID"] = _ask(
@@ -944,12 +944,6 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             "DJANGO_CONFIGURATION": "Production",
         }
     )
-    if app == "transfers":
-        # The app's Python package is `transferts` (French spelling), so the
-        # generic f"{app}.settings" set above would import the nonexistent
-        # transfers.settings. Its public URLs stay domain-derived (else below).
-        answers["DJANGO_SETTINGS_MODULE"] = "transferts.settings"
-
     if app == "meet":
         # Single source of truth: every public-domain var references
         # st_meet_public_host so the operator changes the domain in one place.
@@ -1083,7 +1077,7 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             # CADDY_S3_* pair.
             protocol, host = caddy_s3_parts(endpoint)
             answers["AWS_S3_SIGNATURE_VERSION"] = "s3v4"
-            answers["TRANSFERTS_FRONTEND_S3_ORIGIN"] = f"{protocol}://{host}"
+            answers["TRANSFERS_FRONTEND_S3_ORIGIN"] = f"{protocol}://{host}"
             # transfers sits behind the frontend Caddy, which sets
             # X-Forwarded-For; enable request-IP logging from that proxy header.
             answers["USE_X_FORWARDED_FOR"] = "true"

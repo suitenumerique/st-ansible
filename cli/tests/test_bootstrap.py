@@ -638,7 +638,7 @@ def test_bootstrap_file_scanner_writes_env_blob_and_vault(repo, monkeypatch):
             ("select", "Secret backend:", "ansible-vault"),
             ("text", "file-scanner host(s)", "10.0.0.20"),
             ("text", "WORKER_BROKER_URL", "redis://:pw@redis.example.org:6379/3"),
-            ("text", "JWT_ISSUER_KEYS", "transferts:pubkeyAAA"),
+            ("text", "JWT_ISSUER_KEYS", "transfers:pubkeyAAA"),
             ("text", "JWT_SIGNING_KID", "v1"),
             ("confirm", "PROMETHEUS_API_KEY", True),
             ("text", "ALLOWED_URL_HOSTS", ""),
@@ -657,7 +657,7 @@ def test_bootstrap_file_scanner_writes_env_blob_and_vault(repo, monkeypatch):
     # can embed a password, so it is routed through the vault like REDIS_URL
     assert "CLAMAV_HOSTS=clamav:3310" in body
     assert "WORKER_BROKER_URL={{ vault_worker_broker_url }}" in body
-    assert "JWT_ISSUER_KEYS=transferts:pubkeyAAA" in body
+    assert "JWT_ISSUER_KEYS=transfers:pubkeyAAA" in body
     assert "JWT_SIGNING_KEY={{ vault_jwt_signing_key }}" in body
     assert "JWT_SIGNING_KID=v1" in body
     assert "PROMETHEUS_API_KEY={{ vault_prometheus_api_key }}" in body
@@ -692,7 +692,7 @@ def test_ask_file_scanner_allowlist_reuses_hosts_for_ssrf(repo, monkeypatch):
         monkeypatch,
         [
             ("text", "WORKER_BROKER_URL", "redis://redis.example.org:6379/0"),
-            ("text", "JWT_ISSUER_KEYS", "transferts:pubkeyAAA"),
+            ("text", "JWT_ISSUER_KEYS", "transfers:pubkeyAAA"),
             ("text", "JWT_SIGNING_KID", "v1"),
             ("confirm", "PROMETHEUS_API_KEY", False),
             ("text", "ALLOWED_URL_HOSTS", "s3.fr-par.scw.cloud"),
@@ -1261,7 +1261,7 @@ def test_bootstrap_intro_requirements_tailored_for_file_scanner(
             ("select", "Secret backend:", "ansible-vault"),
             ("text", "file-scanner host(s)", "10.0.0.20"),
             ("text", "WORKER_BROKER_URL", "redis://:pw@redis.example.org:6379/3"),
-            ("text", "JWT_ISSUER_KEYS", "transferts:pubkeyAAA"),
+            ("text", "JWT_ISSUER_KEYS", "transfers:pubkeyAAA"),
             ("text", "JWT_SIGNING_KID", "v1"),
             ("confirm", "PROMETHEUS_API_KEY", True),
             ("text", "ALLOWED_URL_HOSTS", ""),
@@ -1830,9 +1830,8 @@ def test_caddy_s3_parts_lookup_endpoint_with_scheme_in_the_secret():
 
 def test_ask_core_transfers_overrides_settings_bucket_and_s3_origin(monkeypatch):
     """`_ask_core` for transfers diverges from the django-lasuite defaults in a few
-    app-specific ways: the Django settings module is the French package name
-    `transferts.settings` (not `transfers.settings`); the S3 endpoint origin is
-    mirrored into TRANSFERTS_FRONTEND_S3_ORIGIN (the frontend Caddy CSP needs it) and
+    app-specific ways: the S3 endpoint origin is
+    mirrored into TRANSFERS_FRONTEND_S3_ORIGIN (the frontend Caddy CSP needs it) and
     USE_X_FORWARDED_FOR is enabled (transfers sits behind the frontend proxy). The
     optional DRIVE_BASE_URL is emitted only when answered, and the sender address
     stays the base DJANGO_EMAIL_FROM (the app maps DEFAULT_FROM_EMAIL onto it, so
@@ -1872,18 +1871,18 @@ def test_ask_core_transfers_overrides_settings_bucket_and_s3_origin(monkeypatch)
     meta = appmeta.load_app("transfers")
     answers = bootstrap._ask_core(meta, AnsibleVaultBackend())
 
-    # Django package is `transferts` (French spelling), not the st-cli app name.
-    assert answers["DJANGO_SETTINGS_MODULE"] == "transferts.settings"
+    # the Django package matches the app name, so the generic default applies
+    assert answers["DJANGO_SETTINGS_MODULE"] == "transfers.settings"
     # bucket uses the django-lasuite default AWS_STORAGE_BUCKET_NAME (via base)
     assert answers["AWS_STORAGE_BUCKET_NAME"] == "transfers-prod"
     assert answers["AWS_S3_SIGNATURE_VERSION"] == "s3v4"
-    assert answers["TRANSFERTS_FRONTEND_S3_ORIGIN"] == "https://s3.fr-par.scw.cloud"
+    assert answers["TRANSFERS_FRONTEND_S3_ORIGIN"] == "https://s3.fr-par.scw.cloud"
     assert answers["USE_X_FORWARDED_FOR"] == "true"
     assert answers["DRIVE_BASE_URL"] == "https://drive.example.org"
 
     backend = envrender.render_env("transfers", "transfers", answers)
     body = backend["st_transfers_backend_env"]
-    assert "DJANGO_SETTINGS_MODULE=transferts.settings" in body
+    assert "DJANGO_SETTINGS_MODULE=transfers.settings" in body
     assert "AWS_STORAGE_BUCKET_NAME=transfers-prod" in body
     assert "AWS_S3_SIGNATURE_VERSION=s3v4" in body
     assert "USE_X_FORWARDED_FOR=true" in body
@@ -1894,8 +1893,8 @@ def test_ask_core_transfers_overrides_settings_bucket_and_s3_origin(monkeypatch)
     assert "DEFAULT_FROM_EMAIL=" not in body
 
     frontend = backend["st_transfers_frontend_env"]
-    assert "TRANSFERTS_FRONTEND_BACKEND_SERVER=transfers-backend:8000" in frontend
-    assert "TRANSFERTS_FRONTEND_S3_ORIGIN=https://s3.fr-par.scw.cloud" in frontend
+    assert "TRANSFERS_FRONTEND_BACKEND_SERVER=transfers-backend:8000" in frontend
+    assert "TRANSFERS_FRONTEND_S3_ORIGIN=https://s3.fr-par.scw.cloud" in frontend
 
 
 def test_ask_core_transfers_drive_url_optional(monkeypatch):
@@ -1963,7 +1962,7 @@ def test_ask_core_transfers_file_scanner_enabled(monkeypatch):
             ("text", "CLAMAV_SERVICE_URL", "http://clamav_rest:8090"),
             ("text", "SCAN_WEBHOOK_BASE_URL", "https://transfers.example.org"),
             ("password", "SCAN_JWT_PRIVATE_KEY", "eddsa-private-key"),
-            ("text", "SCAN_JWT_ISSUER", "transferts"),
+            ("text", "SCAN_JWT_ISSUER", "transfers"),
             ("text", "SCAN_JWT_AUDIENCE", "file-scanner"),
             ("text", "SCAN_JWT_TTL", "300"),
             ("text", "SCAN_MAX_FILE_SIZE", "2147483648"),
@@ -1986,7 +1985,7 @@ def test_ask_core_transfers_file_scanner_enabled(monkeypatch):
     assert "CLAMAV_SCAN_ENABLED=true" in body
     assert "CLAMAV_SERVICE_URL=http://clamav_rest:8090" in body
     assert "SCAN_WEBHOOK_BASE_URL=https://transfers.example.org" in body
-    assert "SCAN_JWT_ISSUER=transferts" in body
+    assert "SCAN_JWT_ISSUER=transfers" in body
     assert "SCAN_JWT_AUDIENCE=file-scanner" in body
     assert "SCAN_JWT_TTL=300" in body
     assert "SCAN_JWT_PRIVATE_KEY={{ vault_scan_jwt_private_key }}" in body

@@ -33,14 +33,14 @@ def _capture_ui(monkeypatch):
 
 
 def test_generate_single_keypair_summary(repo, monkeypatch):
-    """Default flow: one keypair for issuer `transferts`, no bootstrapped unit →
+    """Default flow: one keypair for issuer `transfers`, no bootstrapped unit →
     the guidance points at the bootstrap questionnaire and the printed halves
     form a consistent Ed25519 pair."""
     notes, values, _ = _capture_ui(monkeypatch)
     script_questionary(
         monkeypatch,
         [
-            ("text", "Issuer name", "transferts"),
+            ("text", "Issuer name", "transfers"),
             ("confirm", "another caller keypair", False),
         ],
     )
@@ -56,7 +56,7 @@ def test_generate_single_keypair_summary(repo, monkeypatch):
     assert "nothing is written" in guidance
 
     merged, private = values
-    pub = re.fullmatch(r"transferts:([A-Za-z0-9_-]{43})", merged).group(1)
+    pub = re.fullmatch(r"transfers:([A-Za-z0-9_-]{43})", merged).group(1)
     seed = base64.urlsafe_b64decode(private + "=")
     assert keypairs.derive_public_key(seed) == base64.urlsafe_b64decode(pub + "=")
 
@@ -69,9 +69,9 @@ def test_generate_multiple_and_invalid_issuer_reprompts(repo, monkeypatch):
         monkeypatch,
         [
             ("text", "Issuer name", "bad:name"),
-            ("text", "Issuer name", "transferts"),
+            ("text", "Issuer name", "transfers"),
             ("confirm", "another caller keypair", True),
-            ("text", "Issuer name", "transferts"),  # duplicate → re-prompt
+            ("text", "Issuer name", "transfers"),  # duplicate → re-prompt
             ("text", "Issuer name", "drive"),
             ("confirm", "another caller keypair", False),
         ],
@@ -80,7 +80,7 @@ def test_generate_multiple_and_invalid_issuer_reprompts(repo, monkeypatch):
 
     assert len(warns) == 2  # invalid name + duplicate
     merged = values[0]
-    assert re.fullmatch(r"transferts:[A-Za-z0-9_-]{43},drive:[A-Za-z0-9_-]{43}", merged)
+    assert re.fullmatch(r"transfers:[A-Za-z0-9_-]{43},drive:[A-Za-z0-9_-]{43}", merged)
     assert len(values) == 3  # merged + one private key per issuer
 
 
