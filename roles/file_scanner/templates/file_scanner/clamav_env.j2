@@ -1,5 +1,17 @@
 {{ ansible_managed | comment }}
 
-{% for line in st_file_scanner_clamav_env %}
-{{ line }}
-{% endfor %}
+{% if st_file_scanner_clamav_env %}
+{{ st_file_scanner_clamav_env }}
+{% else %}
+{# Built-in clamd tuning, used when st_file_scanner_clamav_env is empty. The
+   caps sit above the application's MAX_URL_SIZE (2 GiB): under StreamMaxLength
+   a too-big file dies mid-INSTREAM, under MaxFileSize/MaxScanSize it is skipped
+   and reported CLEAN unscanned. MaxScanTime gives a file that size time to
+   finish, and AlertExceedsMax makes clamd report a limit it hit instead of
+   answering OK — the scanner turns that report into a partial verdict. #}
+CLAMD_CONF_StreamMaxLength=2200M
+CLAMD_CONF_MaxFileSize=2200M
+CLAMD_CONF_MaxScanSize=2200M
+CLAMD_CONF_MaxScanTime=900000
+CLAMD_CONF_AlertExceedsMax=yes
+{% endif %}

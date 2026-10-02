@@ -93,7 +93,7 @@ worker's SSRF guard refuses to download from private addresses.
 | Requirement | Value |
 |-------------|-------|
 | Platform | Debian Trixie |
-| RAM | 3 GB minimum (clamd loads the full signature DB in memory). With exav compiling its own database, budget **~6 GB**: its transient ~3.6 GB spike sits on top of clamd's resident set, and a host that cannot absorb it gets the daemon OOM-killed on every start (see [Second engine: exav](#second-engine-exav)) |
+| RAM | 3 GB minimum (clamd loads the full signature DB in memory). **exav needs much more**: its own database is ~2.1 GB resident, plus a per-job budget per worker — and compiling that database instead of fetching it spikes ~3.6 GB on every start. Read [Sizing](#sizing-read-the-startup-log) before enabling it: an undersized host does not fail, it scans less |
 | Disk | 2 GB for the images + the ClamAV signature volume, **plus** temporary spool: clamd writes each INSTREAM to its temp directory, so up to `CLAMD_CONF_StreamMaxLength` (2200M by default) per scan running in parallel. Size for your peak concurrency, or cap it with `CLAMD_CONF_MaxThreads` in `st_file_scanner_clamav_env` |
 | Network | Outbound HTTPS (signature updates + fetching the URLs to scan) |
 | Redis | External Redis 7+, the dramatiq broker (`WORKER_BROKER_URL`) |
@@ -184,10 +184,25 @@ exav ships no database and has **no updater of its own** — ClamAV's CDN only s
 |---|---|---|
 | Config | `EXAV_DB_URL=https://…/your.exavdb` (+ the default `EXAV_SIG_DIR=/var/lib/exav`) | `EXAV_SIG_DIR=/var/lib/clamav` |
 | Source | a `.exavdb` you build and publish | the files the bundled clamav keeps fresh, mounted read-only |
-| Start cost | seconds, ~the size of the file | a few minutes **and a ~3.6 GB RAM spike, on every start** |
-| Host RAM | the 3 GB baseline + the file | **~6 GB**, and a raised `st_file_scanner_timeout` |
+| Start cost | seconds | a few minutes **and a ~3.6 GB RAM spike, on every start** |
+| Resident cost | the loaded database — **~2.1 GB** for the full ClamAV set | the same, after the spike |
+| Per-job budget | `EXAV_MAX_PROCESS_BYTES` (2 GiB) × `EXAV_WORKERS` (3), on top of the database | the same |
 
-**Set `EXAV_DB_URL`.** Build the file wherever your updater runs
+**Set `EXAV_DB_URL`.** `st_file_scanner_exav_env` is empty by default and the template
+then emits `EXAV_SIG_DIR=/var/lib/exav`, `EXAV_UPDATE_INTERVAL_SECS=300`,
+`EXAV_MAX_SPILL_BYTES=2200M` and `EXAV_MAX_SCAN_SECS=900`. Setting it replaces those,
+so carry them over:
+
+```yaml
+st_file_scanner_exav_env: |
+  EXAV_DB_URL=https://static.example.org/exav.exavdb
+  EXAV_SIG_DIR=/var/lib/exav
+  EXAV_UPDATE_INTERVAL_SECS=300
+  EXAV_MAX_SPILL_BYTES=2200M
+  EXAV_MAX_SCAN_SECS=900
+```
+
+Build the file wherever your updater runs
 (`exav -d /var/lib/clamav --build-db exav.exavdb`), publish it on HTTPS behind a
 stable URL that answers `HEAD` with an `ETag`, and the daemon swaps in a changed
 file live (`EXAV_UPDATE_INTERVAL_SECS`). See the upstream
@@ -202,6 +217,41 @@ and the misconfiguration shows up as one unhealthy optional container.
 The compile path is the one to avoid unless the host is sized for it: its spike is
 transient but real, and on a 3 GB host the daemon is OOM-killed (exit 137) on every
 start, which systemd retries in a loop.
+
+### Sizing: read the startup log
+
+The database is resident, and each worker wants its own scan budget on top. exav does
+not fail when the host cannot back that — it **silently lowers the budget** and says so
+once, at startup:
+
+```text
+exav: per-job memory 2048 MiB x 3 workers exceeds what this host can back;
+      using 256 MiB per job (RAM minus the 2123 MiB shared database)
+exav: extraction budget 1024 MiB exceeds the 256 MiB of address space available;
+      using 128 MiB so a size limit is reported rather than the scan being killed
+```
+
+A degraded budget is not a crash, it is a smaller scan: a file whose extraction
+exceeds it comes back with a limit reported — `partial` here, "not scanned" in
+Transfers — instead of being examined. Worse, it defeats the usual reason for adding
+exav: it cannot scan past clamav's 2 GiB ceiling either, so the deployment advertises
+a coverage it does not deliver.
+
+Measured on the full ClamAV set: clamd and the OS hold ~1.5 GB, exav's database 2.1 GB,
+and each worker wants 2 GiB on top. **A 4 GB host leaves ~270 MB for all scans** — far
+too little; **8 GB fits two workers at the default budget.** So check
+`podman logs file-scanner-exav` after the first start, and if you see those lines,
+pick one:
+
+- **give the VM more RAM** — the honest fix if you need to scan large files: the
+  database plus `EXAV_MAX_PROCESS_BYTES` × `EXAV_WORKERS`, plus clamd's own resident
+  set, plus the OS;
+- **lower `EXAV_WORKERS`** so each remaining worker gets a real budget, at the cost of
+  concurrency (scans are queued asynchronously, so this is often the right trade) —
+  but note the ceiling comes from the resident database, not the worker count: on a
+  4 GB host even a single worker stays far below the 2 GiB it asks for;
+- **set `EXAV_MAX_PROCESS_BYTES`** explicitly to what the host can back, which silences
+  the warning without changing what actually happens.
 
 The role mounts `clamav_data` read-only into the daemon either way, and gives it a
 writable `exav_data` volume for the downloaded database. Its health probe is the
@@ -218,15 +268,23 @@ scanned**. The role therefore ships `st_file_scanner_clamav_env` with all three
 raised to `2200M` (matching upstream's compose); the clamav image applies each
 `CLAMD_CONF_<Option>=<value>` line to `clamd.conf` at startup (same for
 `FRESHCLAM_CONF_<Option>`), so any clamd/freshclam option can be tuned through
-this list in `vars.yml`, one `KEY=value` line per element:
+this blob in `vars.yml`:
 
 ```yaml
-st_file_scanner_clamav_env:
-  - CLAMD_CONF_StreamMaxLength=2200M
-  - CLAMD_CONF_MaxFileSize=2200M
-  - CLAMD_CONF_MaxScanSize=2200M
-  - FRESHCLAM_CONF_Checks=24
+st_file_scanner_clamav_env: |
+  CLAMD_CONF_StreamMaxLength=2200M
+  CLAMD_CONF_MaxFileSize=2200M
+  CLAMD_CONF_MaxScanSize=2200M
+  CLAMD_CONF_MaxScanTime=900000
+  CLAMD_CONF_AlertExceedsMax=yes
+  FRESHCLAM_CONF_Checks=24
 ```
+
+`st_file_scanner_clamav_env` is empty by default, and the template then emits exactly
+the five lines above — so an empty value means "the built-in tuning", not "an empty env
+file". Setting the variable **replaces** all of it, so carry over what you still want:
+`AlertExceedsMax` especially, without which clamd answers OK on a scan it could not
+finish and the file is reported clean without having been examined.
 
 Note: clamd spools each INSTREAM to its temporary directory before scanning, so
 the clamav container needs free disk to match the limit. If you lower the
