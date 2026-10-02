@@ -17,8 +17,10 @@ services:
       clamav:
         condition: service_healthy
 {% if st_file_scanner_exav_enabled %}
+      # Ordered, NOT gated on health: exav is an optional engine, and a database
+      # it cannot load must not keep the API and the worker from starting.
       exav:
-        condition: service_healthy
+        condition: service_started
 {% endif %}
 
   worker:
@@ -32,8 +34,10 @@ services:
       clamav:
         condition: service_healthy
 {% if st_file_scanner_exav_enabled %}
+      # Ordered, NOT gated on health: exav is an optional engine, and a database
+      # it cannot load must not keep the API and the worker from starting.
       exav:
-        condition: service_healthy
+        condition: service_started
 {% endif %}
     # The image's HEALTHCHECK probes the web API on :8090, which this worker
     # does not serve; disable it (see the transfers workers unit for the full

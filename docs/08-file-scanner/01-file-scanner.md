@@ -93,7 +93,7 @@ worker's SSRF guard refuses to download from private addresses.
 | Requirement | Value |
 |-------------|-------|
 | Platform | Debian Trixie |
-| RAM | 3 GB minimum (clamd loads the full signature DB in memory) |
+| RAM | 3 GB minimum (clamd loads the full signature DB in memory). With exav compiling its own database, budget **~6 GB**: its transient ~3.6 GB spike sits on top of clamd's resident set, and a host that cannot absorb it gets the daemon OOM-killed on every start (see [Second engine: exav](#second-engine-exav)) |
 | Disk | 2 GB for the images + the ClamAV signature volume, **plus** temporary spool: clamd writes each INSTREAM to its temp directory, so up to `CLAMD_CONF_StreamMaxLength` (2200M by default) per scan running in parallel. Size for your peak concurrency, or cap it with `CLAMD_CONF_MaxThreads` in `st_file_scanner_clamav_env` |
 | Network | Outbound HTTPS (signature updates + fetching the URLs to scan) |
 | Redis | External Redis 7+, the dramatiq broker (`WORKER_BROKER_URL`) |
@@ -178,22 +178,30 @@ file-scanner releases that ship it; older ones ignore it (their settings use
 ### Signatures: the one thing to decide
 
 exav ships no database and has **no updater of its own** — ClamAV's CDN only serves
-`freshclam`/`cvdupdate`. Two paths, and the default is the slow one:
+`freshclam`/`cvdupdate`. Two paths:
 
-| | Compile locally (default) | Prebuilt database (recommended) |
+| | Prebuilt database (default) | Compile locally |
 |---|---|---|
-| Config | `EXAV_SIG_DIR=/var/lib/clamav` | `EXAV_DB_URL=https://…/your.exavdb` + `EXAV_SIG_DIR=/var/lib/exav` |
-| Source | the files the bundled clamav keeps fresh, mounted read-only | a `.exavdb` you build and publish |
-| Start cost | a few minutes **and a ~3.6 GB RAM spike, on every start** | seconds |
+| Config | `EXAV_DB_URL=https://…/your.exavdb` (+ the default `EXAV_SIG_DIR=/var/lib/exav`) | `EXAV_SIG_DIR=/var/lib/clamav` |
+| Source | a `.exavdb` you build and publish | the files the bundled clamav keeps fresh, mounted read-only |
+| Start cost | seconds, ~the size of the file | a few minutes **and a ~3.6 GB RAM spike, on every start** |
+| Host RAM | the 3 GB baseline + the file | **~6 GB**, and a raised `st_file_scanner_timeout` |
 
-The default works out of the box but is expensive: the systemd unit waits for every
-container to report healthy within `st_file_scanner_timeout` (300 s), so a
-compiling exav usually means raising it. Build the prebuilt file wherever your
-updater runs (`exav -d /var/lib/clamav --build-db exav.exavdb`), publish it on
-HTTPS behind a stable URL that answers `HEAD` with an `ETag`, and the daemon swaps
-in a changed file live (`EXAV_UPDATE_INTERVAL_SECS`). See the upstream
+**Set `EXAV_DB_URL`.** Build the file wherever your updater runs
+(`exav -d /var/lib/clamav --build-db exav.exavdb`), publish it on HTTPS behind a
+stable URL that answers `HEAD` with an `ETag`, and the daemon swaps in a changed
+file live (`EXAV_UPDATE_INTERVAL_SECS`). See the upstream
 [Running exav](https://github.com/suitenumerique/file-scanner/blob/main/docs/deployment.md#running-exav)
 guide for the build step.
+
+Leave it unset and the daemon logs `waiting up to 1800s for signatures in
+/var/lib/exav` and never reports healthy. That is deliberate: the API and the worker
+are ordered after exav but **not gated on its health**, so the service keeps running
+and the misconfiguration shows up as one unhealthy optional container.
+
+The compile path is the one to avoid unless the host is sized for it: its spike is
+transient but real, and on a 3 GB host the daemon is OOM-killed (exit 137) on every
+start, which systemd retries in a loop.
 
 The role mounts `clamav_data` read-only into the daemon either way, and gives it a
 writable `exav_data` volume for the downloaded database. Its health probe is the

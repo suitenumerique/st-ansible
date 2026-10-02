@@ -4,9 +4,12 @@ minor_changes:
     adds an exav daemon (``ghcr.io/sylvinus/exav``) to the compose unit, on the clamd
     protocol like clamav. Deploying it changes no verdict by itself: the application
     reaches it once ``EXAV_HOSTS`` and ``DEFAULT_SCANNERS`` name it in
-    ``st_file_scanner_env``. It ships no signature database - the default compiles the
-    ones the bundled clamav keeps fresh (slow, ~3.6 GB RAM on every start, hence the new
-    ``st_file_scanner_timeout``), and ``EXAV_DB_URL`` loads a prebuilt one in seconds.
+    ``st_file_scanner_env``. It ships no signature database, so point
+    ``EXAV_DB_URL`` at a prebuilt ``.exavdb`` (loads in seconds); without it the daemon
+    waits for signatures and stays unhealthy, which is why the API and the worker are
+    ordered after exav but never gated on its health. Compiling the signatures the
+    bundled clamav keeps fresh is the other path, at ~3.6 GB of RAM on every start and
+    a raised ``st_file_scanner_timeout``.
     The clamav defaults also gain ``MaxScanTime`` and ``AlertExceedsMax``, without which
     clamd answers OK on a scan it could not finish and the file is reported clean
     unscanned."
