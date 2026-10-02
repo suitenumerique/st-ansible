@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.transfers
-Version: 0.2.1
+Version: 0.4.0
 
 This role deploys the Transfers application from La Suite Territoriale on a rootless podman base on Debian systems.
 
@@ -27,7 +27,7 @@ Installs and configures the Transfers application from La Suite Territoriale on 
 | st_transfers_registries | Optional private container registries to login the `transfers` user onto. | list of 'dict' | no |  |
 | st_transfers_frontend_image | Image repository for the transfers frontend. | str | no | ghcr.io/suitenumerique/transfers-frontend |
 | st_transfers_backend_image | Image repository for the transfers backend. | str | no | ghcr.io/suitenumerique/transfers-backend |
-| st_transfers_tag | Tag of the transfers docker images to deploy. | str | no | 0.1.0 |
+| st_transfers_tag | Tag of the transfers docker images to deploy. Requires >= 0.2.0: that release renamed the sender and CSRF env keys to DJANGO_EMAIL_FROM / DJANGO_CSRF_TRUSTED_ORIGINS, which is what this collection emits. | str | no | 0.3.0 |
 | st_transfers_enabled | Triggers the installation of the transfers application. | bool | no | False |
 | st_transfers_dir | Remote path to the base directory for transfers app. | str | no | /opt/transfers/transfers |
 | st_transfers_port | The host published port for the transfers frontend (maps to the container's Caddy port 8080). | str | no | 50700 |

@@ -18,6 +18,8 @@ file-scanner-worker (ghcr.io/suitenumerique/file-scanner)
   └── python -m worker — dramatiq worker running async scans + webhook delivery
 file-scanner-clamav (docker.io/clamav/clamav)
   └── clamd on port 3310 (compose-internal only) + freshclam signature updater
+file-scanner-exav   (ghcr.io/sylvinus/exav)   — optional, off by default
+  └── second malware engine, clamd protocol on 3310 (see "Second engine: exav")
 ```
 
 All three services run in a single compose unit (`/opt/file-scanner/file-scanner`).
@@ -148,6 +150,52 @@ On its first start the clamav container downloads the full signature database
 (~300 MB) before reporting healthy, and the API/worker wait for it — allow several
 minutes before the stack settles. The signatures persist in the `clamav_data` volume,
 so restarts and redeploys are fast.
+
+## Second engine: exav
+
+[exav](https://exav.org) reads ClamAV's signature formats with its own engine. Set
+`st_file_scanner_exav_enabled: true` and the role adds a `file-scanner-exav`
+container to the same compose unit, on the clamd protocol like clamav.
+
+**Deploying the daemon changes no verdict on its own.** The application only sends
+a file to an engine it is told about, so two keys go in `st_file_scanner_env`:
+
+```text
+EXAV_HOSTS=exav:3310
+DEFAULT_SCANNERS={"malware": ["clamav", "exav"]}
+```
+
+`DEFAULT_SCANNERS` maps each category to the engines composing it: the value above
+runs both on every scan, `{"malware": ["exav"]}` replaces clamav. A third key,
+`ADVISORY_SCANNERS`, names engines whose detections count but whose incomplete
+scans do not stop a category from being clean — for an engine under evaluation, or
+for clamav next to exav past clamav's 2 GiB ceiling. It is only read by
+file-scanner releases that ship it; older ones ignore it (their settings use
+`extra="ignore"`), so adding it early breaks nothing.
+
+### Signatures: the one thing to decide
+
+exav ships no database and has **no updater of its own** — ClamAV's CDN only serves
+`freshclam`/`cvdupdate`. Two paths, and the default is the slow one:
+
+| | Compile locally (default) | Prebuilt database (recommended) |
+|---|---|---|
+| Config | `EXAV_SIG_DIR=/var/lib/clamav` | `EXAV_DB_URL=https://…/your.exavdb` + `EXAV_SIG_DIR=/var/lib/exav` |
+| Source | the files the bundled clamav keeps fresh, mounted read-only | a `.exavdb` you build and publish |
+| Start cost | a few minutes **and a ~3.6 GB RAM spike, on every start** | seconds |
+
+The default works out of the box but is expensive: the systemd unit waits for every
+container to report healthy within `st_file_scanner_timeout` (300 s), so a
+compiling exav usually means raising it. Build the prebuilt file wherever your
+updater runs (`exav -d /var/lib/clamav --build-db exav.exavdb`), publish it on
+HTTPS behind a stable URL that answers `HEAD` with an `ETag`, and the daemon swaps
+in a changed file live (`EXAV_UPDATE_INTERVAL_SECS`). See the upstream
+[Running exav](https://github.com/suitenumerique/file-scanner/blob/main/docs/deployment.md#running-exav)
+guide for the build step.
+
+The role mounts `clamav_data` read-only into the daemon either way, and gives it a
+writable `exav_data` volume for the downloaded database. Its health probe is the
+image's own (`/exav --ping`, which passes only once the database is loaded).
 
 ## clamd size limits
 

@@ -8,8 +8,8 @@ st_transfers_gid: '{{ st_transfers_uid }}'
 st_transfers_frontend_image: ghcr.io/suitenumerique/transfers-frontend
 # Image repository for the transfers backend.
 st_transfers_backend_image: ghcr.io/suitenumerique/transfers-backend
-# Tag of the transfers docker images to deploy.
-st_transfers_tag: 0.1.0
+# Tag of the transfers docker images to deploy. Requires >= 0.2.0: that release renamed the sender and CSRF env keys to DJANGO_EMAIL_FROM / DJANGO_CSRF_TRUSTED_ORIGINS, which is what this collection emits.
+st_transfers_tag: 0.3.0
 # Triggers the installation of the transfers application.
 st_transfers_enabled: false
 # Remote path to the base directory for transfers app.

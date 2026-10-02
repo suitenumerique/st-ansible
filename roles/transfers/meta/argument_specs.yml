@@ -28,9 +28,9 @@ argument_specs:
         default: "ghcr.io/suitenumerique/transfers-backend"
       st_transfers_tag:
         type: "str"
-        description: "Tag of the transfers docker images to deploy."
+        description: "Tag of the transfers docker images to deploy. Requires >= 0.2.0: that release renamed the sender and CSRF env keys to DJANGO_EMAIL_FROM / DJANGO_CSRF_TRUSTED_ORIGINS, which is what this collection emits."
         # renovate: datasource=github-releases depName=suitenumerique/transfers versioning=semver
-        default: "0.1.0"
+        default: "0.3.0"
       st_transfers_enabled:
         type: "bool"
         description: "Triggers the installation of the transfers application."

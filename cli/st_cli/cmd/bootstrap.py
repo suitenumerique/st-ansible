@@ -404,6 +404,15 @@ def _ask_transfers_scanner(
         _recall(answers, "CLAMAV_SERVICE_URL"),
         placeholder="http://10.0.0.20:50800",
     )
+    # Each submission carries a Bearer JWT and a presigned S3 URL, so plain HTTP
+    # hands both to anyone on the path. The scanner serves uvicorn without TLS,
+    # so http:// stays allowed (private network) — but it is worth saying out loud.
+    if not answers["CLAMAV_SERVICE_URL"].lower().startswith("https://"):
+        ui.warn(
+            "CLAMAV_SERVICE_URL is not https: the scan-submit JWT and the "
+            "presigned S3 URL travel in cleartext. Keep this on a private "
+            "network, or put TLS in front of the scanner."
+        )
     # Base URL of THIS backend as the scanner reaches it (webhook callback).
     # The backend port is not published on the host — the scanner reaches it
     # through the public frontend Caddy, which proxies /api to the backend.

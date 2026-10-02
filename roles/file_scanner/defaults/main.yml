@@ -9,7 +9,7 @@ st_file_scanner_enabled: false
 # Image repository for file-scanner (one image runs both the web API and the worker).
 st_file_scanner_image: ghcr.io/suitenumerique/file-scanner
 # Tag of the file-scanner docker image to deploy.
-st_file_scanner_tag: 0.1.1
+st_file_scanner_tag: 0.2.0
 # Image repository for the bundled ClamAV daemon.
 st_file_scanner_clamav_image: docker.io/clamav/clamav
 # Tag of the ClamAV docker image to deploy.
@@ -33,6 +33,23 @@ st_file_scanner_clamav_env:
   - CLAMD_CONF_StreamMaxLength=2200M
   - CLAMD_CONF_MaxFileSize=2200M
   - CLAMD_CONF_MaxScanSize=2200M
+  - CLAMD_CONF_MaxScanTime=900000
+  - CLAMD_CONF_AlertExceedsMax=yes
+# Triggers the installation of exav, a second malware engine alongside clamav. The daemon alone changes nothing: name it in the application's `DEFAULT_SCANNERS` (e.g. `{"malware": ["clamav", "exav"]}`) and point `EXAV_HOSTS` at `exav:3310` in `st_file_scanner_env` for scans to reach it.
+st_file_scanner_exav_enabled: false
+# Image repository for the exav daemon (distroless, runs as uid 65532, speaks the clamd protocol on 3310).
+st_file_scanner_exav_image: ghcr.io/sylvinus/exav
+# Tag of the exav docker image to deploy.
+st_file_scanner_exav_tag: 0.0.1
+# Local path to the custom template to use for the exav env file.
+st_file_scanner_exav_env_template: file_scanner/exav_env.j2
+# Lines of the default exav_env_template, one `KEY=value` per element. exav ships no signature database and has no updater of its own, so the default compiles the files the bundled clamav keeps fresh, read-only from its volume — a few minutes and a ~3.6 GB RAM spike on every start, which usually means raising st_file_scanner_timeout. The cheaper production path is a prebuilt database served over HTTPS: set `EXAV_DB_URL=https://…/your.exavdb` plus `EXAV_SIG_DIR=/var/lib/exav` (the daemon's own writable volume) and it loads in seconds. The spill and scan limits sit above the application's MAX_URL_SIZE, like clamd's StreamMaxLength.
+st_file_scanner_exav_env:
+  - EXAV_SIG_DIR=/var/lib/clamav
+  - EXAV_MAX_SPILL_BYTES=2200M
+  - EXAV_MAX_SCAN_SECS=900
+# Seconds the systemd unit waits for every container of the stack to report healthy. The first clamav start downloads the signature database; an exav that compiles its own needs several minutes more.
+st_file_scanner_timeout: 300
 # Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool.
 st_file_scanner_cadvisor_enabled: false
 # Image repository for the cadvisor container.

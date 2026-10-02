@@ -10,16 +10,8 @@ from st_cli.core.models import Component
 
 
 def test_all_apps_load_with_core_and_components():
-    for app in [
-        "meet",
-        "drive",
-        "messages",
-        "keycloak",
-        "docs",
-        "projects",
-        "transfers",
-        "file-scanner",
-    ]:
+    # derived from the bundled manifests, so a new app cannot bypass this test
+    for app in appmeta.list_apps():
         a = appmeta.load_app(app)
         assert a.components
         assert a.core().is_core

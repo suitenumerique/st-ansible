@@ -1,0 +1,5 @@
+{{ ansible_managed | comment }}
+
+{% for line in st_file_scanner_exav_env %}
+{{ line }}
+{% endfor %}
