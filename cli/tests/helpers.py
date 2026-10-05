@@ -445,6 +445,36 @@ def drive_first_run_script() -> list[tuple]:
     ]
 
 
+def conversations_first_run_script() -> list[tuple]:
+    return [
+        ("select", "Secret backend:", "ansible-vault"),
+        ("text", "conversations host(s)", "10.0.0.12"),
+        ("text", "workers (leave blank", ""),
+        ("text", "Public domain for conversations", "conversations.example.org"),
+        ("text", "DB_HOST", "db.example.org"),
+        ("text", "DB_NAME", "conversations"),
+        ("text", "DB_USER", "conversations"),
+        ("password", "DB_PASSWORD", "dbpass123"),
+        ("text", "DB_PORT", "5432"),
+        ("text", "REDIS_URL", "redis://redis:6379/0"),
+        ("text", "AWS_S3_ENDPOINT_URL", "https://s3.fr-par.scw.cloud"),
+        ("text", "AWS_S3_ACCESS_KEY_ID", "convaccess"),
+        ("password", "AWS_S3_SECRET_ACCESS_KEY", "convsecretkey"),
+        ("text", "AWS_STORAGE_BUCKET_NAME", "conversations-media"),
+        ("text", "AWS_S3_REGION_NAME (optional)", "fr-par"),
+        ("text", "AI_BASE_URL", "https://api.openai.com/v1"),
+        ("text", "AI_MODEL", "gpt-4o-mini"),
+        ("password", "AI_API_KEY", "sk-test-key"),
+        ("select", "Identity provider:", "keycloak"),
+        ("text", "Keycloak base URL", "https://idp.example.org"),
+        ("text", "Keycloak realm", "master"),
+        ("text", "OIDC_RP_CLIENT_ID", "conversations-client-id"),
+        ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+        ("confirm", "Configure transactional email (SMTP) settings?", False),
+        ("confirm", "cadvisor", True),
+    ]
+
+
 def messages_first_run_script(
     *,
     db_mode: str = "url",
@@ -678,8 +708,13 @@ class ScriptedQuestionary:
     def __init__(self, scripts):
         self._scripts = list(scripts)
         self.select_calls: list[tuple[str, list[str]]] = []
+        self.prompts: list[tuple[str, str]] = []
+
+    def asked(self, kind, substring) -> bool:
+        return any(k == kind and substring in p for k, p in self.prompts)
 
     def _consume(self, kind, prompt):
+        self.prompts.append((kind, prompt))
         for i, (k, sub, _ans) in enumerate(self._scripts):
             if k == kind and sub in prompt:
                 return self._scripts.pop(i)[2]
@@ -722,10 +757,6 @@ class DefaultsQuestionary(ScriptedQuestionary):
     default, raises. A hashi_vault leg must check ``asked`` for its secrets.
     """
 
-    def __init__(self, scripts):
-        super().__init__(scripts)
-        self.prompts: list[tuple[str, str]] = []
-
     def _consume(self, kind, prompt):
         self.prompts.append((kind, prompt))
         for i, (k, sub, _ans) in enumerate(self._scripts):
@@ -745,9 +776,6 @@ class DefaultsQuestionary(ScriptedQuestionary):
                 f"unexpected required questionary.text prompt: {prompt!r}"
             )
         return super().text(prompt, **kwargs)
-
-    def asked(self, kind, substring) -> bool:
-        return any(k == kind and substring in p for k, p in self.prompts)
 
 
 def _patch_questionary(monkeypatch, sq):
