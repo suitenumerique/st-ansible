@@ -1,0 +1,2 @@
+bugfixes:
+  - "messages: the default compose template declares a healthcheck on the backend service. The frontend waits for the backend to be healthy, but Podman drops the ``HEALTHCHECK`` of OCI images, so the backend never got a health status and ``podman-compose up`` blocked until the unit timed out. The check is the one of the upstream Dockerfile (``/__heartbeat__/``)."
