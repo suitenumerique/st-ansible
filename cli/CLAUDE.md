@@ -19,8 +19,8 @@ st_cli/core/*.py        Logic: recover, render, write, manifest, upgrades, pin, 
 st_cli/core/resources/  Read-only: apps/<app>.yml manifests, templates/, upgrades.yml.
 ```
 
-Subcommands: `bootstrap`, `deploy`, `secrets`, `restart`, `ps`, `oneoff`,
-`reset`, `logs`, `doctor`, `upgrade`, `version`.
+Subcommands: `bootstrap`, `deploy`, `secrets`, `generate-keypairs`, `restart`,
+`ps`, `oneoff`, `reset`, `logs`, `doctor`, `upgrade`, `version`.
 
 Committed by the operator, per `(app, env, component)`:
 `<app>/<env>/<component>/{vars.yml,vault.yml,hosts}`, `<app>/<env>/common.yml`,
@@ -55,6 +55,15 @@ Committed by the operator, per `(app, env, component)`:
   `-H/--host` is the inventory alias. They never block on versions. `reset`
   tears down the unit over ssh, then redeploys it through `generate`,
   `runner.galaxy_install` and `runner.play`, limited to the selected host.
+- **generate-keypairs** (`cmd/generate_keypairs.py`, file-scanner only): local
+  Ed25519 keygen plus a wiring summary, writing nothing anywhere. Default mode
+  mints caller keypairs (issuer-name loop) and prints the `JWT_ISSUER_KEYS`
+  value merged with the bootstrapped unit's, plus each caller's private key.
+  `-s/--signing-key` mints the webhook signing seed (`JWT_SIGNING_KEY`) and the
+  public half served at `/.well-known/jwks.json`; its guidance branches on the
+  recorded secret backend and on whether the unit is bootstrapped. `bootstrap`
+  generates that seed itself under ansible-vault, so this mode is for the
+  hashi_vault backend (which mints nothing) and for key rotation.
 
 ## 3. What you must maintain
 
@@ -196,7 +205,7 @@ global callback and the upstream gate of `st-cli upgrade`.
 
 | Module | Role |
 |---|---|
-| `core/appmeta.py` | Loads `resources/apps/<app>.yml`: components, vars, `env_render`, `dependencies[]` with `shared[]` rules. |
+| `core/appmeta.py` | Loads `resources/apps/<app>.yml`: components, vars, `env_render`, `requirements[]` (the app-tailored pre-bootstrap checklist; mandatory, no generic fallback), `dependencies[]` with `shared[]` rules. |
 | `core/recover.py` | Inverse of render: rebuilds `answers` from a committed unit. Best-effort, app-agnostic, values verbatim. `parse_bool` tolerantly parses a YAML bool or a yes/no-shaped string. |
 | `core/envblob.py` | Text merge of dotenv blobs. Keeps existing lines in place, appends new keys, never deletes. `merge(x, x, m) == x` when `x` ends with one newline. |
 | `core/envrender.py` | Renders env blobs from `templates/env/*.j2`. Missing keys render as `""`. `oidc_endpoints`. |
@@ -208,13 +217,14 @@ global callback and the upstream gate of `st-cli upgrade`.
 | `core/pin.py` | `PinState`, `compare(m)`, `require_not_older(m, retry_hint)` raises `StCliError` when the CLI is older than the pin. |
 | `core/upstream.py` | Upstream tag lookup, `is_behind`, `install_hint`, `maybe_warn_upgrade`. |
 | `core/manifest.py` | `.st-cli.yml` I/O: pins, units, secret backend, `ssh_user`. |
-| `core/tree.py` | Committed tree I/O with ruamel round-trip, `!vault` scalars, INI hosts, `find_host`, `iter_targeted_hosts`, `yaml_safe` for read-only resources. |
+| `core/tree.py` | Committed tree I/O with ruamel round-trip, `!vault` scalars, INI hosts, `find_host`, `iter_targeted_hosts`, `yaml_safe` for read-only resources. `group_name` normalises dashes for inventory groups (app_name `file-scanner` → `[file_scanner]`), applied on write and on read/targeting. |
 | `core/generate.py` | Renders `.st-cli/` scaffolding. `ST_CLI_COLLECTION_SOURCE` overrides the collection pin. |
 | `core/runner.py` | `galaxy_install`, `play` subprocess wrappers. |
 | `core/vault.py` | `ansible-vault` wrappers and `.vault-pass` handling. |
 | `core/secrets.py` | `gen_secret`, `gen_token`, `gen_password` for `_ask_secret(gen=...)`. |
+| `core/keypairs.py` | Pure-python Ed25519 keygen (RFC 8032 derivation, no crypto dependency): `generate_keypair() -> (private, public)`, unpadded base64url, the private key IS the 32-byte seed. Used by `cmd/generate_keypairs.py` only. |
 | `core/paths.py` | All path computation, anchored at `Path.cwd()`. `SECRET_FILE_MODE` is the mode of a secret file. |
-| `core/ui.py` | All console output. `warn`/`error` go to stderr. No bare `print`. |
+| `core/ui.py` | All console output. `warn`/`error` go to stderr. No bare `print`. `value()` prints a raw value copy-paste safe (no markup, `soft_wrap`). |
 | `core/sshuser.py` | Once-per-process ssh user guard. `ST_CLI_SSH_USER` overrides. |
 | `core/models.py`, `core/errors.py` | Dataclasses; `StCliError`. |
 
@@ -228,7 +238,10 @@ global callback and the upstream gate of `st-cli upgrade`.
   With hashi_vault the operator pre-creates every secret in OpenBao; the
   prompt asks for the lookup term, pre-filled with `@openbao(kv/data/<app>:<KEY>)`.
 - Each app role ships distinct uid/gid and host ports so co-located stacks do
-  not collide.
+  not collide: drive 1101/50100, keycloak 1102/50200, meet 1103/50300,
+  messages 1104/50400, projects 1105/50500, docs 1106/50600,
+  transfers 1107/50700, file-scanner 1108/50800. An app name with a dash is
+  normalised in every ansible var and inventory group (`st_file_scanner_*`).
 - `ssh/config` and `ssh/known_hosts` are committed; `ssh/config.local` is
   per-operator and gitignored.
 
@@ -243,8 +256,9 @@ ruff check --fix . && ruff format . && pytest -q -n 6
 CI (`.github/workflows/cli-tests.yml`) runs `ruff check`, `ruff format
 --check` and `pytest` on Python 3.13. Every change must leave the tree
 ruff-clean. `pyproject.toml` commits the rule set under `[tool.ruff.lint]`.
-Tests are offline. Each bootstrap test spawns `ansible-vault`, so the full
-suite takes minutes without `-n`. One `test_<module>.py` per module.
+Tests are offline. `cryptography` is a test-only dependency: the differential
+Ed25519 check in `test_keypairs.py` imports it hard, never a silent skip. Each
+bootstrap test spawns `ansible-vault`, so the full suite takes minutes without `-n`. One `test_<module>.py` per module.
 `tests/conftest.py` provides the `repo` tmp-cwd fixture and disables the
 upstream check. `tests/helpers.py` provides the seeders, the first-run script
 builders, `script_questionary` (strict: an unscripted prompt fails) and

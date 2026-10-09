@@ -2,7 +2,14 @@
 app: messages
 env_docs_url: "https://github.com/suitenumerique/messages/blob/main/docs/env.md"
 arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/04-messages"
-requires: [postgresql, redis, s3, oidc]
+requirements:
+  - "[bold]IP[/bold] or hostname of the VM(s) (messages + mta-in / mpa / socks-proxy providers)"
+  - "[bold]PostgreSQL[/bold] host and credentials"
+  - "[bold]Redis[/bold] host and credentials"
+  - "[bold]S3[/bold] endpoint, bucket and credentials (mail imports bucket)"
+  - "[bold]OpenSearch[/bold] URL"
+  - "[bold]Identity provider[/bold] URLs and credentials (ProConnect Integration: create an app at https://partenaires.proconnect.gouv.fr/)"
+  - "[bold]DNS[/bold]: the MX public hostname and the technical mail domain (MX/SPF/DKIM records)"
 components:
   - key: messages
     role: suitenumerique.st.messages
