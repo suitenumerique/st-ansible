@@ -1,0 +1,121 @@
+---
+argument_specs:
+  main:
+    short_description: "Installs and configures the file-scanner service from La Suite Territoriale on Debian systems."
+    options:
+      st_file_scanner_uid:
+        type: "int"
+        description: "UID of the `file-scanner` user, used for the podman role."
+        default: 1108
+      st_file_scanner_gid:
+        type: "int"
+        description: "GID of the `file-scanner` group, used for the podman role."
+        default: "{{ st_file_scanner_uid }}"
+      st_file_scanner_registries:
+        type: "list"
+        elements: "dict"
+        description: "Optional private container registries to login the `file-scanner` user onto."
+      st_file_scanner_enabled:
+        type: "bool"
+        description: "Triggers the installation of the file-scanner application."
+        default: false
+      st_file_scanner_image:
+        type: "str"
+        description: "Image repository for file-scanner (one image runs both the web API and the worker)."
+        default: "ghcr.io/suitenumerique/file-scanner"
+      st_file_scanner_tag:
+        type: "str"
+        description: "Tag of the file-scanner docker image to deploy."
+        # renovate: datasource=github-releases depName=suitenumerique/file-scanner versioning=semver extractVersion=^v(?<version>.+)$
+        default: "0.3.0"
+      st_file_scanner_clamav_image:
+        type: "str"
+        description: "Image repository for the bundled ClamAV daemon."
+        default: "docker.io/clamav/clamav"
+      st_file_scanner_clamav_tag:
+        type: "str"
+        description: "Tag of the ClamAV docker image to deploy."
+        # renovate: datasource=docker depName=clamav/clamav
+        default: "1.4"
+      st_file_scanner_dir:
+        type: "str"
+        description: "Remote path to the base directory for the file-scanner app."
+        default: "/opt/file-scanner/file-scanner"
+      st_file_scanner_port:
+        type: "str"
+        description: "The host published port for the file-scanner API (maps to the container's uvicorn port 8090)."
+        default: "50800"
+      st_file_scanner_rollback_enabled:
+        type: "bool"
+        description: "Whether or not to trigger the rollback tasks if the file-scanner deployment fails."
+        default: false
+      st_file_scanner_compose_template:
+        type: "str"
+        description: "Local path to the custom template to use for file-scanner compose file."
+        default: "file_scanner/compose.yaml.j2"
+      st_file_scanner_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for file-scanner env file."
+        default: "file_scanner/env.j2"
+      st_file_scanner_env:
+        type: "str"
+        description: "Content of the default env_template, not used if st_file_scanner_env_template is defined. Three keys are not yours to set here, because the compose template sets them on the worker and they take precedence: `WORKER_PROCESSES` and `WORKER_THREADS` come from `st_file_scanner_worker_processes` / `st_file_scanner_worker_threads`, and `DOWNLOAD_DIR` points at a host directory under the application directory — on the worker only, since the API creates that path at import time and has no mount for it."
+        default: ""
+      st_file_scanner_worker_processes:
+        type: "int"
+        description: "Number of dramatiq worker processes (``WORKER_PROCESSES``). Together with `st_file_scanner_worker_threads` it is the only cap on how many scans run at once, and therefore on the transient disk the stack needs: each in-flight job holds a full copy of the submitted file under the application directory's `downloads/` (up to `MAX_URL_SIZE`, 2 GiB) while clamd spools the same bytes again in its own container. The default of 1 x 4 bounds that at roughly 17 GB in the worst case, against 2 x 8 upstream; raise it once the host has the disk for it. Set in the compose `environment` of the worker, so it overrides a `WORKER_PROCESSES` line in `st_file_scanner_env`."
+        default: 1
+      st_file_scanner_worker_threads:
+        type: "int"
+        description: "Threads per dramatiq worker process (``WORKER_THREADS``). See `st_file_scanner_worker_processes` for the disk budget the product of the two implies."
+        default: 4
+      st_file_scanner_clamav_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for the clamav env file."
+        default: "file_scanner/clamav_env.j2"
+      st_file_scanner_clamav_env:
+        type: "str"
+        description: "Content of the default clamav_env_template, not used if st_file_scanner_clamav_env_template is defined. The clamav image applies `CLAMD_CONF_<Option>=<value>` and `FRESHCLAM_CONF_<Option>=<value>` lines to clamd.conf / freshclam.conf at startup. **Empty means the built-in tuning the template falls back to** (it is not an empty env file): `StreamMaxLength`, `MaxFileSize` and `MaxScanSize` at 2200M, above the scanner's 2 GiB MAX_URL_SIZE — below StreamMaxLength a too-big file dies mid-INSTREAM, and below MaxFileSize/MaxScanSize it is skipped and reported CLEAN unscanned — plus `MaxScanTime=900000` and `AlertExceedsMax=yes`, without which clamd answers OK on a scan it could not finish. Setting this variable REPLACES all of it, so carry over what you still want. clamd spools each INSTREAM to its temporary directory, so the clamav container needs that much free disk per concurrent scan. Cap that with the worker's concurrency (`st_file_scanner_worker_processes` x `st_file_scanner_worker_threads`), which is what clamd is actually fed; `CLAMD_CONF_MaxThreads` is a ceiling on top and lowering it to the worker's concurrency leaves no thread for the `clamdscan --ping` healthcheck under load."
+        default: ""
+      st_file_scanner_exav_enabled:
+        type: "bool"
+        description: "Triggers the installation of exav, a second malware engine alongside clamav. The daemon alone changes nothing: name it in the application's `DEFAULT_SCANNERS` (e.g. `{\"malware\": [\"clamav\", \"exav\"]}`) and point `EXAV_HOSTS` at `exav:3310` in `st_file_scanner_env` for scans to reach it."
+        default: false
+      st_file_scanner_exav_image:
+        type: "str"
+        description: "Image repository for the exav daemon (distroless, runs as uid 65532, speaks the clamd protocol on 3310)."
+        default: "ghcr.io/sylvinus/exav"
+      st_file_scanner_exav_tag:
+        type: "str"
+        description: "Tag of the exav docker image to deploy."
+        # renovate: datasource=docker depName=ghcr.io/sylvinus/exav
+        default: "0.0.1"
+      st_file_scanner_exav_env_template:
+        type: "str"
+        description: "Local path to the custom template to use for the exav env file."
+        default: "file_scanner/exav_env.j2"
+      st_file_scanner_exav_env:
+        type: "str"
+        description: "Content of the default exav_env_template. **Empty means the built-in defaults the template falls back to** (`EXAV_SIG_DIR=/var/lib/exav`, `EXAV_UPDATE_INTERVAL_SECS=300`, `EXAV_MAX_SPILL_BYTES=2200M`, `EXAV_MAX_SCAN_SECS=900`); setting it REPLACES them, so carry over what you still want. exav ships no signature database and has no updater of its own, so **set `EXAV_DB_URL` to your published .exavdb**: it loads in seconds, costing about the size of the file. Without it the daemon logs `waiting up to 1800s for signatures in /var/lib/exav` and never reports healthy — the API and the worker still start, so the failure is visible rather than fatal. The other path is compiling the signatures the bundled clamav keeps fresh: set `EXAV_SIG_DIR=/var/lib/clamav` (mounted read-only) and budget ~6 GB of RAM plus a raised st_file_scanner_timeout, because the compile spikes ~3.6 GB on EVERY start and an undersized host OOM-kills it (exit 137) in a systemd retry loop. The spill and scan limits sit above the application's MAX_URL_SIZE, like clamd's StreamMaxLength."
+        default: ""
+      st_file_scanner_timeout:
+        type: "int"
+        description: "Seconds the systemd unit waits for every container of the stack to report healthy. The first clamav start downloads the signature database; an exav that compiles its own needs several minutes more."
+        default: 300
+      st_file_scanner_cadvisor_enabled:
+        type: "bool"
+        description: "Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool."
+        default: false
+      st_file_scanner_cadvisor_image:
+        type: "str"
+        description: "Image repository for the cadvisor container."
+        default: "ghcr.io/google/cadvisor"
+      st_file_scanner_cadvisor_tag:
+        type: "str"
+        description: "Tag of the cadvisor docker image to deploy."
+        # renovate: datasource=docker depName=ghcr.io/google/cadvisor
+        default: "v0.60.3"
+      st_file_scanner_cadvisor_port:
+        type: "str"
+        description: "The host published port of the cadvisor container."
+        default: "127.0.0.1:50899"

@@ -1,0 +1,15 @@
+{{ ansible_managed | comment }}
+
+{% if st_file_scanner_exav_env %}
+{{ st_file_scanner_exav_env }}
+{% else %}
+{# Built-in exav defaults, used when st_file_scanner_exav_env is empty. No
+   EXAV_DB_URL: without one the daemon waits for signatures, then refuses to run
+   rather than report real malware as clean — set it (and keep these lines) to
+   load a prebuilt database. SIG_DIR is its own writable volume; the spill and
+   scan limits sit above the application's MAX_URL_SIZE. #}
+EXAV_SIG_DIR=/var/lib/exav
+EXAV_UPDATE_INTERVAL_SECS=300
+EXAV_MAX_SPILL_BYTES=2200M
+EXAV_MAX_SCAN_SECS=900
+{% endif %}

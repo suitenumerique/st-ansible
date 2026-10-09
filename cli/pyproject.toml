@@ -19,7 +19,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest==9.1.1", "pytest-mock==3.15.1"]
+# cryptography is a TEST dependency only (differential Ed25519 check in
+# test_keypairs.py) — st-cli itself stays free of crypto/binary deps.
+dev = ["pytest==9.1.1", "pytest-mock==3.15.1", "cryptography==50.0.0"]
 ansible = ["ansible-core==2.21.3"]
 hashivault = ["hvac==2.4.0"]
 full = ["ansible-core==2.21.3", "hvac==2.4.0"]
