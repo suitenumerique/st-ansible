@@ -19,6 +19,19 @@ if [ "$TOTAL" -eq 0 ]; then
   exit 1
 fi
 
+# `up -d` can exit 0 having created only SOME of the services: it gives up on a
+# depends_on it cannot satisfy and skips that service silently. Counting only what
+# it created would then report "all containers healthy" with half the stack down,
+# so compare against what the compose file declares. Best effort: when the service
+# list cannot be read, keep going rather than refuse to start.
+DECLARED=$(podman-compose --no-ansi config --services 2>/dev/null | grep -c '[^[:space:]]' || true)
+if [ -n "${DECLARED:-}" ] && [ "$DECLARED" -gt "$TOTAL" ]; then
+  echo "compose declares $DECLARED services but only $TOTAL container(s) exist:"
+  podman-compose ps -a || true
+  echo "a service was never created (check its image tag and its depends_on), aborting."
+  exit 1
+fi
+
 ELAPSED=0
 
 while true; do
@@ -28,6 +41,10 @@ while true; do
   for c in "${CONTAINERS[@]}"; do
     STATE=$(podman inspect --format "{{.State.Status}}" "$c" 2>/dev/null || true)
     HEALTH=$(podman inspect --format "{{.State.Health.Status}}" "$c" 2>/dev/null || true)
+    # A container with no probe (`healthcheck: disable: true`) has a nil
+    # .State.Health, so HEALTH stays empty and it counts as healthy below —
+    # whatever `podman ps` shows in its health column (it reads the healthcheck
+    # log, which podman stamps "reset" on every start, probe or not).
 
     if [ "$STATE" = "exited" ]; then
       EXIT_CODE=$(podman inspect --format "{{.State.ExitCode}}" "$c" 2>/dev/null || echo "1")

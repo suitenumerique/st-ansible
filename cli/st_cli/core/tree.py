@@ -90,7 +90,21 @@ def save_vars(app: str, env: str, component: str, data) -> None:
     _save_yaml(paths.vars_path(app, env, component), data)
 
 
+def group_name(name: str) -> str:
+    """Ansible-safe inventory group for a component ``app_name``.
+
+    Ansible warns on ``-`` in group names ("Invalid characters were found in
+    group names"), so dashes become underscores: app_name ``file-scanner`` →
+    group ``[file_scanner]`` (and alias prefix ``file_scanner<n>``), while the
+    systemd unit / remote dir keep the dashed app_name. Applied at the two
+    chokepoints — :func:`_group_lines` (write) and :func:`effective_group`
+    (read/targeting) — so callers keep passing raw ``app_name``s.
+    """
+    return name.replace("-", "_")
+
+
 def _group_lines(group: str, hosts: list[str]) -> list[str]:
+    group = group_name(group)
     lines = [f"[{group}]"]
     for i, ip in enumerate(hosts, start=1):
         lines.append(f"{group}{i} ansible_host={ip}")
@@ -138,11 +152,12 @@ def ensure_common(app: str, env: str) -> None:
     if p.exists():
         return
     p.parent.mkdir(parents=True, exist_ok=True)
+    var_app = app.replace("-", "_")  # ansible var names can't carry dashes
     text = (
         f"# st-cli app/env-wide vars for {app}/{env} — loaded before EVERY component's\n"
         "# vars.yml. Put values shared across all components here, e.g. "
-        f"st_{app}_uid /\n"
-        f"# st_{app}_gid / st_{app}_registries. Safe to edit by hand.\n"
+        f"st_{var_app}_uid /\n"
+        f"# st_{var_app}_gid / st_{var_app}_registries. Safe to edit by hand.\n"
         "---\n"
     )
     p.write_text(text, encoding="utf-8")
@@ -272,7 +287,12 @@ def read_inventory(
 
     ``alias`` is the inventory hostname an ansible pattern or ``-H/--host`` matches.
     ``ip`` is the ``ansible_host=<x>`` value, falling back to the alias.
+    ``group`` is normalised via :func:`group_name` (idempotent), so a caller
+    passing a raw dashed ``app_name`` still matches the written
+    ``[file_scanner]``-style section.
     """
+    if group is not None:
+        group = group_name(group)
     p = paths.hosts_path(app, env, component)
     if not p.exists():
         return []
@@ -318,9 +338,11 @@ def effective_group(app: str, env: str, meta, comp) -> str:
     to the core group. A non-worker always targets its own group.
     """
     files = meta.files_component(comp.key)
-    if comp.is_worker and read_hosts(app, env, files.key, group=comp.app_name):
-        return comp.app_name
-    return files.app_name
+    if comp.is_worker and read_hosts(
+        app, env, files.key, group=group_name(comp.app_name)
+    ):
+        return group_name(comp.app_name)
+    return group_name(files.app_name)
 
 
 def alias_list(entries: list[tuple[str, str]]) -> str:

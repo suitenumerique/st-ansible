@@ -1,0 +1,21 @@
+---
+- name: "Deploy transfers."
+  ansible.builtin.import_tasks: deploy/transfers.yml
+  when: st_transfers_enabled
+  tags: ['transfers_transfers']
+
+- name: "Deploy transfers workers."
+  ansible.builtin.import_tasks: deploy/workers.yml
+  when: st_transfers_workers_enabled
+  tags: ['transfers_workers']
+
+- name: "Create cadvisor application."
+  when: st_transfers_cadvisor_enabled
+  tags: ['transfers_cadvisor']
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "transfers"
+    st_podman_application_name: "cadvisor"
+    st_podman_application_compose_template: monitoring/compose_cadvisor.yaml.j2
