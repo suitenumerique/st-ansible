@@ -2,7 +2,12 @@
 app: drive
 env_docs_url: "https://github.com/suitenumerique/drive/blob/main/docs/env.md"
 arch_docs_url: "https://github.com/suitenumerique/st-ansible/tree/main/docs/01-drive"
-requires: [postgresql, redis, s3, oidc]
+requirements:
+  - "[bold]IP[/bold] or hostname of the VM(s)"
+  - "[bold]PostgreSQL[/bold] host and credentials"
+  - "[bold]Redis[/bold] host and credentials"
+  - "[bold]S3[/bold] endpoint, bucket and credentials"
+  - "[bold]Identity provider[/bold] URLs and credentials (ProConnect Integration: create an app at https://partenaires.proconnect.gouv.fr/)"
 components:
   - key: drive
     role: suitenumerique.st.drive

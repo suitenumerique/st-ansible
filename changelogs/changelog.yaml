@@ -136,7 +136,7 @@ releases:
         uploads; ``st-cli bootstrap projects <env>`` / ``st-cli deploy projects <env>``
         behave like the other apps."
       - "(st-cli) the bootstrap \"Requirements\" checklist is now app-aware \u2014
-        each app declares the external infrastructure it needs via a ``requires``
+        each app declares the external infrastructure it needs via a ``requirements``
         manifest key \u2014 so ``projects`` and ``keycloak`` operators are no longer
         told to provision a Redis they never use."
       - Update dependency molecule to v26.8.0

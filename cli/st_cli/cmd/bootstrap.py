@@ -74,23 +74,9 @@ _IDP_PLACEHOLDER = "https://idp.example.org"
 _SMTP_PLACEHOLDER = "smtp.example.org"
 _DOCS_CORE_SECRETS = ("COLLABORATION_SERVER_SECRET", "Y_PROVIDER_API_KEY")
 
-# Requirements-checklist lines, keyed by the capability names apps declare in
-# their `requires` (apps/<app>.yml). Insertion order is the display order; the
-# VM line is unconditional and printed separately.
-_REQUIREMENT_LINES = {
-    "postgresql": "[bold]PostgreSQL[/bold] host and credentials",
-    "redis": "[bold]Redis[/bold] host and credentials",
-    "s3": "[bold]S3[/bold] endpoint, bucket and credentials",
-    "oidc": (
-        "[bold]Identity provider[/bold] URLs and credentials\n"
-        "    (For ProConnect Integration environment: create an app at "
-        "https://partenaires.proconnect.gouv.fr/)"
-    ),
-}
-
 # Apps that carry upstream DJANGO_EMAIL_* settings; messages is skipped (no such
 # settings upstream) so its questionnaire never prompts for SMTP config.
-_EMAIL_APPS = {"drive", "meet", "docs"}
+_EMAIL_APPS = {"drive", "meet", "docs", "transfers"}
 
 # Inverse of _ask_keycloak's "jdbc:postgresql://host:port/name" composition, so
 # the 3 separate DB prompts can be pre-filled from the single recovered
@@ -190,6 +176,14 @@ def _ask_secret(
     backend.env_secret(answers, key, component=component, value=value)
 
 
+def _warn_cleared(key: str) -> None:
+    """Warn that a now-blank optional key leaves a stale committed line behind."""
+    ui.warn(
+        f"{key} cleared — the merge never deletes committed lines: "
+        f"remove the {key}= line from vars.yml by hand."
+    )
+
+
 def _ask_optional(answers: dict, key: str, label: str) -> None:
     """Ask an optional text field.
 
@@ -200,10 +194,20 @@ def _ask_optional(answers: dict, key: str, label: str) -> None:
     if value:
         answers[key] = value
     elif answers.pop(key, None):
-        ui.warn(
-            f"{key} cleared — the merge never deletes committed lines: "
-            f"remove the {key}= line from vars.yml by hand."
-        )
+        _warn_cleared(key)
+
+
+def _warn_cleared_secret(backend: SecretBackend, key: str) -> None:
+    """Warn that a secret dropped from the answers leaves its lines behind."""
+    vault_hint = (
+        f" and the vault_{key.lower()} entry from vault.yml"
+        if backend.prompts_values()
+        else ""
+    )
+    ui.warn(
+        f"{key} cleared — the merge never deletes committed lines: "
+        f"remove the {key}= line from vars.yml{vault_hint} by hand."
+    )
 
 
 def _warn_cleared_password(backend: SecretBackend, key: str) -> None:
@@ -386,6 +390,89 @@ def _ask_email(answers: dict, backend: SecretBackend, component: str, app: str) 
     )
     _ask_optional(
         answers, "DJANGO_EMAIL_BRAND_NAME", "DJANGO_EMAIL_BRAND_NAME (optional)"
+    )
+
+
+def _ask_transfers_scanner(
+    answers: dict, backend: SecretBackend, component: str
+) -> None:
+    """Optional file-scanner (antivirus) integration for transfers.
+
+    When enabled, completed uploads are submitted to an external file-scanner
+    service (deployable with ``st-cli bootstrap file-scanner``, or any compatible
+    REST endpoint) for an async virus scan; the verdict returns via a webhook
+    and gates downloads. Declining leaves every key unset, so the app keeps its
+    ``SCAN_ENABLED=false`` default. The EdDSA signing key is a secret routed
+    through the backend; the rest is plain config (numeric knobs keep upstream
+    defaults, editable at the prompt).
+    """
+    # Same shape as _ask_email: once the block is committed the gate asks whether to
+    # review it, so declining reads as "leave it alone" rather than "turn it off" —
+    # which it cannot do, since envblob.merge never deletes the keys already there.
+    configured = _recall_bool(answers, "SCAN_ENABLED", False)
+    if not _confirm(
+        "the file-scanner integration is configured — review its settings?"
+        if configured
+        else "Configure the file-scanner (antivirus) integration?",
+        default=configured,
+    ):
+        return
+    answers["SCAN_ENABLED"] = "true"
+    answers["SCAN_SERVICE_URL"] = _ask(
+        "SCAN_SERVICE_URL (file-scanner REST base URL, no trailing slash)",
+        _recall(answers, "SCAN_SERVICE_URL"),
+        placeholder="http://10.0.0.20:50800",
+    )
+    # Each submission carries a Bearer JWT and a presigned S3 URL, so plain HTTP
+    # hands both to anyone on the path. The scanner serves uvicorn without TLS,
+    # so http:// stays allowed (private network) — but it is worth saying out loud.
+    if not answers["SCAN_SERVICE_URL"].lower().startswith("https://"):
+        ui.warn(
+            "SCAN_SERVICE_URL is not https: the scan-submit JWT and the "
+            "presigned S3 URL travel in cleartext. Keep this on a private "
+            "network, or put TLS in front of the scanner."
+        )
+    # Base URL of THIS backend as the scanner reaches it (webhook callback).
+    # The backend port is not published on the host — the scanner reaches it
+    # through the public frontend Caddy, which proxies /api to the backend.
+    answers["SCAN_WEBHOOK_BASE_URL"] = _ask(
+        "SCAN_WEBHOOK_BASE_URL (this backend, as reachable FROM the scanner "
+        "— usually the public transfers URL)",
+        _recall(answers, "SCAN_WEBHOOK_BASE_URL"),
+        placeholder="https://transfers.example.org",
+    )
+    # EdDSA (Ed25519) private key minting request-bound scan JWTs — a secret.
+    # Minted out-of-band (`st-cli generate-keypairs file-scanner <env>`), so it
+    # is prompted, never generated here.
+    _ask_secret(answers, backend, "SCAN_JWT_PRIVATE_KEY", component)
+    answers["SCAN_JWT_ISSUER"] = _ask(
+        "SCAN_JWT_ISSUER", _recall(answers, "SCAN_JWT_ISSUER", "transfers")
+    )
+    answers["SCAN_JWT_AUDIENCE"] = _ask(
+        "SCAN_JWT_AUDIENCE", _recall(answers, "SCAN_JWT_AUDIENCE", "file-scanner")
+    )
+    # Upstream defaults every knob below, so each stays optional: a blank answer
+    # writes no line and the app keeps its own value. Writing them at their
+    # default would pin our copy and mask a later change upstream (SCAN_JWT_TTL
+    # especially — a longer TTL widens the compromise window of a scan token).
+    _ask_optional(
+        answers, "SCAN_JWT_TTL", "SCAN_JWT_TTL (seconds, optional; upstream 300)"
+    )
+    _ask_optional(
+        answers,
+        "SCAN_MAX_FILE_SIZE",
+        "SCAN_MAX_FILE_SIZE (bytes, optional; upstream 2147483645 — bigger files "
+        "are flagged not-scanned, never claimed clean)",
+    )
+    _ask_optional(
+        answers,
+        "SCAN_PRESIGNED_URL_EXPIRY",
+        "SCAN_PRESIGNED_URL_EXPIRY (seconds, optional; upstream 3600)",
+    )
+    _ask_optional(
+        answers,
+        "SCAN_PENDING_REAP_MINUTES",
+        "SCAN_PENDING_REAP_MINUTES (optional; upstream 15)",
     )
 
 
@@ -768,6 +855,86 @@ def _ask_projects(meta, backend: SecretBackend, answers: dict | None = None) -> 
     return answers
 
 
+def _ask_file_scanner(
+    meta, backend: SecretBackend, answers: dict | None = None
+) -> dict:
+    """Collect the file-scanner core answers → the ``st_file_scanner_env`` blob.
+
+    file-scanner is not a Django app: a FastAPI API + dramatiq worker pair whose
+    compose stack bundles its own clamav daemon, so there is no DOMAIN/DB/S3/OIDC
+    questionnaire — callers (e.g. the transfers backend) reach it at
+    ``http://<host>:<st_file_scanner_port>``. The only external service is the
+    Redis the two containers use as their dramatiq broker
+    (``WORKER_BROKER_URL``); like the other apps' ``REDIS_URL`` it can embed a
+    password, so it routes through the secret backend whole. Callers are trusted
+    via their *public* Ed25519 keys (``JWT_ISSUER_KEYS``, plain config); the
+    secrets are the webhook signing seed (generated — 32 random bytes base64url
+    IS a valid Ed25519 seed) and the optional ``/metrics`` bearer token
+    (generated too, on by default: the API port is published on the host, and
+    the ``api_client`` metric label leaks caller identities to anyone who can
+    scrape it).
+    """
+    core_key = meta.core().key
+    seeded = bool(answers)
+    answers = dict(answers) if answers else {}
+    # The broker URL can embed a password (redis://user:password@host), so it
+    # routes through the secret backend whole, like the Django apps' REDIS_URL.
+    _ask_secret(
+        answers,
+        backend,
+        "WORKER_BROKER_URL",
+        core_key,
+        gen=lambda: _ask(
+            "WORKER_BROKER_URL (dramatiq broker, redis://[user:password@]host:port/db)",
+            placeholder="redis://redis.example.org:6379/0",
+        ),
+    )
+    answers["JWT_ISSUER_KEYS"] = _ask(
+        "JWT_ISSUER_KEYS (comma-separated iss:base64url-ed25519-pubkey pairs)",
+        _recall(answers, "JWT_ISSUER_KEYS"),
+        placeholder="transfers:8sicDCDZLZY5SPNNjr4aBwwh0Dyrqr7Ca9neK_nA6Eg",
+    )
+    _ask_secret(answers, backend, "JWT_SIGNING_KEY", core_key, gen=secrets.gen_token)
+    answers["JWT_SIGNING_KID"] = _ask(
+        "JWT_SIGNING_KID (webhook key label)",
+        _recall(answers, "JWT_SIGNING_KID", "v1"),
+    )
+    if _confirm(
+        "Protect /metrics with a bearer token (PROMETHEUS_API_KEY)?",
+        default="PROMETHEUS_API_KEY" in answers if seeded else True,
+    ):
+        _ask_secret(
+            answers, backend, "PROMETHEUS_API_KEY", core_key, gen=secrets.gen_token
+        )
+    elif answers.pop("PROMETHEUS_API_KEY", None):
+        # The committed line survives: envblob.merge never deletes one.
+        _warn_cleared_secret(backend, "PROMETHEUS_API_KEY")
+    allowed = _ask(
+        "ALLOWED_URL_HOSTS (optional allowlist of scannable URL hosts, e.g. your "
+        "S3 host; blank = any host may be submitted)",
+        _recall(answers, "ALLOWED_URL_HOSTS"),
+        required=False,
+    )
+    if allowed:
+        answers["ALLOWED_URL_HOSTS"] = allowed
+    elif answers.pop("ALLOWED_URL_HOSTS", None):
+        _warn_cleared("ALLOWED_URL_HOSTS")
+    # Not a copy of the list above, and never pre-filled from it: the SSRF guard
+    # also covers the webhook, so a private SCAN_WEBHOOK_BASE_URL host belongs
+    # here or its result is dropped — and a bypass is typed, not defaulted.
+    ssrf = _ask(
+        "SSRF_ALLOWED_HOSTS (optional: hosts allowed to resolve to a private IP — "
+        "an internal S3 endpoint, and the caller host your webhooks go to)",
+        _recall(answers, "SSRF_ALLOWED_HOSTS"),
+        required=False,
+    )
+    if ssrf:
+        answers["SSRF_ALLOWED_HOSTS"] = ssrf
+    elif answers.pop("SSRF_ALLOWED_HOSTS", None):
+        _warn_cleared("SSRF_ALLOWED_HOSTS")
+    return answers
+
+
 def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict:
     """Collect the core component answers (domain, db, redis, s3, secrets, OIDC).
 
@@ -923,6 +1090,17 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
                 answers.setdefault("COLLABORA_DOMAIN", m.group("domain"))
         elif app == "docs":
             answers["MEDIA_BASE_URL"] = "https://{{ st_docs_public_host }}"
+        elif app == "transfers":
+            # Uploads and downloads use presigned URLs straight to S3, so the
+            # frontend Caddy's CSP must allow the S3 origin — derived from the
+            # endpoint above (single source of truth), Jinja-safe like the
+            # CADDY_S3_* pair.
+            protocol, host = caddy_s3_parts(endpoint)
+            answers["AWS_S3_SIGNATURE_VERSION"] = "s3v4"
+            answers["TRANSFERS_FRONTEND_S3_ORIGIN"] = f"{protocol}://{host}"
+            # transfers sits behind the frontend Caddy, which sets
+            # X-Forwarded-For; enable request-IP logging from that proxy header.
+            answers["USE_X_FORWARDED_FOR"] = "true"
 
     if app == "docs":
         # derived answers, never prompted; single source of truth via
@@ -981,6 +1159,14 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             placeholder="mail.example.org",
         )
 
+    if app == "transfers":
+        # Optional Drive integration (file picker). Left unset → integration off.
+        _ask_optional(
+            answers,
+            "DRIVE_BASE_URL",
+            "DRIVE_BASE_URL — enable the Drive file picker (optional)",
+        )
+
     _ask_oidc(answers, backend, core_key)
     _ask_email(answers, backend, core_key, app)
     if app == "docs" and answers.get("DJANGO_EMAIL_HOST"):
@@ -988,6 +1174,8 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             "https://{{ st_docs_public_host }}/assets/logo-suite-numerique.png"
         )
         answers["DJANGO_EMAIL_URL_APP"] = "https://{{ st_docs_public_host }}"
+    if app == "transfers":
+        _ask_transfers_scanner(answers, backend, core_key)
     if app == "messages":
         _ask_messages_outbound(answers, backend, core_key)
     if app == "meet":
@@ -2157,7 +2345,8 @@ def _print_summary(
     # narrow the listed units + the "Next" hint to that component.
     scoped = component is not None and component != core_key
     if not scoped:
-        ui.info(f"  domain: {answers.get('DOMAIN', '?')}")
+        if answers.get("DOMAIN"):  # file-scanner has no public domain — skip the line
+            ui.info(f"  domain: {answers['DOMAIN']}")
         if "OIDC_PROVIDER" in answers:  # keycloak (an IdP itself) has no OIDC provider
             ui.info(f"  OIDC provider: {answers['OIDC_PROVIDER']}")
     shown = [u for u in units if u.component == component] if scoped else units
@@ -2206,17 +2395,11 @@ def _print_bootstrap_intro(meta) -> None:
             f"  {meta.arch_docs_url}",
             title="Bootstrap",
         )
-    # Only list the infrastructure THIS app actually needs (apps/<app>.yml
-    # `requires`): telling a projects/keycloak operator to provision a Redis they
-    # never use is noise. An app declaring nothing falls back to the full list.
-    keys = meta.requires or list(_REQUIREMENT_LINES)
-    bullets = "\n".join(
-        f"  • {_REQUIREMENT_LINES[k]}" for k in keys if k in _REQUIREMENT_LINES
+    # App-tailored checklist from the manifest
+    body = "Make sure you've prepared:\n" + "\n".join(
+        f"  • {line}" for line in meta.requirements
     )
-    ui.note(
-        f"Make sure you've prepared:\n  • [bold]IP[/bold] or hostname of the VM(s)\n{bullets}",
-        title="Requirements",
-    )
+    ui.note(body, title="Requirements")
     _confirm_ready("Do you have all of the above ready to continue?")
 
 
@@ -2529,12 +2712,14 @@ def bootstrap(
                     allow_empty=True,
                     default=worker_hosts_default,
                 )
-            # keycloak and projects are not Django apps; each takes its own
-            # (raw-env) questionnaire instead of the shared Django core one.
+            # keycloak / projects / file-scanner are not Django apps — each takes
+            # its own (raw-env) questionnaire instead of the shared core one.
             if app == "keycloak":
                 answers = _ask_keycloak(meta, backend, seed)
             elif app == "projects":
                 answers = _ask_projects(meta, backend, seed)
+            elif app == "file-scanner":
+                answers = _ask_file_scanner(meta, backend, seed)
             else:
                 answers = _ask_core(meta, backend, seed)
             # a fresh run has no core hosts file on disk yet, so stash the hosts
