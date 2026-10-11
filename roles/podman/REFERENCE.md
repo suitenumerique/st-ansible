@@ -29,6 +29,9 @@ Installs and configures the podman rootless base for La Suite Territoriale appli
 | st_podman_gid | A custom GID for st_podman_group. | int | no |  |
 | st_podman_containers_config_template | Local path to the template for the containers.conf configuration file. This file will be put under st_podman_user homedir. | str | no | containers.conf.j2 |
 | st_podman_tz | Sets the default timezone for all containers, in the default containers.conf template. | str | no | UTC |
+| st_podman_compose_version | The Debian package version of podman-compose that the role installs. The role fetches the package from snapshot.debian.org, which keeps every version that entered the Debian archive. Versions 1.5.0 and later exec a `CMD` healthcheck without `/bin/sh`, which images without a shell need. Trixie ships 1.3.0. | str | no | 1.6.0-1 |
+| st_podman_compose_deb_url | The URL of a podman-compose Debian package to install instead of the snapshot.debian.org file. Set it with `st_podman_compose_deb_checksum` when the hosts have no access to snapshot.debian.org. The package must have the version `st_podman_compose_version`. | str | no |  |
+| st_podman_compose_deb_checksum | The checksum of the package at `st_podman_compose_deb_url`, in the `get_url` format, for example `sha256:<hex>`. Required when `st_podman_compose_deb_url` is set. | str | no |  |
 | st_podman_registries | List of container registries to connect to podman user onto. | list of 'dict' | no |  |
 | st_podman_registries_config_template | The ansible template for registries.conf. See https://github.com/containers/image/blob/main/docs/containers-registries.conf.5.md | str | no |  |
 | st_podman_application_name | The name of the application to deploy. This is used mainly for the systemd unit filename and the default application_dir. | str | no |  |

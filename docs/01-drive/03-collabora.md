@@ -111,9 +111,11 @@ same public HTTPS URLs the browser uses, and TLS validates normally.
          - "{{ st_drive_public_host }}:host-gateway"   # <-- Drive's public domain
    ```
 
-   Do not add a `healthcheck` to the collabora service. The image has no shell and
-   podman-compose 1.3.0 wraps every compose test in `/bin/sh -c`. Podman applies the
-   `HEALTHCHECK` of the image (`coolwsd --probe`) when the compose file sets none.
+   Do not add a `CMD-SHELL` healthcheck to the collabora service: the image has no shell.
+   Use a `CMD` list. The podman role installs podman-compose 1.5.0 or later, which execs
+   the list without `/bin/sh`. With podman-compose 1.3.0 the list also runs through
+   `/bin/sh` and the healthcheck fails. Podman applies the `HEALTHCHECK` of the image
+   (`coolwsd --probe`) when the compose file sets none.
 
 2. Point the role at your overrides and keep the WOPI URLs public:
 

@@ -1,12 +1,96 @@
 ---
-- name: "Install podman, docker-cli and podman-compose."
+- name: "Install podman, docker-cli, acl and the podman-compose dependencies."
   ansible.builtin.apt:
     name:
       - podman
-      - podman-compose
       - docker-cli
       - acl
+      - python3-dotenv
+      - python3-yaml
     update_cache: true
+
+- name: "Read the installed package versions."
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: "Compare the installed podman-compose version with {{ st_podman_compose_version }}."
+  when: "'podman-compose' in ansible_facts.packages"
+  check_mode: false
+  ansible.builtin.command:
+    argv:
+      - dpkg
+      - --compare-versions
+      - "{{ ansible_facts.packages['podman-compose'][0].version }}"
+      - lt
+      - "{{ st_podman_compose_version }}"
+  register: st_podman_compose_outdated
+  changed_when: false
+  # dpkg returns 1 when the installed version is not older.
+  failed_when: st_podman_compose_outdated.rc > 1
+
+- name: "Install podman-compose {{ st_podman_compose_version }}."
+  when: >-
+    'podman-compose' not in ansible_facts.packages or
+    st_podman_compose_outdated.rc == 0
+  vars:
+    st_podman_compose_deb_path: "/var/cache/apt/archives/podman-compose_{{ st_podman_compose_version }}_all.deb"
+  block:
+    # The download tasks run in check mode too, because the apt task reads the file in check mode.
+    - name: "Resolve the podman-compose package hash on snapshot.debian.org."
+      when: st_podman_compose_deb_url | default('', true) | length == 0
+      check_mode: false
+      ansible.builtin.uri:
+        url: "https://snapshot.debian.org/mr/binary/podman-compose/{{ st_podman_compose_version }}/binfiles"
+      register: st_podman_compose_binfiles
+      until: st_podman_compose_binfiles is succeeded
+      retries: 3
+      delay: 5
+
+    - name: "Download the podman-compose Debian package from snapshot.debian.org."
+      when: st_podman_compose_deb_url | default('', true) | length == 0
+      check_mode: false
+      vars:
+        st_podman_compose_hash: >-
+          {{ st_podman_compose_binfiles.json.result
+             | selectattr('architecture', 'equalto', 'all')
+             | map(attribute='hash') | first }}
+      ansible.builtin.get_url:
+        url: "https://snapshot.debian.org/file/{{ st_podman_compose_hash }}"
+        dest: "{{ st_podman_compose_deb_path }}"
+        checksum: "sha1:{{ st_podman_compose_hash }}"
+        mode: "0644"
+      register: st_podman_compose_download
+      until: st_podman_compose_download is succeeded
+      retries: 3
+      delay: 5
+
+    - name: "Assert st_podman_compose_deb_checksum is set when st_podman_compose_deb_url is set."
+      when: st_podman_compose_deb_url | default('', true) | length > 0
+      ansible.builtin.assert:
+        that:
+          - st_podman_compose_deb_checksum | default('', true) | length > 0
+        fail_msg: "st_podman_compose_deb_checksum must be set when st_podman_compose_deb_url is set."
+        quiet: true
+
+    - name: "Download the podman-compose Debian package from {{ st_podman_compose_deb_url }}."
+      when: st_podman_compose_deb_url | default('', true) | length > 0
+      check_mode: false
+      ansible.builtin.get_url:
+        url: "{{ st_podman_compose_deb_url }}"
+        dest: "{{ st_podman_compose_deb_path }}"
+        checksum: "{{ st_podman_compose_deb_checksum }}"
+        mode: "0644"
+
+    # dpkg does not wait for the frontend lock that apt-daily or unattended-upgrades can hold.
+    - name: "Install the podman-compose Debian package."
+      ansible.builtin.apt:
+        deb: "{{ st_podman_compose_deb_path }}"
+      register: st_podman_compose_install
+      until: >-
+        st_podman_compose_install is succeeded or
+        'lock' not in st_podman_compose_install.stderr | default('')
+      retries: 30
+      delay: 10
 
 - name: "Allow unprivileged ports binding."
   when: st_podman_unprivileged_port_start is defined

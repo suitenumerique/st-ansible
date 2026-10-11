@@ -15,12 +15,21 @@ them directly. However, you can use the podman role standalone to deploy custom 
 
 ### `main` (base setup)
 
-1. **Installs** `podman`, `podman-compose`, and `docker-cli` via apt
+1. **Installs** `podman` and `docker-cli` via apt, and `podman-compose` from a pinned Debian
+   package (`st_podman_compose_version`) downloaded from snapshot.debian.org
 2. **Creates** a Unix user with home directory and shell
 3. **Configures** `containers.conf` (timezone, storage driver)
 4. **Enables** lingering so systemd user services survive logout
 5. **Starts** the Podman user socket
 6. **Logs in** to private container registries (if configured)
+
+> [!NOTE]
+> Trixie ships podman-compose 1.3.0, which runs every compose healthcheck through `/bin/sh -c`.
+> Version 1.5.0 and later exec a `CMD` list healthcheck directly, so an image without a shell can
+> have a healthcheck. The role resolves `st_podman_compose_version` to a file on
+> snapshot.debian.org, so an upgrade changes only that variable; Renovate proposes the change. The
+> hosts must have HTTPS access to snapshot.debian.org, or `st_podman_compose_deb_url` and
+> `st_podman_compose_deb_checksum` must point to a copy of the package.
 
 ### `application` (deploy a compose app)
 

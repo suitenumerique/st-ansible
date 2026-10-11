@@ -9,7 +9,7 @@ services:
     env_file: ./env
     command: python worker.py --concurrency={{ ansible_processor_nproc }}
     healthcheck:
-      test: ["CMD-SHELL", "celery -A messages.celery_app inspect ping"]
+      test: ["CMD", "celery", "-A", "messages.celery_app", "inspect", "ping"]
       interval: 1m
       timeout: 10s
       start_interval: 5s

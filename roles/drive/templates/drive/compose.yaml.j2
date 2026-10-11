@@ -37,7 +37,7 @@ services:
     image: "{{ st_drive_backend_image }}:{{ st_drive_tag }}"
     env_file: ./backend_env
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "--header", "'Host: {{ st_drive_public_host }}'", "http://127.0.0.1:8000/__heartbeat__"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "--header", "Host: {{ st_drive_public_host }}", "http://127.0.0.1:8000/__heartbeat__"]
       interval: 30s
       timeout: 15s
       retries: 3

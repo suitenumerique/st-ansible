@@ -21,6 +21,29 @@
         fail_msg: "podman-compose package is not installed."
         success_msg: "podman-compose package is installed."
 
+    - name: "Read the podman role defaults"
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../../roles/podman/defaults/main.yml"
+
+    - name: "Compare the installed podman-compose version with the pinned version"
+      ansible.builtin.command:
+        argv:
+          - dpkg
+          - --compare-versions
+          - "{{ ansible_facts.packages['podman-compose'][0].version }}"
+          - ge
+          - "{{ st_podman_compose_version }}"
+      register: podman_compose_version_check
+      changed_when: false
+      failed_when: podman_compose_version_check.rc > 1
+
+    - name: "Assert podman-compose has the pinned version or a newer one"
+      ansible.builtin.assert:
+        that:
+          - podman_compose_version_check.rc == 0
+        fail_msg: "podman-compose version is {{ ansible_facts.packages['podman-compose'][0].version }}, older than {{ st_podman_compose_version }}."
+        success_msg: "podman-compose version is {{ ansible_facts.packages['podman-compose'][0].version }}."
+
     - name: "Verify testuser exists"
       ansible.builtin.user:
         name: "testuser"

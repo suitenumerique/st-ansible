@@ -43,6 +43,20 @@
       matchPackageNames: ["docker.io/valkey/valkey"],
       groupName: "valkey",
     },
+    // podman-compose is a pinned Debian package (roles/podman). Follow the
+    // version in Debian testing; the role fetches the file from
+    // snapshot.debian.org, so every version stays available there. The
+    // `deb` datasource has no release timestamps, and the strict filter above
+    // would hold such a release forever, so the age gate is off for it; the
+    // migration delay into testing and the molecule podman scenario on trixie
+    // are the gates instead. (The binary-amd64 index also lists
+    // architecture-independent packages, so `binaryArch=amd64` works for an
+    // `all` package.)
+    {
+      matchDatasources: ["deb"],
+      registryUrls: ["https://deb.debian.org/debian?suite=testing&components=main&binaryArch=amd64"],
+      minimumReleaseAge: null,
+    },
   ],
 
   // The role image tags / restic version live in each role's generated

@@ -9,6 +9,16 @@ st_podman_home: /opt/{{ st_podman_user }}
 st_podman_containers_config_template: containers.conf.j2
 # Sets the default timezone for all containers, in the default containers.conf template.
 st_podman_tz: UTC
+# The Debian package version of podman-compose that the role installs.
+# The role fetches the package from snapshot.debian.org, which keeps every version that entered the Debian archive.
+# Versions 1.5.0 and later exec a `CMD` healthcheck without `/bin/sh`, which images without a shell need. Trixie ships 1.3.0.
+st_podman_compose_version: 1.6.0-1
+# The URL of a podman-compose Debian package to install instead of the snapshot.debian.org file.
+# Set it with `st_podman_compose_deb_checksum` when the hosts have no access to snapshot.debian.org. The package must have the version `st_podman_compose_version`.
+st_podman_compose_deb_url: ''
+# The checksum of the package at `st_podman_compose_deb_url`, in the `get_url` format, for example `sha256:<hex>`.
+# Required when `st_podman_compose_deb_url` is set.
+st_podman_compose_deb_checksum: ''
 # The name of the application to deploy.
 # This is used mainly for the systemd unit filename and the default application_dir.
 st_podman_application_name: ''

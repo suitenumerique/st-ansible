@@ -176,6 +176,14 @@ worker process, which serves no HTTP — with the default stack, expect the asyn
 counters to be absent from scrapes (see the upstream
 [monitoring notes](https://github.com/suitenumerique/file-scanner/blob/main/docs/deployment.md#monitoring)).
 
+Serving no HTTP, the worker is probed on its broker instead: dramatiq exposes no worker
+ping, so the compose healthcheck only answers "the broker replies from inside the worker
+container". That is enough for the failure which is otherwise invisible — an unreachable
+`WORKER_BROKER_URL` leaves the worker running and silent, async scans never complete, and
+transfers waits out its `SCAN_WAIT_*` budget. A wedged consumer on a reachable broker is
+not covered. The probe needs podman-compose 1.5.0 or later (the podman role installs
+1.6.0): 1.3.0 runs it through `/bin/sh -c`, which this distroless image has not.
+
 The upstream queue dashboard is **disabled by default** (no
 `WORKER_DASHBOARD_PASSWORD` set — the route is not even mounted). It exposes
 destructive queue operations and scan-job arguments; read the upstream

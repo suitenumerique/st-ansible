@@ -34,6 +34,29 @@ argument_specs:
         type: "str"
         description: "Sets the default timezone for all containers, in the default containers.conf template."
         default: "UTC"
+      st_podman_compose_version:
+        type: "str"
+        description:
+          - "The Debian package version of podman-compose that the role installs."
+          - "The role fetches the package from snapshot.debian.org, which keeps every version that entered the Debian archive."
+          - "Versions 1.5.0 and later exec a `CMD` healthcheck without `/bin/sh`, which images without a shell need. Trixie ships 1.3.0."
+        # The role turns the version into a file hash with
+        # https://snapshot.debian.org/mr/binary/podman-compose/<version>/binfiles,
+        # then downloads https://snapshot.debian.org/file/<hash>.
+        # renovate: datasource=deb depName=podman-compose versioning=deb
+        default: "1.6.0-1"
+      st_podman_compose_deb_url:
+        type: "str"
+        description:
+          - "The URL of a podman-compose Debian package to install instead of the snapshot.debian.org file."
+          - "Set it with `st_podman_compose_deb_checksum` when the hosts have no access to snapshot.debian.org. The package must have the version `st_podman_compose_version`."
+        default: ""
+      st_podman_compose_deb_checksum:
+        type: "str"
+        description:
+          - "The checksum of the package at `st_podman_compose_deb_url`, in the `get_url` format, for example `sha256:<hex>`."
+          - "Required when `st_podman_compose_deb_url` is set."
+        default: ""
       st_podman_registries:
         type: "list"
         elements: "dict"
