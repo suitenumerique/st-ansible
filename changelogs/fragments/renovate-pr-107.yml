@@ -1,0 +1,2 @@
+minor_changes:
+  - "Update dependency cryptography to v50.0.2"
