@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM python:3.13-alpine
+FROM python:3.14-alpine
 
 # shadow (groupadd/useradd) + setpriv (util-linux): the entrypoint uses them to
 # align with the bind-mount owner and drop privileges to it.

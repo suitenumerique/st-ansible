@@ -254,7 +254,7 @@ ruff check --fix . && ruff format . && pytest -q -n 6
 ```
 
 CI (`.github/workflows/cli-tests.yml`) runs `ruff check`, `ruff format
---check` and `pytest` on Python 3.13. Every change must leave the tree
+--check` and `pytest` on Python 3.14. Every change must leave the tree
 ruff-clean. `pyproject.toml` commits the rule set under `[tool.ruff.lint]`.
 Tests are offline. `cryptography` is a test-only dependency: the differential
 Ed25519 check in `test_keypairs.py` imports it hard, never a silent skip. Each

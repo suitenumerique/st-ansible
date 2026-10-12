@@ -17,7 +17,7 @@ pytest -q                           # run the test suite
 ## Linting & formatting (ruff)
 
 CI (`.github/workflows/cli-tests.yml`, scoped to `cli/**`) runs `ruff check`,
-`ruff format --check`, and `pytest` on Python 3.13. All three must pass.
+`ruff format --check`, and `pytest` on Python 3.14. All three must pass.
 The ruff rule set is committed in `pyproject.toml` under `[tool.ruff.lint]`.
 Pin `ruff` to `0.15.*` to match CI. Run all three from `cli/` before you finish
 a change:
