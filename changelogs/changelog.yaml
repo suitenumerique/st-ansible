@@ -269,3 +269,178 @@ releases:
     - renovate-pr-90.yml
     - renovate-pr-91.yml
     release_date: '2026-09-19'
+  0.5.0:
+    changes:
+      breaking_changes:
+      - 'keycloak: the default compose template sets ``PORT`` instead of ``KC_HTTP_PORT``,
+        because the ``messages-keycloak`` image now runs Caddy in front of Keycloak
+        and Caddy owns the public port. The role requires image tag 0.10.0 or later
+        (messages PR #793), and the default tag is now 0.10.0. A custom ``st_keycloak_compose_template``
+        must set ``PORT``, ``KC_HTTP_PORT`` and ``KC_HTTP_MANAGEMENT_PORT`` too.'
+      deprecated_features:
+      - 'cli: ``st-cli bootstrap`` no longer offers ``mta-in`` and ``-c mta-in`` is
+        not a valid target. Existing ``mta-in`` units still work with ``deploy``,
+        ``remote``, ``generate`` and ``upgrade``.'
+      - 'messages: the ``mta-in`` (Postfix) component and its ``st_messages_mta_in_*``
+        variables are deprecated in favour of ``pymta``. The role prints a warning
+        when ``st_messages_mta_in_enabled`` is true. See ``docs/04-messages/06-pymta.md``
+        for the migration steps.'
+      minor_changes:
+      - Update dependency ansible-core to v2.21.5
+      - Update dependency cryptography to v50.0.2
+      - Update dependency molecule to v26.9.0
+      - Update dependency pytest-mock to v3.16.0
+      - Update dependency python to 3.14
+      - Update dependency suitenumerique/meet to v1.33.0
+      - Update docker.io/livekit/livekit-server Docker tag to v1.13.7
+      - Update docker.io/rspamd/rspamd Docker tag to 4.2.0
+      - Update docker.io/valkey/valkey Docker tag to v9.1.2
+      - Update ghcr.io/suitenumerique/messages Docker tag to 0.10.0
+      - 'cli: ``st-cli bootstrap messages`` bootstraps ``pymta`` instead of ``mta-in``.
+        The pymta env blob asks for ``PYMTA_SMTP_HOSTNAME``.'
+      - 'cli: the keycloak env template no longer sets ``KC_HTTP_ENABLED`` and ``KC_PROXY_HEADERS``,
+        because the image sets them. The rendered env requires image tag 0.10.0 or
+        later.'
+      - 'docs: add ``docs/04-messages/06-pymta.md``. The full-high-availability example
+        deploys pymta (``playbook_pymta.yml``) instead of mta-in.'
+      - 'drive: the backend healthcheck passes the ``Host`` header without inner quotes.
+        podman-compose 1.5.0 and later exec the ``CMD`` list without a shell, so the
+        quotes reached ``wget`` and the probe failed.'
+      - 'file-scanner: the worker gets a healthcheck that pings the dramatiq broker
+        (``redis.from_url(config.get_settings().worker_broker_url).ping()``), run
+        as a ``CMD`` list in the distroless image. Until now the worker had no probe
+        at all, so a worker left running and silent on an unreachable ``WORKER_BROKER_URL``
+        counted as healthy and the async scans never completed. dramatiq exposes no
+        worker ping, so this checks the broker connection, not the consumer. It requires
+        podman-compose 1.5.0 or later; on a host that keeps 1.3.0 the probe is wrapped
+        in ``/bin/sh -c``, which the image has no shell for, and the unit does not
+        start.'
+      - file_scanner role - add a ``file_scanner`` role deploying the file-scanner
+        antivirus service (suitenumerique/file-scanner) - a FastAPI REST API and a
+        dramatiq worker with a bundled ClamAV daemon, all in one compose unit on the
+        rootless podman base. Unlike the upstream ``docker-compose.yml`` the role
+        bundles no Redis - the dramatiq broker is an external Redis 7+ prompted at
+        bootstrap (``WORKER_BROKER_URL``, routed through the secret backend since
+        it can embed a password), consistent with every other app of the collection.
+        No PostgreSQL, S3 or IdP needed; used by Transfers to scan completed uploads.
+        The worker's download scratch is a host directory (``downloads/`` under the
+        application directory, so the space is accounted for and can be put on its
+        own filesystem) and its concurrency defaults to 1 process x 4 threads against
+        upstream's 2 x 8 (``st_file_scanner_worker_processes`` / ``st_file_scanner_worker_threads``)
+        because every in-flight job holds a full copy of the file it scans, and clamd
+        spools the same bytes again, so the default bounds a scan burst at ~17 GB
+        of transient disk instead of ~64 GB.
+      - 'file_scanner: optional second malware engine - ``st_file_scanner_exav_enabled``
+        adds an exav daemon (``ghcr.io/sylvinus/exav``) to the compose unit, on the
+        clamd protocol like clamav. Deploying it changes no verdict by itself: the
+        application reaches it once ``EXAV_HOSTS`` and ``DEFAULT_SCANNERS`` name it
+        in ``st_file_scanner_env``. It ships no signature database, so point ``EXAV_DB_URL``
+        at a prebuilt ``.exavdb`` (loads in seconds); without it the daemon waits
+        for signatures and stays unhealthy, which is why the API and the worker are
+        ordered after exav but never gated on its health. Compiling the signatures
+        the bundled clamav keeps fresh is the other path, at ~3.6 GB of RAM on every
+        start and a raised ``st_file_scanner_timeout``. The clamav defaults also gain
+        ``MaxScanTime`` and ``AlertExceedsMax``, without which clamd answers OK on
+        a scan it could not finish and the file is reported clean unscanned.'
+      - "file_scanner: the clamav container is now configurable through a new ``st_file_scanner_clamav_env``
+        blob, empty by default and falling back to the role's built-in tuning (the
+        image maps ``CLAMD_CONF_<Option>``/``FRESHCLAM_CONF_<Option>`` lines onto
+        clamd.conf/freshclam.conf). The default raises clamd's size caps (``StreamMaxLength``/``MaxFileSize``/``MaxScanSize``
+        to 2200M) above the scanner's 2 GiB ``MAX_URL_SIZE`` \u2014 with clamd's stock
+        limits a big file either failed mid-INSTREAM on every retry or, above MaxFileSize/MaxScanSize,
+        was skipped and reported clean without being scanned."
+      - 'keycloak: add ``st_keycloak_http_port`` (default ``50201``) and ``st_keycloak_management_port``
+        (default ``50202``). The default compose template sets ``KC_HTTP_PORT`` and
+        ``KC_HTTP_MANAGEMENT_PORT`` from them, so with ``network_mode: host`` Keycloak
+        listens on ``127.0.0.1:50201`` behind Caddy and the management interface (``/health``,
+        ``/metrics``) listens on ``50202`` instead of ``9000``, inside the ``502xx``
+        block of the collection port scheme. Update firewall rules and Prometheus
+        scrape targets that used port ``9000``. The compose ``environment`` block
+        sets ``PORT``, ``KC_HTTP_PORT`` and ``KC_HTTP_MANAGEMENT_PORT`` and overrides
+        these keys in ``st_keycloak_env``; use the role variables instead.'
+      - 'keycloak: document the ``KEYCLOAK_ADMIN_IP_ALLOWLIST`` and ``KEYCLOAK_TRUSTED_PROXIES``
+        variables of the image, and the host ports the image binds with ``network_mode:
+        host``.'
+      - 'messages: add the ``pymta`` component (``ghcr.io/suitenumerique/messages-mta-in-py``),
+        a pure-Python inbound MTA that replaces mta-in. It runs with ``network_mode:
+        host``. The role sets ``PYMTA_SMTP_BIND_PORT`` from ``st_messages_pymta_port``
+        (default ``50425``), binds the metrics endpoint to ``127.0.0.1`` on ``st_messages_pymta_metrics_port``
+        (default ``50426``), and enables STARTTLS from ``st_messages_pymta_starttls_certificate_path``.'
+      - 'messages: the workers compose template runs the Celery ping healthcheck as
+        a ``CMD`` list instead of ``CMD-SHELL``, so it works with the distroless backend
+        image that has no shell. With podman-compose 1.3.0 the list still runs through
+        ``/bin/sh``, so the behavior on a host that keeps 1.3.0 is unchanged.'
+      - 'podman role: the application start script now fails when ``podman-compose
+        up -d`` created fewer containers than the compose file declares. It can exit
+        0 having skipped a service whose ``depends_on`` it gave up waiting for, and
+        the unit then reported every container healthy with half the stack missing
+        - a file-scanner whose API and worker were never created while systemd showed
+        the service as running.'
+      - 'podman: the role installs podman-compose ``1.6.0-1``, resolved on snapshot.debian.org
+        from ``st_podman_compose_version``, instead of the trixie package 1.3.0. The
+        role installs a package from an operator URL when you set ``st_podman_compose_deb_url``
+        and ``st_podman_compose_deb_checksum``. The checksum is required. Version
+        1.3.0 runs every compose healthcheck through ``/bin/sh -c``; 1.5.0 and later
+        exec a ``CMD`` list directly, so images without a shell can have a healthcheck.
+        The install step does not restart any unit; a container gets the new form
+        when its unit restarts. A host that already has a newer version keeps it.'
+      - st-cli - add ``file-scanner`` app support to bootstrap with its own non-Django
+        questionnaire (external dramatiq broker URL, caller public keys in ``JWT_ISSUER_KEYS``,
+        generated Ed25519 webhook signing seed and /metrics bearer token kept in the
+        vault, optional ``ALLOWED_URL_HOSTS`` allowlist and the separate ``SSRF_ALLOWED_HOSTS``
+        list of hosts allowed to resolve to a private address, which must name the
+        webhook callback host as well as any internal object store, because one SSRF-guarded
+        client serves both legs of an async job). Inventory group names are dash-normalised
+        (``[file_scanner]``, alias ``file_scanner1``) so ansible stops warning about
+        invalid group characters. The pre-bootstrap Requirements box is now app-tailored
+        via a ``requirements`` list in each app manifest (file-scanner shows only
+        its hosts, broker and caller keys, keycloak no Redis/S3/OIDC ones, messages
+        adds OpenSearch and MX/SPF/DKIM DNS prep, meet the LiveKit/TURN domains);
+        the list is mandatory per app manifest, replacing the old generic one.
+      - "st-cli - add ``transfers`` app support (backend core + workers) to bootstrap,
+        reusing the django-lasuite base env with transfers-specific overrides (``transfers.settings``
+        module, frontend Caddy S3 origin, ``USE_X_FORWARDED_FOR``, optional Drive
+        file-picker integration, and an optional file-scanner / antivirus integration
+        \u2014 the ``SCAN_*`` keys with the EdDSA signing key kept in the vault and
+        the tuning knobs left to their upstream defaults unless answered)."
+      - st-cli - new ``generate-keypairs APP ENV`` command minting Ed25519 caller
+        keypairs for the file-scanner JWT auth (pure-python RFC 8032 derivation, no
+        crypto dependency) - asks an issuer name per keypair and prints a wiring summary
+        with the ``JWT_ISSUER_KEYS`` value (merged with the bootstrapped unit's existing
+        keys) and each caller's private key, shown once and never stored. Its ``-s/--signing-key``
+        flag mints file-scanner's own webhook signing seed (``JWT_SIGNING_KEY``) instead,
+        printing the seed and the public half advertised at ``/.well-known/jwks.json``
+        - for the ``hashi_vault`` backend, which generates nothing, and for key rotation
+        (``bootstrap`` generates that seed itself on the ansible-vault backend).
+      - transfers role - add a ``transfers`` role deploying the Transfers application
+        (suitenumerique/transfers) - a Django backend, a Caddy-served React frontend
+        and an optional Celery worker (with the beat scheduler embedded) - on the
+        rootless podman base, with S3-backed uploads and OIDC login.
+      - 'transfers: the worker gets the Celery ping healthcheck as a ``CMD`` list,
+        replacing ``healthcheck: disable: true``. The probe was disabled because podman-compose
+        1.3.0 wraps even a ``CMD`` list in ``/bin/sh -c``, which the distroless backend
+        image has no shell for; 1.5.0 and later exec it directly. The ping is a broadcast
+        on the broker, so with several hosts on one Redis another host''s worker can
+        answer for this one.'
+      release_summary: 'Added file-scanner and transfers. Added IP filtering on Keycloak
+        admin path
+
+        and Django Admin paths. Bump podman compose to 1.6.0. Deprecate messages mta-in,
+
+        added messages pymta.
+
+        '
+    fragments:
+    - dependencies.yml
+    - deps-messages.yml
+    - file-scanner-clamav-env.yml
+    - file-scanner.yml
+    - keycloak-caddy.yml
+    - podman-compose.yml
+    - pymta.yml
+    - release_summary.yml
+    - renovate-pr-102.yml
+    - renovate-pr-107.yml
+    - renovate-pr-98.yml
+    - transfers.yml
+    release_date: '2026-10-12'

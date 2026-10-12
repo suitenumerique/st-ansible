@@ -1,5 +1,0 @@
-minor_changes:
-  - "Update dependency molecule to v26.9.0"
-  - "Update dependency pytest-mock to v3.16.0"
-  - "Update dependency ansible-core to v2.21.5"
-  - "Update dependency python to 3.14"
