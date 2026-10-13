@@ -649,11 +649,13 @@ def test_socks_proxy_replay_never_rotates_or_clobbers(repo, monkeypatch):
 
 
 def test_socks_proxy_standalone_mint_then_full_replay_repairs_core_vault(
-    repo, monkeypatch
+    repo, monkeypatch, tmp_path
 ):
     """A full replay after a standalone socks-proxy mint repairs the core vault's
     vault_proxy_users ref."""
     seed_creds(repo)
+    # a shipped socks-proxy flag forces a replay and removes the Modify select
+    set_flags(monkeypatch, tmp_path, [])
     sq1 = script_questionary(
         monkeypatch,
         messages_first_run_script()
@@ -696,11 +698,15 @@ def test_socks_proxy_standalone_mint_then_full_replay_repairs_core_vault(
             ("select", "Outbound mail mode", "direct"),
             ("select", "Bootstrap pymta now?", "No — bootstrap later"),
             ("select", "Bootstrap mpa now?", "No — bootstrap later"),
+            (
+                "select",
+                "Bootstrap socks-proxy now?",
+                "Modify (replay the questionnaire)",
+            ),
         ],
     )
     bootstrap.bootstrap("messages", "prod", replay=bootstrap.ReplayAction.MODIFY)
     assert not sq3._scripts, f"unconsumed scripts: {sq3._scripts}"
-    assert not [m for m, _ in sq3.select_calls if "Bootstrap socks-proxy now?" in m]
 
     core_vault_after = vault.decrypt_to_dict(core_vault_path)
     provider_vault_after = vault.decrypt_to_dict(
