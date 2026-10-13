@@ -47,6 +47,7 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 | st_drive_workers_env_template | Local path to the custom template to use for drive workers env file. | str | no | workers/env.j2 |
 | st_drive_workers_env | Content of the default workers_env_template, not used if st_drive_workers_env_template is defined. | str | no | {{ st_drive_backend_env }} |
 | st_drive_workers_rollback_enabled | Whether or not to trigger the rollback tasks if the workers deployment fails. | bool | no | False |
+| st_drive_workers_beat_enabled | Runs the Celery beat scheduler inside the worker. Set it to false on every workers host except one, because each beat scheduler enqueues every periodic task. | bool | no | True |
 | st_drive_workers_compose_template | Local path to the custom template to use for workers compose file. | str | no | workers/compose.yaml.j2 |
 | st_drive_collabora_enabled | Triggers the installation of collabora. | bool | no | False |
 | st_drive_collabora_image | Image repository for collabora. | str | no | docker.io/collabora/code |

@@ -7,7 +7,8 @@ services:
     container_name: messages-worker
     image: "{{ st_messages_backend_image }}:{{ st_messages_tag }}"
     env_file: ./env
-    command: python worker.py --concurrency={{ ansible_processor_nproc }}
+    # worker.py embeds beat unless it receives --disable-scheduler.
+    command: python worker.py --concurrency={{ ansible_processor_nproc }}{% if not st_messages_workers_beat_enabled | bool %} --disable-scheduler{% endif %}
     healthcheck:
       test: ["CMD", "celery", "-A", "messages.celery_app", "inspect", "ping"]
       interval: 1m

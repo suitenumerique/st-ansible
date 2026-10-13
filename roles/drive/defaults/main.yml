@@ -49,6 +49,8 @@ st_drive_workers_env_template: workers/env.j2
 st_drive_workers_env: '{{ st_drive_backend_env }}'
 # Whether or not to trigger the rollback tasks if the workers deployment fails.
 st_drive_workers_rollback_enabled: false
+# Runs the Celery beat scheduler inside the worker. Set it to false on every workers host except one, because each beat scheduler enqueues every periodic task.
+st_drive_workers_beat_enabled: true
 # Local path to the custom template to use for workers compose file.
 st_drive_workers_compose_template: workers/compose.yaml.j2
 # Triggers the installation of collabora.
