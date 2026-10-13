@@ -47,3 +47,10 @@ flags:
     warnings:
       - "Remove st_drive_s3_protocol, st_drive_s3_host and st_drive_s3_bucket from drive/<env>/drive/vars.yml."
       - "Remove any st_drive_nginx_template override. In a custom st_drive_compose_template, add the drive-caddy service on st_drive_port and put the frontend on port 8080 behind it."
+  - version: "next"
+    apps: [messages]
+    components: [socks-proxy]
+    reason: "0.5.0 changed the inventory group st-cli writes from socks-proxy to socks_proxy. The replay rewrites the hosts file."
+    warnings:
+      - "Replace socks-proxy<n> with socks_proxy<n> in every -H/--host argument, script and runbook."
+      - "If the env uses relay mode and keeps a socks-proxy unit, run st-cli bootstrap messages <env> -c socks-proxy to clear the flag."

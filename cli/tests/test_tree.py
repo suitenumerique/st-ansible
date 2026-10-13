@@ -75,6 +75,24 @@ def test_read_inventory_returns_alias_ip_pairs(repo):
     ]
 
 
+def test_read_inventory_matches_legacy_dashed_header(repo):
+    """A pre-0.5.0 ``[socks-proxy]`` header matches the normalised group."""
+    p = paths.hosts_path("messages", "staging", "socks-proxy")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(
+        "[socks-proxy]\n"
+        "socks-proxy1 ansible_host=10.0.0.7\n"
+        "socks-proxy2 ansible_host=10.0.0.8\n",
+        encoding="utf-8",
+    )
+    assert tree.read_inventory(
+        "messages", "staging", "socks-proxy", group="socks-proxy"
+    ) == [("socks-proxy1", "10.0.0.7"), ("socks-proxy2", "10.0.0.8")]
+    assert tree.read_inventory(
+        "messages", "staging", "socks-proxy", group="socks_proxy"
+    ) == [("socks-proxy1", "10.0.0.7"), ("socks-proxy2", "10.0.0.8")]
+
+
 def test_find_host_matches_alias_only(repo):
     """find_host matches the inventory alias, never the ip."""
     entries = [("meet1", "10.0.0.5"), ("meet2", "10.0.0.6")]

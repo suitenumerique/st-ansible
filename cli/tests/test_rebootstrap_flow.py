@@ -696,15 +696,11 @@ def test_socks_proxy_standalone_mint_then_full_replay_repairs_core_vault(
             ("select", "Outbound mail mode", "direct"),
             ("select", "Bootstrap pymta now?", "No — bootstrap later"),
             ("select", "Bootstrap mpa now?", "No — bootstrap later"),
-            (
-                "select",
-                "Bootstrap socks-proxy now?",
-                "Modify (replay the questionnaire)",
-            ),
         ],
     )
     bootstrap.bootstrap("messages", "prod", replay=bootstrap.ReplayAction.MODIFY)
     assert not sq3._scripts, f"unconsumed scripts: {sq3._scripts}"
+    assert not [m for m, _ in sq3.select_calls if "Bootstrap socks-proxy now?" in m]
 
     core_vault_after = vault.decrypt_to_dict(core_vault_path)
     provider_vault_after = vault.decrypt_to_dict(
@@ -715,6 +711,83 @@ def test_socks_proxy_standalone_mint_then_full_replay_repairs_core_vault(
         == provider_vault_before["vault_proxy_users"]
     )
     assert provider_vault_after == provider_vault_before
+
+
+def test_silent_flagged_socks_proxy_replay_rewrites_legacy_hosts_group(
+    repo, monkeypatch, tmp_path
+):
+    """A flagged socks-proxy unit replays silently and the replay rewrites a legacy
+    dashed hosts group."""
+    seed_creds(repo)
+    script_questionary(
+        monkeypatch,
+        messages_first_run_script()
+        + [
+            ("select", "Bootstrap pymta now?", "No — bootstrap later"),
+            ("select", "Bootstrap mpa now?", "No — bootstrap later"),
+            ("select", "Bootstrap socks-proxy now?", "Yes — bootstrap now"),
+            ("text", "socks-proxy host(s)", "10.0.0.6, 10.0.0.9"),
+            ("text", "PROXY_EXTERNAL", "eth0"),
+            ("text", "PROXY_INTERNAL_PORT", "50405"),
+            ("confirm", "cadvisor", True),
+        ],
+    )
+    bootstrap.bootstrap("messages", "prod")
+
+    set_flags(
+        monkeypatch,
+        tmp_path,
+        [
+            {
+                "version": __version__,
+                "apps": ["messages"],
+                "components": ["socks-proxy"],
+                "reason": "test flag",
+                "link": "",
+            }
+        ],
+    )
+    m = manifest.load_manifest()
+    for u in m.units:
+        u.bootstrapped_with = "0.0.1"
+    manifest.save_manifest(m)
+
+    paths.hosts_path("messages", "prod", "socks-proxy").write_text(
+        "[socks-proxy]\n"
+        "socks-proxy1 ansible_host=10.0.0.6\n"
+        "socks-proxy2 ansible_host=10.0.0.9\n",
+        encoding="utf-8",
+    )
+
+    sp_vars_before = (repo / "messages/prod/socks-proxy/vars.yml").read_text()
+    sp_vault_before = paths.vault_path("messages", "prod", "socks-proxy").read_bytes()
+    core_vars_before = (repo / "messages/prod/messages/vars.yml").read_text()
+    core_vault_before = paths.vault_path("messages", "prod", "messages").read_bytes()
+
+    sq = script_questionary(monkeypatch, [])
+    bootstrap.bootstrap("messages", "prod", replay=bootstrap.ReplayAction.SILENT)
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+    assert not sq.select_calls, f"a select fired: {sq.select_calls}"
+
+    assert paths.hosts_path("messages", "prod", "socks-proxy").read_text() == (
+        "[socks_proxy]\n"
+        "socks_proxy1 ansible_host=10.0.0.6\n"
+        "socks_proxy2 ansible_host=10.0.0.9\n"
+    )
+    assert (repo / "messages/prod/socks-proxy/vars.yml").read_text() == sp_vars_before
+    assert (
+        paths.vault_path("messages", "prod", "socks-proxy").read_bytes()
+        == sp_vault_before
+    )
+    assert (repo / "messages/prod/messages/vars.yml").read_text() == core_vars_before
+    assert (
+        paths.vault_path("messages", "prod", "messages").read_bytes()
+        == core_vault_before
+    )
+
+    m2 = manifest.load_manifest()
+    unit = next(u for u in m2.units if u.component == "socks-proxy")
+    assert unit.bootstrapped_with == __version__
 
 
 def test_edited_answer_propagates(repo, monkeypatch):

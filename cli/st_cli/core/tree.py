@@ -96,9 +96,10 @@ def group_name(name: str) -> str:
     Ansible warns on ``-`` in group names ("Invalid characters were found in
     group names"), so dashes become underscores: app_name ``file-scanner`` →
     group ``[file_scanner]`` (and alias prefix ``file_scanner<n>``), while the
-    systemd unit / remote dir keep the dashed app_name. Applied at the two
-    chokepoints — :func:`_group_lines` (write) and :func:`effective_group`
-    (read/targeting) — so callers keep passing raw ``app_name``s.
+    systemd unit / remote dir keep the dashed app_name. Applied at three
+    chokepoints — :func:`_group_lines` (write), :func:`effective_group`
+    (targeting) and :func:`read_inventory` (the section header on read) — so
+    callers keep passing raw ``app_name``s.
     """
     return name.replace("-", "_")
 
@@ -289,7 +290,9 @@ def read_inventory(
     ``ip`` is the ``ansible_host=<x>`` value, falling back to the alias.
     ``group`` is normalised via :func:`group_name` (idempotent), so a caller
     passing a raw dashed ``app_name`` still matches the written
-    ``[file_scanner]``-style section.
+    ``[file_scanner]``-style section. The section header is normalised the
+    same way, so a legacy ``[socks-proxy]`` header written before 0.5.0 still
+    matches.
     """
     if group is not None:
         group = group_name(group)
@@ -304,7 +307,7 @@ def read_inventory(
         if not line or line.startswith(("#", ";")):
             continue
         if line.startswith("["):
-            current = line.strip("[]").strip()
+            current = group_name(line.strip("[]").strip())
             continue
         if want_group and current != group:
             continue
