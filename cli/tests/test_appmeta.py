@@ -190,7 +190,7 @@ def test_file_scanner_component_metadata():
 
 def test_worker_component_metadata():
     """Each app exposes a first-class workers component (is_worker, app_name, enabled_var)."""
-    for app in ("drive", "messages", "meet", "docs", "transfers"):
+    for app in ("drive", "messages", "meet", "docs", "transfers", "conversations"):
         w = appmeta.load_app(app).worker()
         assert w is not None, f"{app} has no workers component"
         assert w.is_worker is True
@@ -309,3 +309,41 @@ def test_component_unknown_raises_stclierror():
     meta = appmeta.load_app("meet")
     with pytest.raises(StCliError, match=r"unknown component 'bogus' for app 'meet'"):
         meta.component("bogus")
+
+
+def test_conversations_component_metadata():
+    """conversations has two components (core + workers), no dependencies, and
+    a backend env_render layer only: no caddy S3 keys, no frontend env."""
+    meta = appmeta.load_app("conversations")
+    assert {c.key for c in meta.components} == {"conversations", "workers"}
+    assert meta.dependencies == []
+
+    core = meta.core()
+    assert core.key == "conversations"
+    assert core.role == "suitenumerique.st.conversations"
+    assert core.user == "conversations"
+    assert core.dir_var == "st_conversations_dir"
+    assert core.enabled_var == "st_conversations_enabled"
+    assert core.deploy_order == 20
+
+    spec = meta.env_render_spec("conversations")
+    assert set(spec.keys()) == {"backend"}
+    assert spec["backend"]["blob_var"] == "st_conversations_backend_env"
+    assert spec["backend"]["templates"] == ["conversations.backend.env.j2"]
+
+    assert meta.component_vars("conversations")["st_conversations_public_host"] == (
+        "{DOMAIN}"
+    )
+
+    worker = meta.worker()
+    assert worker is not None
+    assert worker.deploy_order == 30
+    assert worker.implemented is True
+
+    # tailored requirements checklist: external PostgreSQL/Redis/S3/OIDC plus the AI API
+    reqs = meta.requirements
+    assert any("PostgreSQL" in r for r in reqs)
+    assert any("Redis" in r for r in reqs)
+    assert any("S3" in r for r in reqs)
+    assert any("Identity provider" in r for r in reqs)
+    assert any("AI" in r for r in reqs)

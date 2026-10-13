@@ -85,7 +85,7 @@ def test_backend_run_migrations_gated_to_first_host():
     """drive/meet/messages backends scaffold st_<app>_backend_run_migrations to a
     literal Ansible expression that runs migrations only on the first play host."""
     expr = "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
-    for app in ("drive", "meet", "messages", "docs"):
+    for app in ("drive", "meet", "messages", "docs", "conversations"):
         meta = appmeta.load_app(app)
         var = f"st_{app}_backend_run_migrations"
         # manifest stores the escaped (quadrupled-brace) template …

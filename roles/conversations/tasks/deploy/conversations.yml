@@ -1,0 +1,46 @@
+---
+- name: "Create conversations application."
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "conversations"
+    st_podman_application_name: "conversations"
+    st_podman_application_dir: "{{ st_conversations_dir }}"
+    st_podman_application_rollback_enabled: "{{ st_conversations_rollback_enabled }}"
+    st_podman_application_compose_template: "{{ st_conversations_compose_template }}"
+    st_podman_application_files:
+      - src: "{{ st_conversations_backend_env_template }}"
+        dest: "backend_env"
+      - src: "{{ st_conversations_caddy_env_template }}"
+        dest: "caddy_env"
+      - src: "conversations/Caddyfile.j2"
+        dest: "Caddyfile"
+      - src: "{{ st_conversations_llm_configuration_src }}"
+        dest: "llm.json"
+        template: false
+        container_uid: 1001
+        when: "{{ st_conversations_llm_configuration_src | length > 0 }}"
+      - src: "{{ st_conversations_theme_customization_src }}"
+        dest: "theme.json"
+        template: false
+        container_uid: 1001
+        when: "{{ st_conversations_theme_customization_src | length > 0 }}"
+
+- name: "Play conversations migrations."
+  become: true
+  become_user: "conversations"
+  become_method: ansible.builtin.sudo
+  become_flags: "-i"
+  run_once: true
+  register: migration_result
+  changed_when: "'No migrations to apply.' not in migration_result.stdout"
+  when: st_conversations_backend_run_migrations
+  retries: 3
+  delay: 10
+  until: migration_result.rc == 0
+  ansible.builtin.shell:
+    chdir: "{{ st_conversations_dir }}"
+    cmd: |
+      set -eu
+      podman-compose run --rm --name conversations_backend_migrations backend python manage.py migrate --noinput

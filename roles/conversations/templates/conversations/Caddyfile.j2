@@ -1,0 +1,59 @@
+{{ ansible_managed | comment }}
+{
+	admin off
+	auto_https off
+	log {
+		output stdout
+		format json
+	}
+	servers {
+		# Trust the front load balancer so the client IP comes from its X-Forwarded-For.
+		# CADDY_TRUSTED_PROXIES is an optional CIDR list from the caddy_env file.
+		trusted_proxies static {$CADDY_TRUSTED_PROXIES:private_ranges}
+		# Walk X-Forwarded-For right to left, so a client cannot set its own client IP.
+		trusted_proxies_strict
+	}
+}
+
+:50900 {
+	# Access logs to stdout as JSON.
+	log {
+		output stdout
+		format json
+	}
+
+	# Strip proxy/upstream identity headers from every response.
+	header {
+		-Server
+		-Via
+	}
+
+	# Health endpoint for the front LB. Caddy answers it without the backend.
+	handle /__lbheartbeat__ {
+		respond "ok" 200
+	}
+
+	# Django admin IP allowlist. CADDY_ADMIN_IP_ALLOWLIST is an optional space-separated
+	# CIDR list from the caddy_env file: unset allows all, empty denies all. A named
+	# matcher keeps this handle before @backend in file order.
+	@admin_denied {
+		path /admin /admin/* /admin;*
+		not client_ip {$CADDY_ADMIN_IP_ALLOWLIST:0.0.0.0/0 ::/0}
+	}
+	handle @admin_denied {
+		respond 403
+	}
+
+	# Backend: API, Django admin, and static assets.
+	@backend path /api/* /admin /admin/* /static/*
+	handle @backend {
+		reverse_proxy conversations-backend:8000 {
+			header_up X-Forwarded-Proto https
+		}
+	}
+
+	# Frontend SPA. The stock image serves index.html and falls back for client-side routes.
+	handle {
+		reverse_proxy conversations-frontend:8080
+	}
+}
