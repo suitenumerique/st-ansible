@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.file_scanner
-Version: 0.5.0
+Version: 0.5.1
 
 This role deploys the file-scanner antivirus service for La Suite Territoriale applications on a rootless podman base on Debian systems.
 

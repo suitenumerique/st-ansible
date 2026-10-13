@@ -1,2 +1,0 @@
-bugfixes:
-  - "st-cli - read_inventory normalises the section header of the hosts file. A legacy socks-proxy group written before 0.5.0 now matches the group socks_proxy, so the unit targets its hosts again. An upgrade flag replays messages/<env>/socks-proxy and rewrites the hosts file with the group socks_proxy and the aliases socks_proxy<n>."

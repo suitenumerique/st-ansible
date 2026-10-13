@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.transfers
-Version: 0.5.0
+Version: 0.5.1
 
 This role deploys the Transfers application from La Suite Territoriale on a rootless podman base on Debian systems.
 

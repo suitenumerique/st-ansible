@@ -2,39 +2,58 @@
 
 **Topics**
 
+- <a href="#v0-5-1">v0\.5\.1</a>
+    - <a href="#minor-changes">Minor Changes</a>
+    - <a href="#bugfixes">Bugfixes</a>
 - <a href="#v0-5-0">v0\.5\.0</a>
     - <a href="#release-summary">Release Summary</a>
-    - <a href="#minor-changes">Minor Changes</a>
+    - <a href="#minor-changes-1">Minor Changes</a>
     - <a href="#breaking-changes">Breaking Changes</a>
     - <a href="#deprecated-features">Deprecated Features</a>
 - <a href="#v0-4-0">v0\.4\.0</a>
     - <a href="#release-summary-1">Release Summary</a>
-    - <a href="#minor-changes-1">Minor Changes</a>
-    - <a href="#bugfixes">Bugfixes</a>
-- <a href="#v0-3-1">v0\.3\.1</a>
     - <a href="#minor-changes-2">Minor Changes</a>
+    - <a href="#bugfixes-1">Bugfixes</a>
+- <a href="#v0-3-1">v0\.3\.1</a>
+    - <a href="#minor-changes-3">Minor Changes</a>
 - <a href="#v0-3-0">v0\.3\.0</a>
     - <a href="#release-summary-2">Release Summary</a>
-    - <a href="#minor-changes-3">Minor Changes</a>
-    - <a href="#bugfixes-1">Bugfixes</a>
+    - <a href="#minor-changes-4">Minor Changes</a>
+    - <a href="#bugfixes-2">Bugfixes</a>
     - <a href="#new-plugins">New Plugins</a>
         - <a href="#callback">Callback</a>
 - <a href="#v0-2-2">v0\.2\.2</a>
-    - <a href="#minor-changes-4">Minor Changes</a>
-    - <a href="#bugfixes-2">Bugfixes</a>
-- <a href="#v0-2-1">v0\.2\.1</a>
     - <a href="#minor-changes-5">Minor Changes</a>
+    - <a href="#bugfixes-3">Bugfixes</a>
+- <a href="#v0-2-1">v0\.2\.1</a>
+    - <a href="#minor-changes-6">Minor Changes</a>
 - <a href="#v0-2-0">v0\.2\.0</a>
     - <a href="#release-summary-3">Release Summary</a>
-    - <a href="#minor-changes-6">Minor Changes</a>
-    - <a href="#bugfixes-3">Bugfixes</a>
-- <a href="#v0-1-1">v0\.1\.1</a>
     - <a href="#minor-changes-7">Minor Changes</a>
     - <a href="#bugfixes-4">Bugfixes</a>
+- <a href="#v0-1-1">v0\.1\.1</a>
+    - <a href="#minor-changes-8">Minor Changes</a>
+    - <a href="#bugfixes-5">Bugfixes</a>
 - <a href="#v0-1-0">v0\.1\.0</a>
     - <a href="#release-summary-4">Release Summary</a>
     - <a href="#major-changes">Major Changes</a>
-    - <a href="#minor-changes-8">Minor Changes</a>
+    - <a href="#minor-changes-9">Minor Changes</a>
+
+<a id="v0-5-1"></a>
+## v0\.5\.1
+
+<a id="minor-changes"></a>
+### Minor Changes
+
+* Update dependency molecule to v26\.10\.0
+* Update dependency typer to v0\.27\.3
+* Update docker\.io/caddy Docker tag to v2\.11\.7
+* Update ghcr\.io/google/cadvisor Docker tag to v0\.60\.6
+
+<a id="bugfixes"></a>
+### Bugfixes
+
+* st\-cli \- read\_inventory normalises the section header of the hosts file\. A legacy socks\-proxy group written before 0\.5\.0 now matches the group socks\_proxy\, so the unit targets its hosts again\. An upgrade flag replays messages/\<env\>/socks\-proxy and rewrites the hosts file with the group socks\_proxy and the aliases socks\_proxy\<n\>\.
 
 <a id="v0-5-0"></a>
 ## v0\.5\.0
@@ -46,7 +65,7 @@ Added file\-scanner and transfers\. Added IP filtering on Keycloak admin path
 and Django Admin paths\. Bump podman compose to 1\.6\.0\. Deprecate messages mta\-in\,
 added messages pymta\.
 
-<a id="minor-changes"></a>
+<a id="minor-changes-1"></a>
 ### Minor Changes
 
 * Update dependency ansible\-core to v2\.21\.5
@@ -98,7 +117,7 @@ added messages pymta\.
 
 Added cli rebootstrap and improve upgrades\, added an IP filtering setup in front of Django Admins paths\, bump drive\, docs and meet\.
 
-<a id="minor-changes-1"></a>
+<a id="minor-changes-2"></a>
 ### Minor Changes
 
 * Update dependency suitenumerique/docs to v5\.6\.1
@@ -125,7 +144,7 @@ Added cli rebootstrap and improve upgrades\, added an IP filtering setup in fron
 * drive\: a <code>drive\-caddy</code> container now owns <code>st\_drive\_port</code> and proxies the frontend\, the backend and the S3 media routes\, like docs and meet\. <code>st\_drive\_nginx\_template</code> and the <code>st\_drive\_s3\_\*</code> vars are replaced by <code>st\_drive\_caddy\_env</code> \(<code>CADDY\_S3\_\*</code>\)\, <code>st\_drive\_caddy\_image</code> and <code>st\_drive\_caddy\_tag</code>\.
 * drive\: the collabora compose file no longer sets a healthcheck\. The 26\.04\.3 image has no shell\, and podman\-compose 1\.3\.0 wraps every compose test in <code>/bin/sh \-c</code>\. Podman applies the <code>HEALTHCHECK</code> of the image \(<code>coolwsd \-\-probe</code>\) instead\. A custom <code>st\_drive\_collabora\_compose\_template</code> must drop its <code>healthcheck</code> block too\.
 
-<a id="bugfixes"></a>
+<a id="bugfixes-1"></a>
 ### Bugfixes
 
 * cli\: <code>st\-cli reset \-H \<alias\></code> redeploys only the selected host\. It redeployed the component on every host\.
@@ -134,7 +153,7 @@ Added cli rebootstrap and improve upgrades\, added an IP filtering setup in fron
 <a id="v0-3-1"></a>
 ## v0\.3\.1
 
-<a id="minor-changes-2"></a>
+<a id="minor-changes-3"></a>
 ### Minor Changes
 
 * Update dependency suitenumerique/docs to v5\.5\.0
@@ -154,7 +173,7 @@ sub\-apps\) and Projects \(a Planka fork\)\, both deployable end to end with
 st\-cli\. The bootstrap \"Requirements\" checklist is now app\-aware\, and
 several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\.
 
-<a id="minor-changes-3"></a>
+<a id="minor-changes-4"></a>
 ### Minor Changes
 
 * 1. added docs app support to st\-cli
@@ -168,7 +187,7 @@ several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\
 * Update docker\.io/livekit/egress Docker tag to v1\.14\.1
 * Update docker\.io/livekit/livekit\-server Docker tag to v1\.13\.5
 
-<a id="bugfixes-1"></a>
+<a id="bugfixes-2"></a>
 ### Bugfixes
 
 * \(st\-cli\) the <code>vars\.yml</code> header no longer claims secrets are stored in an encrypted <code>vault\.yml</code> when the hashi\_vault \(OpenBao\) backend is in use\, where no <code>vault\.yml</code> is written and secrets are referenced by lookup\.
@@ -184,7 +203,7 @@ several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\
 <a id="v0-2-2"></a>
 ## v0\.2\.2
 
-<a id="minor-changes-4"></a>
+<a id="minor-changes-5"></a>
 ### Minor Changes
 
 * Update docker\.io/clamav/clamav Docker tag to v1\.5\.4
@@ -195,7 +214,7 @@ several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\
 * cli\: the behind\-upstream warning on other commands now branches on pipx — without pipx it names the exact <code>docker pull ghcr\.io/suitenumerique/st\-cli\:latest</code> command to run before <code>st\-cli upgrade</code>
 * plugins\: the compact callback now prints the <code>msg</code> of a <code>debug</code> task in a green box in place of the ok line and the JSON dump
 
-<a id="bugfixes-2"></a>
+<a id="bugfixes-3"></a>
 ### Bugfixes
 
 * cli\: only push latest on new tags to follow the st\-cli collection tags
@@ -204,7 +223,7 @@ several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\
 <a id="v0-2-1"></a>
 ## v0\.2\.1
 
-<a id="minor-changes-5"></a>
+<a id="minor-changes-6"></a>
 ### Minor Changes
 
 * callback\: added the suitenumerique\.st\.compact stdout callback\, one line per task and host\, a live progress line on a TTY\, diffs for changed tasks\, and full default\-style error output
@@ -220,7 +239,7 @@ several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\
 Adds support for meet recordings\, fix openbao markers on st\-cli bootstrap
 and multiple versions upgrades\.
 
-<a id="minor-changes-6"></a>
+<a id="minor-changes-7"></a>
 ### Minor Changes
 
 * Update actions/checkout digest to 3d3c42e
@@ -233,7 +252,7 @@ and multiple versions upgrades\.
 * meet\: added custom logo handling
 * meet\: separated egress component and added recording feature to bootstrap
 
-<a id="bugfixes-3"></a>
+<a id="bugfixes-4"></a>
 ### Bugfixes
 
 * cli\: allow \@openbao markers on non\-secret fields
@@ -241,7 +260,7 @@ and multiple versions upgrades\.
 <a id="v0-1-1"></a>
 ## v0\.1\.1
 
-<a id="minor-changes-7"></a>
+<a id="minor-changes-8"></a>
 ### Minor Changes
 
 * Added Renovate configuration \(<code>renovate\.json5</code>\) and renovate Makefile target
@@ -254,7 +273,7 @@ and multiple versions upgrades\.
 * Update docker/setup\-buildx\-action action to v4
 * Update docker/setup\-qemu\-action action to v4
 
-<a id="bugfixes-4"></a>
+<a id="bugfixes-5"></a>
 ### Bugfixes
 
 * Fixed restic install task for upgrade workflow
@@ -273,7 +292,7 @@ Added st\-cli to manage LST environments bootstraps and deployments\, refactored
 * cli\: added st\-cli \#27
 * roles\: refactor every uid\, gid and ports to allow single\-host deployments \#26
 
-<a id="minor-changes-8"></a>
+<a id="minor-changes-9"></a>
 ### Minor Changes
 
 * changelog\: added antsibull\-changelog config\, Makefile targets and CI job \#13

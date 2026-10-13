@@ -444,3 +444,22 @@ releases:
     - renovate-pr-98.yml
     - transfers.yml
     release_date: '2026-10-12'
+  0.5.1:
+    changes:
+      bugfixes:
+      - st-cli - read_inventory normalises the section header of the hosts file. A
+        legacy socks-proxy group written before 0.5.0 now matches the group socks_proxy,
+        so the unit targets its hosts again. An upgrade flag replays messages/<env>/socks-proxy
+        and rewrites the hosts file with the group socks_proxy and the aliases socks_proxy<n>.
+      minor_changes:
+      - Update dependency molecule to v26.10.0
+      - Update dependency typer to v0.27.3
+      - Update docker.io/caddy Docker tag to v2.11.7
+      - Update ghcr.io/google/cadvisor Docker tag to v0.60.6
+    fragments:
+    - renovate-pr-100.yml
+    - renovate-pr-110.yml
+    - renovate-pr-111.yml
+    - renovate-pr-112.yml
+    - socks-proxy-group.yml
+    release_date: '2026-10-13'
