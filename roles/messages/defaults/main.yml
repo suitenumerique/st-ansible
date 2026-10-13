@@ -100,7 +100,7 @@ st_messages_mpa_dir: /opt/messages/mpa
 st_messages_mpa_caddy_image: docker.io/caddy
 # The tag of the caddy docker image to use.
 # See https://hub.docker.com/_/caddy/tags.
-st_messages_mpa_caddy_tag: 2.11.4-alpine
+st_messages_mpa_caddy_tag: 2.11.7-alpine
 # The host published port for the caddy /checkv2 endpoint.
 st_messages_mpa_caddy_port: '50402'
 # The host published port for the caddy /healthcheck endpoint.
@@ -159,6 +159,6 @@ st_messages_cadvisor_enabled: false
 # Image repository for the cadvisor container.
 st_messages_cadvisor_image: ghcr.io/google/cadvisor
 # Tag of the cadvisor docker image to deploy.
-st_messages_cadvisor_tag: v0.60.3
+st_messages_cadvisor_tag: v0.60.6
 # The host published port of the cadvisor container.
 st_messages_cadvisor_port: '127.0.0.1:50499'

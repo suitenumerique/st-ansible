@@ -41,7 +41,7 @@ Installs and configures the meet application from La Suite Territoriale on Debia
 | st_meet_caddy_env | Content of the default caddy_env_template, not used if st_meet_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST and CADDY_S3_BUCKET. Optional: CADDY_ADMIN_IP_ALLOWLIST (space-separated CIDR list of client IPs allowed on the Django admin URL, default allows all) and CADDY_TRUSTED_PROXIES (space-separated CIDR list of proxies whose X-Forwarded-For sets the client IP, default private_ranges). | str | no |  |
 | st_meet_compose_template | Local path to the custom template to use for meet compose file. | str | no | meet/compose.yaml.j2 |
 | st_meet_caddy_image | Image repository for the meet caddy reverse-proxy. | str | no | docker.io/caddy |
-| st_meet_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | 2.11.4-alpine |
+| st_meet_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | 2.11.7-alpine |
 | st_meet_rollback_enabled | Whether or not to trigger the rollback tasks if the meet deployment fails. | bool | no | False |
 | st_meet_livekit_caddyl4_image | Image repository for livekit caddyl4. | str | no | docker.io/livekit/caddyl4 |
 | st_meet_livekit_image | Image repository for the livekit server. | str | no | docker.io/livekit/livekit-server |
@@ -73,7 +73,7 @@ Installs and configures the meet application from La Suite Territoriale on Debia
 | st_meet_egress_rollback_enabled | Whether or not to trigger the rollback tasks if the egress deployment fails. | bool | no | False |
 | st_meet_egress_files | List of files to deploy for the egress application. By default deploys egress.yaml from the default template. Override this entirely to deploy a custom egress configuration. | list of 'dict' | no | [{'src': 'egress/egress.yaml.j2', 'dest': 'egress.yaml'}] |
 | st_meet_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
-| st_meet_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.3 |
+| st_meet_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.6 |
 | st_meet_cadvisor_enabled | Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server. | bool | no | False |
 | st_meet_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:50399 |
 

@@ -41,7 +41,7 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 | st_drive_caddy_env_template | Local path to the custom template to use for drive caddy env file. | str | no | drive/caddy_env.j2 |
 | st_drive_caddy_env | Content of the default caddy_env_template, not used if st_drive_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST and CADDY_S3_BUCKET. Optional: CADDY_ADMIN_IP_ALLOWLIST (space-separated CIDR list of client IPs allowed on the Django admin URL, default allows all) and CADDY_TRUSTED_PROXIES (space-separated CIDR list of proxies whose X-Forwarded-For sets the client IP, default private_ranges). | str | no |  |
 | st_drive_caddy_image | Image repository for the drive caddy reverse-proxy. | str | no | docker.io/caddy |
-| st_drive_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | 2.11.4-alpine |
+| st_drive_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | 2.11.7-alpine |
 | st_drive_workers_enabled | Triggers the installation of the drive workers | bool | no | False |
 | st_drive_workers_dir | Remote path to the base directory for drive workers. | str | no | /opt/drive/workers |
 | st_drive_workers_env_template | Local path to the custom template to use for drive workers env file. | str | no | workers/env.j2 |
@@ -59,7 +59,7 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 | st_drive_collabora_port | The port to open on the host, redirecting to port 9980 in the container. It can also specify the ip address, something like 127.0.0.1:9980. | str | no | 50101 |
 | st_drive_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
 | st_drive_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
-| st_drive_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.3 |
+| st_drive_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.6 |
 | st_drive_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:50199 |
 | st_drive_collabora_fonts_src | Local path to a directory containing ttf / otf fonts to install on the collabora instance | str | no |  |
 

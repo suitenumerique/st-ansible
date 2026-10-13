@@ -47,7 +47,7 @@ Installs and configures the file-scanner service from La Suite Territoriale on D
 | st_file_scanner_timeout | Seconds the systemd unit waits for every container of the stack to report healthy. The first clamav start downloads the signature database; an exav that compiles its own needs several minutes more. | int | no | 300 |
 | st_file_scanner_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
 | st_file_scanner_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
-| st_file_scanner_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.3 |
+| st_file_scanner_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.6 |
 | st_file_scanner_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:50899 |
 
 

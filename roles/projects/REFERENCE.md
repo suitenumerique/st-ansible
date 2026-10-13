@@ -36,7 +36,7 @@ Installs and configures the projects application from La Suite Territoriale on D
 | st_projects_rollback_enabled | Whether to trigger the rollback tasks if the projects deployment fails. Rollback is config-level only (it restores the previous compose/env directory, never the database). Projects runs its DB migrations unconditionally on every container start, so rolling back across a schema-changing upgrade leaves the old image running against an already-migrated database — back up the database before such an upgrade. | bool | no | False |
 | st_projects_cadvisor_enabled | Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server. | bool | no | False |
 | st_projects_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
-| st_projects_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.3 |
+| st_projects_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.6 |
 | st_projects_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:50599 |
 
 

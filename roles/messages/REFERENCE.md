@@ -76,7 +76,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mpa_dir | Remote path to the base directory for mpa app. | str | no | /opt/messages/mpa |
 | st_messages_mpa_auth_bearer | Add a caddy container in front of the rspamd worker with a simple authorization check. The value of this variable should then be used as a Bearer token when calling the /checkv2 rspamd endpoint. | str | no |  |
 | st_messages_mpa_caddy_image | Image repository for the mpa caddy. | str | no | docker.io/caddy |
-| st_messages_mpa_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | 2.11.4-alpine |
+| st_messages_mpa_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | 2.11.7-alpine |
 | st_messages_mpa_caddy_port | The host published port for the caddy /checkv2 endpoint. | str | no | 50402 |
 | st_messages_mpa_caddy_healthcheck_port | The host published port for the caddy /healthcheck endpoint. | str | no | 50403 |
 | st_messages_mpa_rspamd_image | Image repository for the mpa rspamd. | str | no | docker.io/rspamd/rspamd |
@@ -105,7 +105,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mpa_compose_template | Local path to the custom template to use for mpa compose file. | str | no | mpa/compose.yaml.j2 |
 | st_messages_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
 | st_messages_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
-| st_messages_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.3 |
+| st_messages_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.6 |
 | st_messages_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:50499 |
 
 

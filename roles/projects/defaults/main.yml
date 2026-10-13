@@ -32,6 +32,6 @@ st_projects_cadvisor_enabled: false
 # Image repository for the cadvisor container.
 st_projects_cadvisor_image: ghcr.io/google/cadvisor
 # Tag of the cadvisor docker image to deploy.
-st_projects_cadvisor_tag: v0.60.3
+st_projects_cadvisor_tag: v0.60.6
 # The host published port of the cadvisor container.
 st_projects_cadvisor_port: '127.0.0.1:50599'

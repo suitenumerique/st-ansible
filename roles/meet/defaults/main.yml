@@ -38,7 +38,7 @@ st_meet_compose_template: meet/compose.yaml.j2
 st_meet_caddy_image: docker.io/caddy
 # The tag of the caddy docker image to use.
 # See https://hub.docker.com/_/caddy/tags.
-st_meet_caddy_tag: 2.11.4-alpine
+st_meet_caddy_tag: 2.11.7-alpine
 # Whether or not to trigger the rollback tasks if the meet deployment fails.
 st_meet_rollback_enabled: false
 # Image repository for livekit caddyl4.
@@ -103,7 +103,7 @@ st_meet_egress_files:
 # Image repository for the cadvisor container.
 st_meet_cadvisor_image: ghcr.io/google/cadvisor
 # Tag of the cadvisor docker image to deploy.
-st_meet_cadvisor_tag: v0.60.3
+st_meet_cadvisor_tag: v0.60.6
 # Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server.
 st_meet_cadvisor_enabled: false
 # The host published port of the cadvisor container.

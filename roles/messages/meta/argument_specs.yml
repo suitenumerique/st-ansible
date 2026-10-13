@@ -246,7 +246,7 @@ argument_specs:
           - "The tag of the caddy docker image to use."
           - "See https://hub.docker.com/_/caddy/tags."
         # renovate: datasource=docker depName=docker.io/caddy
-        default: "2.11.4-alpine"
+        default: "2.11.7-alpine"
       st_messages_mpa_caddy_port:
         type: "str"
         description: "The host published port for the caddy /checkv2 endpoint."
@@ -381,7 +381,7 @@ argument_specs:
         type: "str"
         description: "Tag of the cadvisor docker image to deploy."
         # renovate: datasource=docker depName=ghcr.io/google/cadvisor
-        default: "v0.60.3"
+        default: "v0.60.6"
       st_messages_cadvisor_port:
         type: "str"
         description: "The host published port of the cadvisor container."

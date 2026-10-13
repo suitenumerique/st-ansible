@@ -46,7 +46,7 @@ Installs and configures the Transfers application from La Suite Territoriale on 
 | st_transfers_workers_compose_template | Local path to the custom template to use for workers compose file. | str | no | workers/compose.yaml.j2 |
 | st_transfers_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
 | st_transfers_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
-| st_transfers_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.3 |
+| st_transfers_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.6 |
 | st_transfers_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:50799 |
 
 

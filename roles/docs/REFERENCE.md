@@ -41,7 +41,7 @@ Installs and configures the docs application from La Suite Territoriale on Debia
 | st_docs_caddy_env | Content of the default caddy_env_template, not used if st_docs_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST, CADDY_S3_BUCKET and CADDY_YPROVIDER_ENDPOINTS (a space-separated host:port list of y-provider upstreams, load-balanced by document room). Optional: CADDY_ADMIN_IP_ALLOWLIST (space-separated CIDR list of client IPs allowed on the Django admin URL, default allows all) and CADDY_TRUSTED_PROXIES (space-separated CIDR list of proxies whose X-Forwarded-For sets the client IP, default private_ranges). | str | no |  |
 | st_docs_compose_template | Local path to the custom template to use for docs compose file. | str | no | docs/compose.yaml.j2 |
 | st_docs_caddy_image | Image repository for the docs caddy reverse-proxy. | str | no | docker.io/caddy |
-| st_docs_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | 2.11.4-alpine |
+| st_docs_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | 2.11.7-alpine |
 | st_docs_docspec_image | Image repository for the docspec conversion service. | str | no | ghcr.io/docspecio/api |
 | st_docs_docspec_tag | Tag of the docspec docker image to deploy. | str | no | 3.0.1 |
 | st_docs_rollback_enabled | Whether or not to trigger the rollback tasks if the docs deployment fails. | bool | no | False |
@@ -61,7 +61,7 @@ Installs and configures the docs application from La Suite Territoriale on Debia
 | st_docs_yprovider_compose_template | Local path to the custom template to use for y-provider compose file. | str | no | yprovider/compose.yaml.j2 |
 | st_docs_yprovider_port | The host published port for the y-provider collaboration server. | str | no | 50601 |
 | st_docs_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
-| st_docs_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.3 |
+| st_docs_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.6 |
 | st_docs_cadvisor_enabled | Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server. | bool | no | False |
 | st_docs_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:50699 |
 

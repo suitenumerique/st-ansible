@@ -38,7 +38,7 @@ st_drive_caddy_env: ''
 st_drive_caddy_image: docker.io/caddy
 # The tag of the caddy docker image to use.
 # See https://hub.docker.com/_/caddy/tags.
-st_drive_caddy_tag: 2.11.4-alpine
+st_drive_caddy_tag: 2.11.7-alpine
 # Triggers the installation of the drive workers
 st_drive_workers_enabled: false
 # Remote path to the base directory for drive workers.
@@ -72,6 +72,6 @@ st_drive_cadvisor_enabled: false
 # Image repository for the cadvisor container.
 st_drive_cadvisor_image: ghcr.io/google/cadvisor
 # Tag of the cadvisor docker image to deploy.
-st_drive_cadvisor_tag: v0.60.3
+st_drive_cadvisor_tag: v0.60.6
 # The host published port of the cadvisor container.
 st_drive_cadvisor_port: '127.0.0.1:50199'

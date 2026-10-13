@@ -37,7 +37,7 @@ Installs and configures the keycloak application from La Suite Territoriale on D
 | st_keycloak_rollback_enabled | Whether or not to trigger the rollback tasks if the keycloak deployment fails. | bool | no | False |
 | st_keycloak_cadvisor_enabled | Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server. | bool | no | False |
 | st_keycloak_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
-| st_keycloak_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.3 |
+| st_keycloak_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.6 |
 | st_keycloak_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:50299 |
 
 
