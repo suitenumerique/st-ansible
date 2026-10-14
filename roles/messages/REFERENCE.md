@@ -99,14 +99,28 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_mpa_clamav_image | Image repository for the mpa clamav. | str | no | docker.io/clamav/clamav |
 | st_messages_mpa_clamav_tag | The tag of the clamav docker image to use. See https://hub.docker.com/r/clamav/clamav/tags. | str | no | 1.5.4 |
 | st_messages_mpa_clamav_config_template | Local path to the clamd.conf template. | str | no | mpa/clamd.conf.j2 |
+| st_messages_mpa_antivirus_engine | The antivirus engine behind rspamd. `clamav` runs the clamav daemon. `exav` runs the exav daemon instead, on the same clamd protocol, and serves the prebuilt database from `st_messages_mpa_exav_db_url`. | str | no | clamav |
+| st_messages_mpa_exav_image | Image repository for the mpa exav. | str | no | ghcr.io/sylvinus/exav |
+| st_messages_mpa_exav_tag | The tag of the exav docker image to use. See https://github.com/sylvinus/exav/pkgs/container/exav. | str | no | 0.0.2 |
+| st_messages_mpa_exav_db_url | URL of the prebuilt `.exavdb` that exav pulls and serves. Required when the engine is `exav`. Any HTTP(S) URL. Basic auth as `user:pass@` works over `https://` only. exav re-checks the URL every 300 seconds and hot-reloads a changed file. | str | no |  |
+| st_messages_mpa_exav_env_template | Local path to the exav env file template. | str | no | mpa/exav_env.j2 |
+| st_messages_mpa_exav_env | Content of the exav env file: extra `EXAV_*` lines, for example `EXAV_WORKERS` or `EXAV_MAX_PROCESS_BYTES`. The compose file sets `EXAV_DB_URL` from `st_messages_mpa_exav_db_url`. | str | no |  |
 | st_messages_mpa_valkey_image | Image repository for the mpa valkey. | str | no | docker.io/valkey/valkey |
 | st_messages_mpa_valkey_tag | The tag of the valkey docker image to use. See https://hub.docker.com/r/valkey/valkey/tags. | str | no | 9.1.2 |
 | st_messages_mpa_rollback_enabled | Whether or not to trigger the rollback tasks if the mpa deployment fails. | bool | no | False |
 | st_messages_mpa_compose_template | Local path to the custom template to use for mpa compose file. | str | no | mpa/compose.yaml.j2 |
+| st_messages_mpa_timeout | Seconds the systemd unit waits for every container of the mpa stack to report healthy. The first exav start downloads the prebuilt database before it reports healthy. | int | no | 300 |
 | st_messages_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
 | st_messages_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
 | st_messages_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.6 |
 | st_messages_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:50499 |
+
+#### Choices for main > st_messages_mpa_antivirus_engine
+
+|Choice|
+|---|
+| clamav |
+| exav |
 
 
 

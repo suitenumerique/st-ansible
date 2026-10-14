@@ -145,6 +145,20 @@ st_messages_mpa_clamav_image: docker.io/clamav/clamav
 st_messages_mpa_clamav_tag: 1.5.4
 # Local path to the clamd.conf template.
 st_messages_mpa_clamav_config_template: mpa/clamd.conf.j2
+# The antivirus engine behind rspamd. `clamav` runs the clamav daemon. `exav` runs the exav daemon instead, on the same clamd protocol, and serves the prebuilt database from `st_messages_mpa_exav_db_url`.
+st_messages_mpa_antivirus_engine: clamav
+# Image repository for the mpa exav.
+st_messages_mpa_exav_image: ghcr.io/sylvinus/exav
+# The tag of the exav docker image to use.
+# See https://github.com/sylvinus/exav/pkgs/container/exav.
+st_messages_mpa_exav_tag: 0.0.2
+# URL of the prebuilt `.exavdb` that exav pulls and serves. Required when the engine is `exav`.
+# Any HTTP(S) URL. Basic auth as `user:pass@` works over `https://` only. exav re-checks the URL every 300 seconds and hot-reloads a changed file.
+st_messages_mpa_exav_db_url: ''
+# Local path to the exav env file template.
+st_messages_mpa_exav_env_template: mpa/exav_env.j2
+# Content of the exav env file: extra `EXAV_*` lines, for example `EXAV_WORKERS` or `EXAV_MAX_PROCESS_BYTES`. The compose file sets `EXAV_DB_URL` from `st_messages_mpa_exav_db_url`.
+st_messages_mpa_exav_env: ''
 # Image repository for the mpa valkey.
 st_messages_mpa_valkey_image: docker.io/valkey/valkey
 # The tag of the valkey docker image to use.
@@ -154,6 +168,8 @@ st_messages_mpa_valkey_tag: 9.1.2
 st_messages_mpa_rollback_enabled: false
 # Local path to the custom template to use for mpa compose file.
 st_messages_mpa_compose_template: mpa/compose.yaml.j2
+# Seconds the systemd unit waits for every container of the mpa stack to report healthy. The first exav start downloads the prebuilt database before it reports healthy.
+st_messages_mpa_timeout: 300
 # Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool.
 st_messages_cadvisor_enabled: false
 # Image repository for the cadvisor container.

@@ -21,7 +21,7 @@ services:
     container_name: rspamd
     image: "{{ st_messages_mpa_rspamd_image }}:{{ st_messages_mpa_rspamd_tag }}"
     depends_on:
-      - clamav
+      - {{ st_messages_mpa_antivirus_engine }}
       - unbound
       - valkey
     ports:
@@ -35,6 +35,7 @@ services:
       timeout: 3s
       start_period: 10s
 
+{% if st_messages_mpa_antivirus_engine == 'clamav' %}
   clamav:
     container_name: clamav
     image: "{{ st_messages_mpa_clamav_image }}:{{ st_messages_mpa_clamav_tag }}"
@@ -45,6 +46,21 @@ services:
       interval: 1m
       timeout: 3s
       start_period: 10s
+{% else %}
+  exav:
+    container_name: exav
+    image: "{{ st_messages_mpa_exav_image }}:{{ st_messages_mpa_exav_tag }}"
+    environment:
+      EXAV_DB_URL: "{{ st_messages_mpa_exav_db_url }}"
+    env_file: ./exav_env
+    volumes:
+      - {{ st_messages_mpa_dir }}/exav_data:/var/lib/exav
+    healthcheck:
+      test: ["CMD", "/exav", "--ping"]
+      interval: 1m
+      timeout: 5s
+      start_period: 60s
+{% endif %}
 
   unbound:
     container_name: unbound

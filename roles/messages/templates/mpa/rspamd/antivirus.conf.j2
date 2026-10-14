@@ -6,7 +6,7 @@ clamav {
   type = "clamav";
   # If set true, log message is emitted for clean messages
   log_clean = true;
-  servers = "clamav:3310";
+  servers = "{{ st_messages_mpa_antivirus_engine }}:3310";
   # Scan whole message - slightly more load
   scan_mime_parts = false;
 }

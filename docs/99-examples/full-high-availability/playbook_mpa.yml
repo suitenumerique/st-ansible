@@ -23,6 +23,8 @@
         st_messages_mpa_enabled: true
         st_messages_mpa_rollback_enabled: false # don't rollback the valkey and rspamd data directories
         st_messages_mpa_clamav_tag: x.y.z # check https://hub.docker.com/r/clamav/clamav/tags
+        # st_messages_mpa_antivirus_engine: exav # replaces clamav, see docs/04-messages/05-mpa.md
+        # st_messages_mpa_exav_db_url: https://files.example.org/signatures/clamav.exavdb
         st_messages_mpa_rspamd_tag: x.y.z # check https://hub.docker.com/r/rspamd/rspamd/tags
         st_messages_mpa_caddy_tag: x.y.z # check https://hub.docker.com/_/caddy/tags
         st_messages_mpa_valkey_tag: x.y.z # check https://hub.docker.com/r/valkey/valkey/tags

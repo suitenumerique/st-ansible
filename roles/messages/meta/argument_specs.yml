@@ -350,6 +350,36 @@ argument_specs:
         type: "str"
         description: "Local path to the clamd.conf template."
         default: "mpa/clamd.conf.j2"
+      st_messages_mpa_antivirus_engine:
+        type: "str"
+        choices: ["clamav", "exav"]
+        description: "The antivirus engine behind rspamd. `clamav` runs the clamav daemon. `exav` runs the exav daemon instead, on the same clamd protocol, and serves the prebuilt database from `st_messages_mpa_exav_db_url`."
+        default: "clamav"
+      st_messages_mpa_exav_image:
+        type: "str"
+        description: "Image repository for the mpa exav."
+        default: "ghcr.io/sylvinus/exav"
+      st_messages_mpa_exav_tag:
+        type: "str"
+        description:
+          - "The tag of the exav docker image to use."
+          - "See https://github.com/sylvinus/exav/pkgs/container/exav."
+        # renovate: datasource=docker depName=ghcr.io/sylvinus/exav
+        default: "0.0.2"
+      st_messages_mpa_exav_db_url:
+        type: "str"
+        description:
+          - "URL of the prebuilt `.exavdb` that exav pulls and serves. Required when the engine is `exav`."
+          - "Any HTTP(S) URL. Basic auth as `user:pass@` works over `https://` only. exav re-checks the URL every 300 seconds and hot-reloads a changed file."
+        default: ""
+      st_messages_mpa_exav_env_template:
+        type: "str"
+        description: "Local path to the exav env file template."
+        default: "mpa/exav_env.j2"
+      st_messages_mpa_exav_env:
+        type: "str"
+        description: "Content of the exav env file: extra `EXAV_*` lines, for example `EXAV_WORKERS` or `EXAV_MAX_PROCESS_BYTES`. The compose file sets `EXAV_DB_URL` from `st_messages_mpa_exav_db_url`."
+        default: ""
       st_messages_mpa_valkey_image:
         type: "str"
         description: "Image repository for the mpa valkey."
@@ -369,6 +399,10 @@ argument_specs:
         type: "str"
         description: "Local path to the custom template to use for mpa compose file."
         default: "mpa/compose.yaml.j2"
+      st_messages_mpa_timeout:
+        type: "int"
+        description: "Seconds the systemd unit waits for every container of the mpa stack to report healthy. The first exav start downloads the prebuilt database before it reports healthy."
+        default: 300
       st_messages_cadvisor_enabled:
         type: "bool"
         description: "Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool."
