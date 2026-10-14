@@ -28,7 +28,7 @@ Installs and configures the file-scanner service from La Suite Territoriale on D
 | st_file_scanner_image | Image repository for file-scanner (one image runs both the web API and the worker). | str | no | ghcr.io/suitenumerique/file-scanner |
 | st_file_scanner_tag | Tag of the file-scanner docker image to deploy. | str | no | 0.3.0 |
 | st_file_scanner_clamav_image | Image repository for the bundled ClamAV daemon. | str | no | docker.io/clamav/clamav |
-| st_file_scanner_clamav_tag | Tag of the ClamAV docker image to deploy. | str | no | 1.4 |
+| st_file_scanner_clamav_tag | Tag of the ClamAV docker image to deploy. | str | no | 1.5.4 |
 | st_file_scanner_dir | Remote path to the base directory for the file-scanner app. | str | no | /opt/file-scanner/file-scanner |
 | st_file_scanner_port | The host published port for the file-scanner API (maps to the container's uvicorn port 8090). | str | no | 50800 |
 | st_file_scanner_rollback_enabled | Whether or not to trigger the rollback tasks if the file-scanner deployment fails. | bool | no | False |

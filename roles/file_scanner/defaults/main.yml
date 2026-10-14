@@ -13,7 +13,7 @@ st_file_scanner_tag: 0.3.0
 # Image repository for the bundled ClamAV daemon.
 st_file_scanner_clamav_image: docker.io/clamav/clamav
 # Tag of the ClamAV docker image to deploy.
-st_file_scanner_clamav_tag: '1.4'
+st_file_scanner_clamav_tag: 1.5.4
 # Remote path to the base directory for the file-scanner app.
 st_file_scanner_dir: /opt/file-scanner/file-scanner
 # The host published port for the file-scanner API (maps to the container's uvicorn port 8090).

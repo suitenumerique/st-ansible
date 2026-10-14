@@ -147,7 +147,7 @@ complete variable reference.
 | `st_file_scanner_port` | Host port (maps to the API's uvicorn 8090) | `50800` |
 | `st_file_scanner_uid` | Unix UID for the file-scanner user | `1108` |
 | `st_file_scanner_env` | Environment content (API + worker) | _(empty)_ |
-| `st_file_scanner_clamav_tag` | ClamAV image tag | `1.4` |
+| `st_file_scanner_clamav_tag` | ClamAV image tag | `1.5.4` |
 | `st_file_scanner_rollback_enabled` | Rollback on failure | `false` |
 
 ## Network & Ports
