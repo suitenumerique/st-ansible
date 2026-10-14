@@ -90,6 +90,7 @@ Default configs include:
 - **phishing.conf**, OpenPhish + phishcatch enabled
 - **multimap.conf**, Blacklist/whitelist domain and IP maps
 - **mime_types.conf**, Extended dangerous extension list
+- **classifier-bayes.conf**, Bayes autolearn enabled, 100 learns per class before classification
 - **redis.conf** / **history_redis.conf**, Valkey at `valkey:6379`
 - **worker-controller.inc** / **worker-proxy.inc**, Controller and proxy settings
 - **options.inc** / **logging.inc**, General options
