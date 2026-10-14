@@ -2,7 +2,8 @@
 
 Celery worker for the Conversations application. Processes asynchronous tasks using the same
 backend image with a Celery entrypoint. The worker runs Celery beat embedded. Beat reads its
-schedule from three env vars (upstream release after `v0.0.25`). See
+schedule from three env vars (upstream release after `v0.0.25`). Set
+`st_conversations_workers_beat_enabled` to `false` to stop beat on a host. See
 [Periodic Jobs](01-conversations.md#periodic-jobs).
 
 ## Features That Run on the Workers
@@ -25,8 +26,10 @@ production installation.
 
 ```text
 conversations-worker (docker.io/lasuite/conversations-backend)
-  └── celery -A conversations.celery_app worker --task-events --beat -l INFO -c <nproc> --schedule=/tmp/celerybeat-schedule
+  └── celery -A conversations.celery_app worker --task-events -l INFO -c <nproc> [--beat --schedule=/tmp/celerybeat-schedule]
 ```
+
+The bracketed part is present when `st_conversations_workers_beat_enabled` is `true` (the default).
 
 ## Prerequisites
 
@@ -48,6 +51,7 @@ See [roles/conversations/REFERENCE.md](../../roles/conversations/REFERENCE.md) f
 | `st_conversations_workers_dir` | Application directory | `/opt/conversations/workers` |
 | `st_conversations_workers_env` | Environment content | `{{ st_conversations_backend_env }}` |
 | `st_conversations_workers_rollback_enabled` | Rollback on failure | `false` |
+| `st_conversations_workers_beat_enabled` | Run Celery beat inside the worker | `true` |
 
 ## Network & Ports
 
@@ -59,8 +63,9 @@ Stateless. No persistent bind mounts.
 
 ## Periodic Jobs
 
-Deploy exactly one workers host. Beat is embedded in the worker, so a second host runs every
-periodic task twice.
+Run beat on exactly one workers host. Each beat scheduler enqueues every periodic task, so two hosts with
+beat run every task twice. Set `st_conversations_workers_beat_enabled: false` on every other
+workers host. The hosts without beat still consume the tasks from the queue.
 
 The workers env must carry the same three lines as the backend env. By default, the workers env
 inherits them. See [Periodic Jobs](01-conversations.md#periodic-jobs) for the variables and rules.

@@ -7,9 +7,8 @@ services:
     container_name: transfers-worker
     image: "{{ st_transfers_backend_image }}:{{ st_transfers_tag }}"
     env_file: ./env
-    # worker.py launches a single Celery worker with the beat scheduler embedded
-    # (`celery worker --beat --task-events`), so no separate beat container is needed.
-    command: ["python", "worker.py"]
+    # worker.py embeds beat unless it receives --disable-scheduler.
+    command: ["python", "worker.py"{% if not st_transfers_workers_beat_enabled | bool %}, "--disable-scheduler"{% endif %}]
     # The image's own probe targets gunicorn on :8000, which this worker does not
     # run, so Celery's ping replaces it. It is a broadcast on the broker: with
     # several hosts on one Redis, another host's worker can answer for this one.

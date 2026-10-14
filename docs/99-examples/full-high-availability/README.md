@@ -96,7 +96,16 @@ first host stays on the new version and the second can be debugged manually.
 | playbook_conversations.yml | conversations | 2 | 1 | conversations |
 | playbook_conversations_workers.yml | conversations_workers | 1 | - | conversations (workers) |
 
-Deploy exactly one conversations workers host. Celery beat runs inside the worker, so a second host runs every periodic task twice.
+Each workers playbook deploys one host. Celery beat runs inside the worker, so a second host
+with beat runs every periodic task twice. To add workers hosts, set
+`st_<app>_workers_beat_enabled: false` on every workers host except one:
+
+```yaml
+st_messages_workers_beat_enabled: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+```
+
+`ansible_play_hosts_all` lists every host of the play, also under `serial: 1`, so the expression
+picks the same host in each batch. The st-cli scaffold sets this expression by itself.
 
 ## Running
 

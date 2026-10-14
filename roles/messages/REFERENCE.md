@@ -42,6 +42,7 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | st_messages_workers_env_template | Local path to the custom template to use for messages workers env file. | str | no | workers/env.j2 |
 | st_messages_workers_env | Content of the default workers_env_template, not used if st_messages_workers_env_template is defined. | str | no | {{ st_messages_backend_env }} |
 | st_messages_workers_rollback_enabled | Whether or not to trigger the rollback tasks if the workers deployment fails. | bool | no | False |
+| st_messages_workers_beat_enabled | Runs the Celery beat scheduler inside the worker. Set it to false on every workers host except one, because each beat scheduler enqueues every periodic task. | bool | no | True |
 | st_messages_workers_compose_template | Local path to the custom template to use for messages workers compose file. | str | no | workers/compose.yaml.j2 |
 | st_messages_mta_in_enabled | DEPRECATED (use st_messages_pymta_enabled): triggers the installation of the mta-in. | bool | no | False |
 | st_messages_mta_in_image | DEPRECATED (use st_messages_pymta_image): image repository for mta-in. | str | no | ghcr.io/suitenumerique/messages-mta-in |

@@ -270,7 +270,8 @@ inherits them. If you override `st_conversations_workers_env`, you must add them
 - An invalid value stops the backend, the worker, and the migrations one-off at start. The
   settings raise `ValueError` for a provider other than `albert`, a non-integer or negative
   interval, an interval of `0` with the poll on, or an invalid cron string.
-- Deploy exactly one workers host. A second host runs every periodic task twice.
+- Run beat on exactly one workers host. Set `st_conversations_workers_beat_enabled: false` on
+  every other workers host. See [02-workers.md](02-workers.md#periodic-jobs).
 - `st-cli bootstrap` does not write these lines. Add them by hand.
 
 > [!NOTE]

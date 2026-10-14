@@ -15,7 +15,7 @@ transfers-frontend (ghcr.io/suitenumerique/transfers-frontend)
 transfers-backend  (ghcr.io/suitenumerique/transfers-backend)
   └── gunicorn (transfers.wsgi) on port 8000
 transfers-worker   (ghcr.io/suitenumerique/transfers-backend)
-  └── python worker.py — a Celery worker with the beat scheduler embedded
+  └── python worker.py [--disable-scheduler] — a Celery worker with the beat scheduler embedded
 ```
 
 The frontend and backend run in a single compose unit (`/opt/transfers/transfers`); the
@@ -136,6 +136,7 @@ variable reference.
 | `st_transfers_frontend_env` | Frontend (Caddy) environment content | _(empty)_ |
 | `st_transfers_backend_run_migrations` | Run DB migrations on deploy | `true` |
 | `st_transfers_workers_enabled` | Enable the Celery worker unit | `false` |
+| `st_transfers_workers_beat_enabled` | Run Celery beat inside the worker | `true` |
 | `st_transfers_rollback_enabled` | Rollback on failure | `false` |
 
 ## Network & Ports
@@ -172,10 +173,16 @@ endpoint you enter, so the two stay in sync.
 ## Background jobs (Celery)
 
 The worker unit (`st_transfers_workers_enabled: true`) runs `python worker.py`, which
-launches a single Celery worker with the **beat scheduler embedded** (`--beat`) — there
+launches a single Celery worker with the **beat scheduler embedded** (`--beat`). There
 is no separate beat container. It handles transfer expiry, draft cleanup, S3 orphan
 detection and invitation delivery. Enable it on the same hosts as the core or on
 dedicated worker hosts (`st-cli` prompts for optional worker IPs at bootstrap).
+
+Run beat on exactly one workers host. Each beat scheduler enqueues every periodic task, so two
+hosts with beat run every task twice. Set `st_transfers_workers_beat_enabled: false` on
+every other workers host. The role then passes `--disable-scheduler` to `worker.py`.
+`worker.py` accepts this flag from upstream `v0.4.0`.
+The hosts without beat still consume the tasks from the queue.
 
 ## Drive integration (optional)
 

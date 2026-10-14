@@ -86,7 +86,7 @@ same public HTTPS URLs the browser uses, and TLS validates normally.
        container_name: drive-worker
        image: "{{ st_drive_backend_image }}:{{ st_drive_tag }}"
        env_file: ./env
-       command: celery -A drive.celery_app worker --task-events --beat -l INFO -c {{ ansible_processor_nproc }} -Q celery,default --schedule=/tmp/celerybeat-schedule
+       command: celery -A drive.celery_app worker --task-events -l INFO -c {{ ansible_processor_nproc }} -Q celery,default{% if st_drive_workers_beat_enabled | bool %} --beat --schedule=/tmp/celerybeat-schedule{% endif %}
        extra_hosts:
          - "collabora.example.org:host-gateway"    # <-- your public Collabora domain
        healthcheck:

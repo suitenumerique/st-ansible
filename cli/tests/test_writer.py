@@ -100,6 +100,20 @@ def test_backend_run_migrations_gated_to_first_host():
         assert data[var] == expr
 
 
+def test_workers_beat_gated_to_first_host():
+    """Apps with an embedded Celery beat scaffold st_<app>_workers_beat_enabled
+    on the core vars (the workers play loads them) so beat runs on one host."""
+    expr = "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+    for app in ("conversations", "drive", "messages", "transfers"):
+        meta = appmeta.load_app(app)
+        var = f"st_{app}_workers_beat_enabled"
+        data = CommentedMap()
+        writer.apply_component_vars(
+            data, meta, meta.core(), {"DOMAIN": "x.example.org"}
+        )
+        assert data[var] == expr
+
+
 def test_collabora_env_and_wiring():
     meta = appmeta.load_app("drive")
     data = CommentedMap()
