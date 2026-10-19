@@ -176,13 +176,15 @@ worker process, which serves no HTTP — with the default stack, expect the asyn
 counters to be absent from scrapes (see the upstream
 [monitoring notes](https://github.com/suitenumerique/file-scanner/blob/main/docs/deployment.md#monitoring)).
 
-Serving no HTTP, the worker is probed on its broker instead: dramatiq exposes no worker
-ping, so the compose healthcheck only answers "the broker replies from inside the worker
-container". That is enough for the failure which is otherwise invisible — an unreachable
-`WORKER_BROKER_URL` leaves the worker running and silent, async scans never complete, and
-transfers waits out its `SCAN_WAIT_*` budget. A wedged consumer on a reachable broker is
-not covered. The probe needs podman-compose 1.5.0 or later (the podman role installs
-1.6.0): 1.3.0 runs it through `/bin/sh -c`, which this distroless image has not.
+Serving no HTTP, the worker is probed with upstream's
+[`python -m health`](https://github.com/suitenumerique/file-scanner/blob/main/src/health.py),
+which sends a dramatiq ping on a queue only that container consumes and waits for the
+answer — the broker, the consumer, a worker thread and the result backend in one probe.
+It needs podman-compose 1.5.0 or later (the podman role installs 1.6.0).
+
+The ping is itself a task, so it reports unhealthy when every worker thread is busy on long
+scans. That costs nothing at runtime, where health drives nothing, but it can hold up the
+start of the unit while a backlog drains.
 
 The upstream queue dashboard is **disabled by default** (no
 `WORKER_DASHBOARD_PASSWORD` set — the route is not even mounted). It exposes
@@ -261,13 +263,15 @@ exav: no signature database loaded — refusing to run (it would report real mal
       as clean). Load signatures with -d/--sig-dir, or pass --allow-no-db …
 ```
 
-The API and the worker are ordered after exav but **not gated on its health**, so the
-service keeps running either way. That is not a preference: podman does not pick up
-this image's declared HEALTHCHECK (`podman inspect` leaves `.State.Health` nil) and a
-compose-defined probe cannot work on a shell-less image under podman-compose 1.3.0 —
-so `condition: service_healthy` on exav would never be satisfied, and the API would
-never be created at all. Watch `podman logs file-scanner-exav` instead; there is no
-health signal for this container.
+The API and the worker are ordered after exav but **not gated on its health**: it is an
+optional engine, and a database it cannot load must not keep them from starting.
+
+`depends_on` is not the whole story. The image declares its own HEALTHCHECK
+(`/exav --ping`) and podman reports it, so exav has a health status like any other
+container — and `application_execstart.sh` counts them all: the unit reaches `--ready`
+only once exav answers, whatever `depends_on` says. Loading the signatures therefore has
+to fit in `st_file_scanner_timeout`, which is the operational reason to set `EXAV_DB_URL`
+instead of letting it compile clamav's set on every start.
 
 Ordering is not insulation, though: the application's `/check` answers 200 only when
 **every** engine of the default set pings back, so naming exav in `DEFAULT_SCANNERS`
@@ -315,10 +319,9 @@ pick one:
   the warning without changing what actually happens.
 
 The role mounts `clamav_data` read-only into the daemon either way, and gives it a
-writable `exav_data` volume for the downloaded database. The image declares its own
-`/exav --ping` check, which passes only once the database is loaded, but podman does
-not expose its result — as above, this container has no health signal, so read the
-logs.
+writable `exav_data` volume for the downloaded database. The `/exav --ping` check
+passes only once the database is loaded, so a slow or failed load shows as `unhealthy`
+in `podman ps` — and as a unit that never reaches ready.
 
 ## clamd size limits
 

@@ -1,0 +1,2 @@
+minor_changes:
+  - "file-scanner: the worker healthcheck runs the upstream ``python -m health`` module, which sends a dramatiq ping on a queue only that container consumes and waits for the answer, instead of a plain broker ping. It covers the consumer, a worker thread and the result backend too, so a worker wedged on a reachable broker is now reported unhealthy. It needs podman-compose 1.5.0 or later, and file-scanner 0.4.0, which the role now pins (up from 0.3.0: Python 3.14.8 for CVE-2026-19445 and CVE-2026-19553, and the healthcheck module)."
