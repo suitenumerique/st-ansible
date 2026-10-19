@@ -9,7 +9,7 @@ st_file_scanner_enabled: false
 # Image repository for file-scanner (one image runs both the web API and the worker).
 st_file_scanner_image: ghcr.io/suitenumerique/file-scanner
 # Tag of the file-scanner docker image to deploy.
-st_file_scanner_tag: 0.3.0
+st_file_scanner_tag: 0.4.0
 # Image repository for the bundled ClamAV daemon.
 st_file_scanner_clamav_image: docker.io/clamav/clamav
 # Tag of the ClamAV docker image to deploy.
@@ -42,7 +42,7 @@ st_file_scanner_exav_image: ghcr.io/sylvinus/exav
 st_file_scanner_exav_tag: 0.0.2
 # Local path to the custom template to use for the exav env file.
 st_file_scanner_exav_env_template: file_scanner/exav_env.j2
-# Content of the default exav_env_template. **Empty means the built-in defaults the template falls back to** (`EXAV_SIG_DIR=/var/lib/exav`, `EXAV_UPDATE_INTERVAL_SECS=300`, `EXAV_MAX_SPILL_BYTES=2200M`, `EXAV_MAX_SCAN_SECS=900`); setting it REPLACES them, so carry over what you still want. exav ships no signature database and has no updater of its own, so **set `EXAV_DB_URL` to your published .exavdb**: it loads in seconds, costing about the size of the file. Without it the daemon logs `waiting up to 1800s for signatures in /var/lib/exav` and never reports healthy — the API and the worker still start, so the failure is visible rather than fatal. The other path is compiling the signatures the bundled clamav keeps fresh: set `EXAV_SIG_DIR=/var/lib/clamav` (mounted read-only) and budget ~6 GB of RAM plus a raised st_file_scanner_timeout, because the compile spikes ~3.6 GB on EVERY start and an undersized host OOM-kills it (exit 137) in a systemd retry loop. The spill and scan limits sit above the application's MAX_URL_SIZE, like clamd's StreamMaxLength.
+# Content of the default exav_env_template. **Empty means the built-in defaults the template falls back to** (`EXAV_SIG_DIR=/var/lib/exav`, `EXAV_UPDATE_INTERVAL_SECS=300`, `EXAV_MAX_SPILL_BYTES=2200M`, `EXAV_MAX_SCAN_SECS=900`); setting it REPLACES them, so carry over what you still want. exav ships no signature database and has no updater of its own, so **set `EXAV_DB_URL` to your published .exavdb**: it loads in seconds, costing about the size of the file. Without it the daemon logs `waiting up to 1800s for signatures in /var/lib/exav` and never reports healthy, which fails the unit at st_file_scanner_timeout. The other path is compiling the signatures the bundled clamav keeps fresh: set `EXAV_SIG_DIR=/var/lib/clamav` (mounted read-only) and budget ~6 GB of RAM plus a raised st_file_scanner_timeout, because the compile spikes ~3.6 GB on EVERY start and an undersized host OOM-kills it (exit 137) in a systemd retry loop. The spill and scan limits sit above the application's MAX_URL_SIZE, like clamd's StreamMaxLength.
 st_file_scanner_exav_env: ''
 # Seconds the systemd unit waits for every container of the stack to report healthy. The first clamav start downloads the signature database; an exav that compiles its own needs several minutes more.
 st_file_scanner_timeout: 300
