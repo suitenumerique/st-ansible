@@ -28,9 +28,9 @@ argument_specs:
         default: "ghcr.io/suitenumerique/transfers-backend"
       st_transfers_tag:
         type: "str"
-        description: "Tag of the transfers docker images to deploy. Requires >= 0.4.0: the CLI sets `DJANGO_SETTINGS_MODULE=transfers.settings`, which an earlier image does not have, and emits the `SCAN_*` antivirus keys that 0.4.0 reads."
+        description: "Tag of the transfers docker images to deploy. Requires >= 0.5.0: background tasks run on dramatiq, so the CLI writes `WORKER_BROKER_URL` and the workers unit is probed with `python worker.py --ping`, neither of which an earlier image has."
         # renovate: datasource=github-releases depName=suitenumerique/transfers versioning=semver
-        default: "0.4.0"
+        default: "0.5.0"
       st_transfers_enabled:
         type: "bool"
         description: "Triggers the installation of the transfers application."
@@ -73,7 +73,7 @@ argument_specs:
         default: ''
       st_transfers_workers_enabled:
         type: "bool"
-        description: "Triggers the installation of the transfers workers (Celery worker with embedded beat scheduler)."
+        description: "Triggers the installation of the transfers workers (dramatiq worker with the periodic scheduler embedded, leader-elected on the broker Redis)."
         default: false
       st_transfers_workers_dir:
         type: "str"
