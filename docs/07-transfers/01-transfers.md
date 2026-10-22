@@ -3,7 +3,7 @@
 The `transfers` role deploys a [Transfers](https://github.com/suitenumerique/transfers)
 instance for La Suite Territoriale. Transfers is a sovereign file-transfer service (a
 companion to Drive): a Django REST backend, a React frontend served by Caddy, and a
-Celery worker for background jobs.
+dramatiq worker for background jobs.
 
 ## Container Stack
 
@@ -15,7 +15,7 @@ transfers-frontend (ghcr.io/suitenumerique/transfers-frontend)
 transfers-backend  (ghcr.io/suitenumerique/transfers-backend)
   └── gunicorn (transfers.wsgi) on port 8000
 transfers-worker   (ghcr.io/suitenumerique/transfers-backend)
-  └── python worker.py — a Celery worker with the beat scheduler embedded
+  └── python worker.py — a dramatiq worker with the periodic scheduler embedded
 ```
 
 The frontend and backend run in a single compose unit (`/opt/transfers/transfers`); the
@@ -115,7 +115,7 @@ filter.
 | RAM | 1 GB minimum |
 | Disk | 1 GB for images |
 | Database | External PostgreSQL (`DATABASE_URL` or discrete `DB_*`) |
-| Cache / broker | External Redis (`REDIS_URL` / `CELERY_BROKER_URL`) |
+| Cache / broker | External Redis for the cache (`REDIS_URL`) and, for the task broker (`WORKER_BROKER_URL`), **Redis 7 or later with eviction disabled** |
 | Object storage | S3-compatible bucket + credentials (**required**) |
 | Identity provider | OIDC issuer + client credentials |
 
@@ -135,7 +135,7 @@ variable reference.
 | `st_transfers_backend_env` | Backend environment content | _(empty)_ |
 | `st_transfers_frontend_env` | Frontend (Caddy) environment content | _(empty)_ |
 | `st_transfers_backend_run_migrations` | Run DB migrations on deploy | `true` |
-| `st_transfers_workers_enabled` | Enable the Celery worker unit | `false` |
+| `st_transfers_workers_enabled` | Enable the dramatiq worker unit | `false` |
 | `st_transfers_rollback_enabled` | Rollback on failure | `false` |
 
 ## Network & Ports
@@ -169,13 +169,36 @@ know the bucket:
 `st-cli bootstrap transfers` derives `TRANSFERS_FRONTEND_S3_ORIGIN` from the S3
 endpoint you enter, so the two stay in sync.
 
-## Background jobs (Celery)
+## Background jobs (dramatiq)
 
-The worker unit (`st_transfers_workers_enabled: true`) runs `python worker.py`, which
-launches a single Celery worker with the **beat scheduler embedded** (`--beat`) — there
-is no separate beat container. It handles transfer expiry, draft cleanup, S3 orphan
-detection and invitation delivery. Enable it on the same hosts as the core or on
+The worker unit (`st_transfers_workers_enabled: true`) runs `python worker.py`: a
+dramatiq worker on a Redis Streams broker, handling transfer expiry, draft cleanup, S3
+orphan detection and invitation delivery. Enable it on the same hosts as the core or on
 dedicated worker hosts (`st-cli` prompts for optional worker IPs at bootstrap).
+
+The periodic schedules run **inside** the worker, as a forked sidecar, and a Redis lock
+elects one worker to fire them. So there is no beat container, and nothing to enable on
+one host only: deploy the unit on as many hosts as you like.
+
+The broker is `WORKER_BROKER_URL`, written by `st-cli bootstrap` from the same secret as
+`REDIS_URL`. It is not the cache: consumer groups need **Redis 7 or later**, and a queued
+job must not be evicted (`maxmemory-policy noeviction`, with AOF if you want the queue to
+survive a restart). A job's message carries what the task needs, so an evicted message is
+a transfer that silently never expires or a webhook never sent. So if your cache Redis
+evicts, point the broker elsewhere: edit `WORKER_BROKER_URL` in the committed
+`st_transfers_backend_env` and a later replay keeps your value.
+
+The worker serves no HTTP, so it is probed with `python worker.py --ping`, which sends a
+dramatiq ping on a queue only that container consumes and waits for the answer — the
+broker, the consumer, a worker thread and the result backend in one probe. The published
+backend image is distroless, so the probe needs the exec form and podman-compose 1.5.0 or
+later to leave it alone (the podman role installs 1.6.0). The ping is
+itself a task, so it reports unhealthy when every worker thread is busy. That costs
+nothing at runtime, where health drives nothing, but it can hold up the start of the unit
+while a backlog drains.
+
+The queue dashboard lives in the Django admin (`/admin/worker-dashboard/`, superusers
+only), which the frontend proxies — behind whatever restriction you put on `/admin`.
 
 ## Drive integration (optional)
 
@@ -224,7 +247,7 @@ integration?"*; answering yes collects:
 > writes the key when you deviate.
 
 The keys land in `st_transfers_backend_env`, which the worker unit reuses — so the
-scan-submit and stale-scan reap Celery tasks see the same config. The scanner service
+scan-submit and stale-scan reap tasks see the same config. The scanner service
 itself can be deployed by this collection — see
 [08-file-scanner](../08-file-scanner/01-file-scanner.md) and
 `st-cli bootstrap file-scanner` — or run externally; either way, point

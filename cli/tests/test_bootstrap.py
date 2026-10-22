@@ -1939,7 +1939,8 @@ def test_ask_core_transfers_overrides_settings_bucket_and_s3_origin(monkeypatch)
     stays the base DJANGO_EMAIL_FROM (the app maps DEFAULT_FROM_EMAIL onto it, so
     the overlay emits no DEFAULT_FROM_EMAIL of its own). The frontend Caddy env
     points at the backend service. Object storage uses the standard
-    AWS_STORAGE_BUCKET_NAME (via base)."""
+    AWS_STORAGE_BUCKET_NAME (via base), and the broker is WORKER_BROKER_URL:
+    transfers runs its tasks on dramatiq, not celery."""
     script_questionary(
         monkeypatch,
         [
@@ -1981,6 +1982,9 @@ def test_ask_core_transfers_overrides_settings_bucket_and_s3_origin(monkeypatch)
     assert answers["TRANSFERS_FRONTEND_S3_ORIGIN"] == "https://s3.fr-par.scw.cloud"
     assert answers["USE_X_FORWARDED_FOR"] == "true"
     assert answers["DRIVE_BASE_URL"] == "https://drive.example.org"
+    # dramatiq, not celery: the same REDIS_URL secret under the broker's new key
+    assert answers["WORKER_BROKER_URL"] == answers["REDIS_URL"]
+    assert "CELERY_BROKER_URL" not in answers
 
     backend = envrender.render_env("transfers", "transfers", answers)
     body = backend["st_transfers_backend_env"]
@@ -1989,6 +1993,8 @@ def test_ask_core_transfers_overrides_settings_bucket_and_s3_origin(monkeypatch)
     assert "AWS_S3_SIGNATURE_VERSION=s3v4" in body
     assert "USE_X_FORWARDED_FOR=true" in body
     assert "DRIVE_BASE_URL=https://drive.example.org" in body
+    assert "WORKER_BROKER_URL={{ vault_redis_url }}" in body
+    assert "CELERY_BROKER_URL" not in body
     # sender comes from the base DJANGO_EMAIL_FROM (transfers maps DEFAULT_FROM_EMAIL
     # onto that env var), so the overlay adds no DEFAULT_FROM_EMAIL of its own
     assert "DJANGO_EMAIL_FROM=noreply@example.org" in body
@@ -2091,3 +2097,46 @@ def test_ask_core_transfers_file_scanner_enabled(monkeypatch):
     assert "SCAN_JWT_AUDIENCE=file-scanner" in body
     assert "SCAN_JWT_TTL=300" in body
     assert "SCAN_JWT_PRIVATE_KEY={{ vault_scan_jwt_private_key }}" in body
+
+
+def test_ask_core_transfers_keeps_a_committed_worker_broker_url(monkeypatch):
+    """A WORKER_BROKER_URL recovered from the committed blob survives a replay. It
+    defaults to the REDIS_URL secret, but the task broker must not evict where the
+    cache may, so an operator can point it at another Redis and keep it."""
+    script_questionary(
+        monkeypatch,
+        [
+            ("text", "Public domain for transfers", "transfers.example.org"),
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("text", "DATABASE_URL", "postgres://transfers"),
+            ("text", "REDIS_URL", "redis://cache.example.org:6379/0"),
+            ("text", "AWS_S3_ENDPOINT_URL", "https://s3.fr-par.scw.cloud"),
+            ("text", "AWS_S3_ACCESS_KEY_ID", "accesskey"),
+            ("password", "AWS_S3_SECRET_ACCESS_KEY", "secretkey"),
+            ("text", "AWS_STORAGE_BUCKET_NAME", "transfers-prod"),
+            ("text", "AWS_S3_REGION_NAME (optional)", ""),
+            ("text", "DRIVE_BASE_URL", ""),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "transfers-client"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", False),
+            ("confirm", "file-scanner", False),
+        ],
+    )
+    meta = appmeta.load_app("transfers")
+    answers = bootstrap._ask_core(
+        meta,
+        AnsibleVaultBackend(),
+        answers={"WORKER_BROKER_URL": "redis://broker.example.org:6379/1"},
+    )
+
+    assert answers["WORKER_BROKER_URL"] == "redis://broker.example.org:6379/1"
+    assert answers["REDIS_URL"] == "{{ vault_redis_url }}"
+
+    body = envrender.render_env("transfers", "transfers", answers)[
+        "st_transfers_backend_env"
+    ]
+    assert "WORKER_BROKER_URL=redis://broker.example.org:6379/1" in body
+    assert "REDIS_URL={{ vault_redis_url }}" in body

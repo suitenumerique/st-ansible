@@ -1,0 +1,4 @@
+---
+minor_changes:
+  - "transfers: move the workers unit to dramatiq, following upstream 0.5.0, which drops celery, celery beat and Flower. The probe is now ``python worker.py --ping``, a dramatiq ping on the queue of that container alone, where ``celery inspect ping`` was a broker broadcast another host's worker could answer. The periodic schedules run inside the worker and a Redis lock elects one to fire them, so the unit no longer has to be confined to a single host. Pins ``st_transfers_tag`` to 0.5.0."
+  - "cli: transfers' task broker is ``WORKER_BROKER_URL``, written from the same secret as ``REDIS_URL``; the other Django apps keep ``CELERY_BROKER_URL``. The broker needs a Redis 7 or later with eviction disabled, and the release flag tells the operator to delete the obsolete ``CELERY_BROKER_URL`` line, which the env merge never removes."
