@@ -1939,7 +1939,8 @@ def test_ask_core_transfers_overrides_settings_bucket_and_s3_origin(monkeypatch)
     stays the base DJANGO_EMAIL_FROM (the app maps DEFAULT_FROM_EMAIL onto it, so
     the overlay emits no DEFAULT_FROM_EMAIL of its own). The frontend Caddy env
     points at the backend service. Object storage uses the standard
-    AWS_STORAGE_BUCKET_NAME (via base)."""
+    AWS_STORAGE_BUCKET_NAME (via base), and the broker is WORKER_BROKER_URL:
+    transfers runs its tasks on dramatiq, not celery."""
     script_questionary(
         monkeypatch,
         [
@@ -1981,6 +1982,9 @@ def test_ask_core_transfers_overrides_settings_bucket_and_s3_origin(monkeypatch)
     assert answers["TRANSFERS_FRONTEND_S3_ORIGIN"] == "https://s3.fr-par.scw.cloud"
     assert answers["USE_X_FORWARDED_FOR"] == "true"
     assert answers["DRIVE_BASE_URL"] == "https://drive.example.org"
+    # dramatiq, not celery: the same REDIS_URL secret under the broker's new key
+    assert answers["WORKER_BROKER_URL"] == answers["REDIS_URL"]
+    assert "CELERY_BROKER_URL" not in answers
 
     backend = envrender.render_env("transfers", "transfers", answers)
     body = backend["st_transfers_backend_env"]
@@ -1989,6 +1993,8 @@ def test_ask_core_transfers_overrides_settings_bucket_and_s3_origin(monkeypatch)
     assert "AWS_S3_SIGNATURE_VERSION=s3v4" in body
     assert "USE_X_FORWARDED_FOR=true" in body
     assert "DRIVE_BASE_URL=https://drive.example.org" in body
+    assert "WORKER_BROKER_URL={{ vault_redis_url }}" in body
+    assert "CELERY_BROKER_URL" not in body
     # sender comes from the base DJANGO_EMAIL_FROM (transfers maps DEFAULT_FROM_EMAIL
     # onto that env var), so the overlay adds no DEFAULT_FROM_EMAIL of its own
     assert "DJANGO_EMAIL_FROM=noreply@example.org" in body

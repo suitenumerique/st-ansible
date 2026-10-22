@@ -503,6 +503,41 @@ def test_transfers_round_trip_byte_identical_with_scanner(repo, monkeypatch):
     )
 
 
+def test_transfers_replay_keeps_a_hand_edited_worker_broker_url(repo, monkeypatch):
+    """The questionnaire never asks for WORKER_BROKER_URL — it defaults to the
+    REDIS_URL secret — so an operator who needs a non-evicting broker edits the
+    committed blob by hand. A replay must recover that value and leave it alone,
+    changing nothing else."""
+    seed_creds(repo)
+    sq1 = script_questionary(monkeypatch, transfers_first_run_script())
+    bootstrap.bootstrap("transfers", "prod")
+    assert not sq1._scripts, f"unconsumed scripts: {sq1._scripts}"
+
+    vars_path = repo / "transfers/prod/transfers/vars.yml"
+    assert "WORKER_BROKER_URL={{ vault_redis_url }}" in vars_path.read_text()
+    # the operator points the task broker at a Redis that does not evict
+    broker = "redis://broker.example.org:6379/1"
+    vars_path.write_text(
+        vars_path.read_text().replace(
+            "WORKER_BROKER_URL={{ vault_redis_url }}",
+            f"WORKER_BROKER_URL={broker}",
+        )
+    )
+    vars_before = vars_path.read_text()
+    vault_before = (repo / "transfers/prod/transfers/vault.yml").read_bytes()
+
+    sq2 = accept_defaults(monkeypatch)
+    bootstrap.bootstrap("transfers", "prod", replay=bootstrap.ReplayAction.MODIFY)
+    assert not sq2._scripts, f"unconsumed scripts: {sq2._scripts}"
+    # the broker is never prompted, so the hand edit is the only source
+    assert not sq2.asked("text", "WORKER_BROKER_URL")
+
+    assert vars_path.read_text() == vars_before
+    assert f"WORKER_BROKER_URL={broker}" in vars_path.read_text()
+    assert "REDIS_URL={{ vault_redis_url }}" in vars_path.read_text()
+    assert (repo / "transfers/prod/transfers/vault.yml").read_bytes() == vault_before
+
+
 def test_file_scanner_round_trip_byte_identical(repo, monkeypatch):
     """An Enter-through file-scanner rebootstrap leaves vars.yml and vault.yml
     byte-identical: the generated webhook signing seed, the /metrics token and

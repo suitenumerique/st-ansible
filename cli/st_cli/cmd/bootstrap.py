@@ -1051,8 +1051,8 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
     _ask_db(answers, backend, core_key, app)
 
     # REDIS_URL can embed a password, so it routes through the secret backend
-    # like DATABASE_URL. CELERY_BROKER_URL references the same secret rather
-    # than prompting again.
+    # like DATABASE_URL. The broker URL references the same secret rather than
+    # prompting again.
     if "REDIS_URL" not in answers:
         redis_url = (
             _ask(
@@ -1063,7 +1063,13 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             else None
         )
         backend.env_secret(answers, "REDIS_URL", component=core_key, value=redis_url)
-    answers["CELERY_BROKER_URL"] = answers["REDIS_URL"]
+    if app == "transfers":
+        # dramatiq, not celery. The task broker defaults to the cache Redis but
+        # keeps a committed value: unlike the cache it must not evict, so it can
+        # legitimately point somewhere else.
+        answers.setdefault("WORKER_BROKER_URL", answers["REDIS_URL"])
+    else:
+        answers["CELERY_BROKER_URL"] = answers["REDIS_URL"]
     if app == "conversations":
         # Upstream waits on the document-parse task result, so it needs a result backend.
         answers["CELERY_RESULT_BACKEND"] = answers["REDIS_URL"]
