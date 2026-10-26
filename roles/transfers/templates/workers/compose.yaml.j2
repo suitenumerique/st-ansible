@@ -7,14 +7,15 @@ services:
     container_name: transfers-worker
     image: "{{ st_transfers_backend_image }}:{{ st_transfers_tag }}"
     env_file: ./env
-    # worker.py launches a single Celery worker with the beat scheduler embedded
-    # (`celery worker --beat --task-events`), so no separate beat container is needed.
+    # Dramatiq worker; it forks the periodic scheduler as a sidecar, and a Redis
+    # lock lets one worker fire the schedules, so there is no beat container and
+    # nothing to enable per host.
     command: ["python", "worker.py"]
     # The image's own probe targets gunicorn on :8000, which this worker does not
-    # run, so Celery's ping replaces it. It is a broadcast on the broker: with
-    # several hosts on one Redis, another host's worker can answer for this one.
+    # run. This one pings the container's own dramatiq queue, so no other host
+    # can answer for it. Flaps when every worker thread is busy.
     healthcheck:
-      test: ["CMD", "celery", "-A", "transfers.celery_app", "inspect", "ping"]
+      test: ["CMD", "python", "worker.py", "--ping"]
       interval: 1m
       timeout: 10s
       start_interval: 5s

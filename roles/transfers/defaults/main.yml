@@ -8,8 +8,8 @@ st_transfers_gid: '{{ st_transfers_uid }}'
 st_transfers_frontend_image: ghcr.io/suitenumerique/transfers-frontend
 # Image repository for the transfers backend.
 st_transfers_backend_image: ghcr.io/suitenumerique/transfers-backend
-# Tag of the transfers docker images to deploy. Requires >= 0.4.0: the CLI sets `DJANGO_SETTINGS_MODULE=transfers.settings`, which an earlier image does not have, and emits the `SCAN_*` antivirus keys that 0.4.0 reads.
-st_transfers_tag: 0.4.0
+# Tag of the transfers docker images to deploy. Requires >= 0.5.0: background tasks run on dramatiq, so the CLI writes `WORKER_BROKER_URL` and the workers unit is probed with `python worker.py --ping`, neither of which an earlier image has.
+st_transfers_tag: 0.5.0
 # Triggers the installation of the transfers application.
 st_transfers_enabled: false
 # Remote path to the base directory for transfers app.
@@ -30,7 +30,7 @@ st_transfers_backend_run_migrations: true
 st_transfers_frontend_env_template: transfers/frontend_env.j2
 # Content of the default frontend_env_template, not used if st_transfers_frontend_env_template is defined.
 st_transfers_frontend_env: ''
-# Triggers the installation of the transfers workers (Celery worker with embedded beat scheduler).
+# Triggers the installation of the transfers workers (dramatiq worker with the periodic scheduler embedded, leader-elected on the broker Redis).
 st_transfers_workers_enabled: false
 # Remote path to the base directory for transfers workers.
 st_transfers_workers_dir: /opt/transfers/workers
