@@ -1,6 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.projects
-Version: 0.5.1
+Version: 0.6.0
 
 This role deploys a Projects instance from La Suite Territoriale on a rootless podman base on Debian systems.
 

@@ -1,2 +1,0 @@
-minor_changes:
-  - "messages: the mpa app can run exav instead of clamav behind rspamd. Set ``st_messages_mpa_antivirus_engine`` to ``exav`` and point ``st_messages_mpa_exav_db_url`` at a prebuilt ``.exavdb``; rspamd keeps its clamav-type antivirus module because exav speaks the clamd protocol. clamav stays the default."

@@ -2,47 +2,77 @@
 
 **Topics**
 
-- <a href="#v0-5-1">v0\.5\.1</a>
+- <a href="#v0-6-0">v0\.6\.0</a>
+    - <a href="#release-summary">Release Summary</a>
     - <a href="#minor-changes">Minor Changes</a>
+- <a href="#v0-5-1">v0\.5\.1</a>
+    - <a href="#minor-changes-1">Minor Changes</a>
     - <a href="#bugfixes">Bugfixes</a>
 - <a href="#v0-5-0">v0\.5\.0</a>
-    - <a href="#release-summary">Release Summary</a>
-    - <a href="#minor-changes-1">Minor Changes</a>
+    - <a href="#release-summary-1">Release Summary</a>
+    - <a href="#minor-changes-2">Minor Changes</a>
     - <a href="#breaking-changes">Breaking Changes</a>
     - <a href="#deprecated-features">Deprecated Features</a>
 - <a href="#v0-4-0">v0\.4\.0</a>
-    - <a href="#release-summary-1">Release Summary</a>
-    - <a href="#minor-changes-2">Minor Changes</a>
+    - <a href="#release-summary-2">Release Summary</a>
+    - <a href="#minor-changes-3">Minor Changes</a>
     - <a href="#bugfixes-1">Bugfixes</a>
 - <a href="#v0-3-1">v0\.3\.1</a>
-    - <a href="#minor-changes-3">Minor Changes</a>
-- <a href="#v0-3-0">v0\.3\.0</a>
-    - <a href="#release-summary-2">Release Summary</a>
     - <a href="#minor-changes-4">Minor Changes</a>
+- <a href="#v0-3-0">v0\.3\.0</a>
+    - <a href="#release-summary-3">Release Summary</a>
+    - <a href="#minor-changes-5">Minor Changes</a>
     - <a href="#bugfixes-2">Bugfixes</a>
     - <a href="#new-plugins">New Plugins</a>
         - <a href="#callback">Callback</a>
 - <a href="#v0-2-2">v0\.2\.2</a>
-    - <a href="#minor-changes-5">Minor Changes</a>
+    - <a href="#minor-changes-6">Minor Changes</a>
     - <a href="#bugfixes-3">Bugfixes</a>
 - <a href="#v0-2-1">v0\.2\.1</a>
-    - <a href="#minor-changes-6">Minor Changes</a>
-- <a href="#v0-2-0">v0\.2\.0</a>
-    - <a href="#release-summary-3">Release Summary</a>
     - <a href="#minor-changes-7">Minor Changes</a>
+- <a href="#v0-2-0">v0\.2\.0</a>
+    - <a href="#release-summary-4">Release Summary</a>
+    - <a href="#minor-changes-8">Minor Changes</a>
     - <a href="#bugfixes-4">Bugfixes</a>
 - <a href="#v0-1-1">v0\.1\.1</a>
-    - <a href="#minor-changes-8">Minor Changes</a>
+    - <a href="#minor-changes-9">Minor Changes</a>
     - <a href="#bugfixes-5">Bugfixes</a>
 - <a href="#v0-1-0">v0\.1\.0</a>
-    - <a href="#release-summary-4">Release Summary</a>
+    - <a href="#release-summary-5">Release Summary</a>
     - <a href="#major-changes">Major Changes</a>
-    - <a href="#minor-changes-9">Minor Changes</a>
+    - <a href="#minor-changes-10">Minor Changes</a>
+
+<a id="v0-6-0"></a>
+## v0\.6\.0
+
+<a id="release-summary"></a>
+### Release Summary
+
+Adds the Conversations application\, deployable end to end with st\-cli\.
+Moves the transfers workers to dramatiq\, following upstream 0\.5\.0\, which
+drops celery\: the broker is now <code>WORKER\_BROKER\_URL</code>\, which an upgrade flag
+replays\. Probes the file\-scanner worker with the upstream dramatiq
+healthcheck and pins file\-scanner 0\.4\.0\. The messages mpa app can run exav
+instead of clamav behind rspamd\, and deploys the rspamd bayes classifier
+config\. Bumps clamav 1\.5\.4 and rspamd 4\.2\.2\.
+
+<a id="minor-changes"></a>
+### Minor Changes
+
+* Update clamav/clamav Docker tag to v1\.5\.4
+* Update docker\.io/rspamd/rspamd Docker tag to v4\.2\.2
+* cli\: add <code>conversations</code> app support to bootstrap\: discrete <code>DB\_\*</code> database prompts\, the <code>AI\_BASE\_URL</code> / <code>AI\_MODEL</code> / <code>AI\_API\_KEY</code> LLM provider prompts\, and <code>CELERY\_RESULT\_BACKEND</code> derived from <code>REDIS\_URL</code>\.
+* cli\: transfers\' task broker is <code>WORKER\_BROKER\_URL</code>\, written from the same secret as <code>REDIS\_URL</code>\; the other Django apps keep <code>CELERY\_BROKER\_URL</code>\. The broker needs a Redis 7 or later with eviction disabled\, and the release flag tells the operator to delete the obsolete <code>CELERY\_BROKER\_URL</code> line\, which the env merge never removes\.
+* conversations\: add a <code>conversations</code> role that deploys the Conversations application \(suitenumerique/conversations\) as a caddy \+ frontend \+ backend core with a workers sub\-app on the rootless podman base\, with optional LLM catalog and theme files\, and documents the celery beat periodic jobs\.
+* file\-scanner\: the worker healthcheck runs the upstream <code>python \-m health</code> module\, which sends a dramatiq ping on a queue only that container consumes and waits for the answer\, instead of a plain broker ping\. It covers the consumer\, a worker thread and the result backend too\, so a worker wedged on a reachable broker is now reported unhealthy\. It needs podman\-compose 1\.5\.0 or later\, and file\-scanner 0\.4\.0\, which the role now pins \(up from 0\.3\.0\: Python 3\.14\.8 for CVE\-2026\-19445 and CVE\-2026\-19553\, and the healthcheck module\)\.
+* messages\: deploy the <code>classifier\-bayes\.conf</code> rspamd template in the mpa app\, with autolearn enabled and <code>min\_learns</code> set to 100\.
+* messages\: the mpa app can run exav instead of clamav behind rspamd\. Set <code>st\_messages\_mpa\_antivirus\_engine</code> to <code>exav</code> and point <code>st\_messages\_mpa\_exav\_db\_url</code> at a prebuilt <code>\.exavdb</code>\; rspamd keeps its clamav\-type antivirus module because exav speaks the clamd protocol\. clamav stays the default\.
+* transfers\: move the workers unit to dramatiq\, following upstream 0\.5\.0\, which drops celery\, celery beat and Flower\. The probe is now <code>python worker\.py \-\-ping</code>\, a dramatiq ping on the queue of that container alone\, where <code>celery inspect ping</code> was a broker broadcast another host\'s worker could answer\. The periodic schedules run inside the worker and a Redis lock elects one to fire them\, so the unit no longer has to be confined to a single host\. Pins <code>st\_transfers\_tag</code> to 0\.5\.0\.
 
 <a id="v0-5-1"></a>
 ## v0\.5\.1
 
-<a id="minor-changes"></a>
+<a id="minor-changes-1"></a>
 ### Minor Changes
 
 * Update dependency molecule to v26\.10\.0
@@ -58,14 +88,14 @@
 <a id="v0-5-0"></a>
 ## v0\.5\.0
 
-<a id="release-summary"></a>
+<a id="release-summary-1"></a>
 ### Release Summary
 
 Added file\-scanner and transfers\. Added IP filtering on Keycloak admin path
 and Django Admin paths\. Bump podman compose to 1\.6\.0\. Deprecate messages mta\-in\,
 added messages pymta\.
 
-<a id="minor-changes-1"></a>
+<a id="minor-changes-2"></a>
 ### Minor Changes
 
 * Update dependency ansible\-core to v2\.21\.5
@@ -112,12 +142,12 @@ added messages pymta\.
 <a id="v0-4-0"></a>
 ## v0\.4\.0
 
-<a id="release-summary-1"></a>
+<a id="release-summary-2"></a>
 ### Release Summary
 
 Added cli rebootstrap and improve upgrades\, added an IP filtering setup in front of Django Admins paths\, bump drive\, docs and meet\.
 
-<a id="minor-changes-2"></a>
+<a id="minor-changes-3"></a>
 ### Minor Changes
 
 * Update dependency suitenumerique/docs to v5\.6\.1
@@ -153,7 +183,7 @@ Added cli rebootstrap and improve upgrades\, added an IP filtering setup in fron
 <a id="v0-3-1"></a>
 ## v0\.3\.1
 
-<a id="minor-changes-3"></a>
+<a id="minor-changes-4"></a>
 ### Minor Changes
 
 * Update dependency suitenumerique/docs to v5\.5\.0
@@ -165,7 +195,7 @@ Added cli rebootstrap and improve upgrades\, added an IP filtering setup in fron
 <a id="v0-3-0"></a>
 ## v0\.3\.0
 
-<a id="release-summary-2"></a>
+<a id="release-summary-3"></a>
 ### Release Summary
 
 Adds two new applications\: Docs \(impress\, with workers and yprovider
@@ -173,7 +203,7 @@ sub\-apps\) and Projects \(a Planka fork\)\, both deployable end to end with
 st\-cli\. The bootstrap \"Requirements\" checklist is now app\-aware\, and
 several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\.
 
-<a id="minor-changes-4"></a>
+<a id="minor-changes-5"></a>
 ### Minor Changes
 
 * 1. added docs app support to st\-cli
@@ -203,7 +233,7 @@ several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\
 <a id="v0-2-2"></a>
 ## v0\.2\.2
 
-<a id="minor-changes-5"></a>
+<a id="minor-changes-6"></a>
 ### Minor Changes
 
 * Update docker\.io/clamav/clamav Docker tag to v1\.5\.4
@@ -223,7 +253,7 @@ several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\
 <a id="v0-2-1"></a>
 ## v0\.2\.1
 
-<a id="minor-changes-6"></a>
+<a id="minor-changes-7"></a>
 ### Minor Changes
 
 * callback\: added the suitenumerique\.st\.compact stdout callback\, one line per task and host\, a live progress line on a TTY\, diffs for changed tasks\, and full default\-style error output
@@ -233,13 +263,13 @@ several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\
 <a id="v0-2-0"></a>
 ## v0\.2\.0
 
-<a id="release-summary-3"></a>
+<a id="release-summary-4"></a>
 ### Release Summary
 
 Adds support for meet recordings\, fix openbao markers on st\-cli bootstrap
 and multiple versions upgrades\.
 
-<a id="minor-changes-7"></a>
+<a id="minor-changes-8"></a>
 ### Minor Changes
 
 * Update actions/checkout digest to 3d3c42e
@@ -260,7 +290,7 @@ and multiple versions upgrades\.
 <a id="v0-1-1"></a>
 ## v0\.1\.1
 
-<a id="minor-changes-8"></a>
+<a id="minor-changes-9"></a>
 ### Minor Changes
 
 * Added Renovate configuration \(<code>renovate\.json5</code>\) and renovate Makefile target
@@ -281,7 +311,7 @@ and multiple versions upgrades\.
 <a id="v0-1-0"></a>
 ## v0\.1\.0
 
-<a id="release-summary-4"></a>
+<a id="release-summary-5"></a>
 ### Release Summary
 
 Added st\-cli to manage LST environments bootstraps and deployments\, refactored roles to make single\-host deployments easier\, started the CHANGELOG dance\.
@@ -292,7 +322,7 @@ Added st\-cli to manage LST environments bootstraps and deployments\, refactored
 * cli\: added st\-cli \#27
 * roles\: refactor every uid\, gid and ports to allow single\-host deployments \#26
 
-<a id="minor-changes-9"></a>
+<a id="minor-changes-10"></a>
 ### Minor Changes
 
 * changelog\: added antsibull\-changelog config\, Makefile targets and CI job \#13

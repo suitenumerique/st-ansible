@@ -1,2 +1,0 @@
-minor_changes:
-  - "messages: deploy the ``classifier-bayes.conf`` rspamd template in the mpa app, with autolearn enabled and ``min_learns`` set to 100."

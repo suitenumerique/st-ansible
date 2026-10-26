@@ -463,3 +463,66 @@ releases:
     - renovate-pr-112.yml
     - socks-proxy-group.yml
     release_date: '2026-10-13'
+  0.6.0:
+    changes:
+      minor_changes:
+      - Update clamav/clamav Docker tag to v1.5.4
+      - Update docker.io/rspamd/rspamd Docker tag to v4.2.2
+      - 'cli: add ``conversations`` app support to bootstrap: discrete ``DB_*`` database
+        prompts, the ``AI_BASE_URL`` / ``AI_MODEL`` / ``AI_API_KEY`` LLM provider
+        prompts, and ``CELERY_RESULT_BACKEND`` derived from ``REDIS_URL``.'
+      - 'cli: transfers'' task broker is ``WORKER_BROKER_URL``, written from the same
+        secret as ``REDIS_URL``; the other Django apps keep ``CELERY_BROKER_URL``.
+        The broker needs a Redis 7 or later with eviction disabled, and the release
+        flag tells the operator to delete the obsolete ``CELERY_BROKER_URL`` line,
+        which the env merge never removes.'
+      - 'conversations: add a ``conversations`` role that deploys the Conversations
+        application (suitenumerique/conversations) as a caddy + frontend + backend
+        core with a workers sub-app on the rootless podman base, with optional LLM
+        catalog and theme files, and documents the celery beat periodic jobs.'
+      - 'file-scanner: the worker healthcheck runs the upstream ``python -m health``
+        module, which sends a dramatiq ping on a queue only that container consumes
+        and waits for the answer, instead of a plain broker ping. It covers the consumer,
+        a worker thread and the result backend too, so a worker wedged on a reachable
+        broker is now reported unhealthy. It needs podman-compose 1.5.0 or later,
+        and file-scanner 0.4.0, which the role now pins (up from 0.3.0: Python 3.14.8
+        for CVE-2026-19445 and CVE-2026-19553, and the healthcheck module).'
+      - 'messages: deploy the ``classifier-bayes.conf`` rspamd template in the mpa
+        app, with autolearn enabled and ``min_learns`` set to 100.'
+      - 'messages: the mpa app can run exav instead of clamav behind rspamd. Set ``st_messages_mpa_antivirus_engine``
+        to ``exav`` and point ``st_messages_mpa_exav_db_url`` at a prebuilt ``.exavdb``;
+        rspamd keeps its clamav-type antivirus module because exav speaks the clamd
+        protocol. clamav stays the default.'
+      - 'transfers: move the workers unit to dramatiq, following upstream 0.5.0, which
+        drops celery, celery beat and Flower. The probe is now ``python worker.py
+        --ping``, a dramatiq ping on the queue of that container alone, where ``celery
+        inspect ping`` was a broker broadcast another host''s worker could answer.
+        The periodic schedules run inside the worker and a Redis lock elects one to
+        fire them, so the unit no longer has to be confined to a single host. Pins
+        ``st_transfers_tag`` to 0.5.0.'
+      release_summary: 'Adds the Conversations application, deployable end to end
+        with st-cli.
+
+        Moves the transfers workers to dramatiq, following upstream 0.5.0, which
+
+        drops celery: the broker is now ``WORKER_BROKER_URL``, which an upgrade flag
+
+        replays. Probes the file-scanner worker with the upstream dramatiq
+
+        healthcheck and pins file-scanner 0.4.0. The messages mpa app can run exav
+
+        instead of clamav behind rspamd, and deploys the rspamd bayes classifier
+
+        config. Bumps clamav 1.5.4 and rspamd 4.2.2.
+
+        '
+    fragments:
+    - conversations.yml
+    - file-scanner-worker-health.yml
+    - messages-bayes.yml
+    - messages-exav.yml
+    - release_summary.yml
+    - renovate-pr-115.yml
+    - renovate-pr-116.yml
+    - transfers-dramatiq.yml
+    release_date: '2026-10-26'

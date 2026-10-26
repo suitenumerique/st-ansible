@@ -54,7 +54,7 @@ flags:
     warnings:
       - "Replace socks-proxy<n> with socks_proxy<n> in every -H/--host argument, script and runbook."
       - "If the env uses relay mode and keeps a socks-proxy unit, run st-cli bootstrap messages <env> -c socks-proxy to clear the flag."
-  - version: "next"
+  - version: "0.6.0"
     apps: [transfers]
     components: [transfers]
     reason: "transfers 0.5.0 moved its background tasks from celery to dramatiq: the broker is now WORKER_BROKER_URL. The replay writes it from the REDIS_URL secret."
