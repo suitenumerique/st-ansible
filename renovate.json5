@@ -26,6 +26,12 @@
       matchManagers: ["pep621"],
       rangeStrategy: "pin",
     },
+    // certifi is a security floor in the cli extras, not a pin: raise it, keep `>=`.
+    {
+      matchManagers: ["pep621"],
+      matchPackageNames: ["certifi"],
+      rangeStrategy: "bump",
+    },
     // cadvisor is pinned in 4 roles, caddy in 3 and valkey in 2. Collapse each
     // into a single grouped PR instead of one per file.
     {

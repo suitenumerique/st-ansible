@@ -48,8 +48,9 @@ st-cli --help
 | Extra | Adds | When to use |
 |-------|------|-------------|
 | `[ansible]` | the pinned `ansible-core` | You want ansible bundled in the same venv as st-cli. |
-| `[hashivault]` | the pinned `hvac` | You use the `hashi_vault` (OpenBao) secret backend. |
-| `[full]` | the pinned `ansible-core` and `hvac` | Self-contained one-command install (recommended). |
+| `[hashivault]` | the pinned `hvac` and a `certifi` floor | You use the `hashi_vault` (OpenBao) secret backend. |
+| `[full]` | the pinned `ansible-core`, `hvac` and a `certifi` floor | Self-contained one-command install (recommended). |
+
 
 ### Self-contained (`[full]`)
 

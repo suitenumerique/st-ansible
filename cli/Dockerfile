@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
-FROM python:3.14-alpine
+FROM python:3.14.10-alpine
 
+# ca-certificates 20261020-r0 distrusts the compromised eMudhra CAs (CVE-2026-111943).
 # shadow (groupadd/useradd) + setpriv (util-linux): the entrypoint uses them to
 # align with the bind-mount owner and drop privileges to it.
-RUN apk add --no-cache bash git openssh-client ca-certificates \
+RUN apk add --no-cache bash git openssh-client 'ca-certificates>=20261020-r0' \
     shadow setpriv
 
 COPY . /src

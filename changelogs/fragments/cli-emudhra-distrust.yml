@@ -1,0 +1,5 @@
+minor_changes:
+  - "Update dependency pytest-mock to v3.17.0"
+security_fixes:
+  - "st-cli image - move to Python 3.14.10 (CVE-2026-115557, CVE-2026-114583) and Alpine ca-certificates 20261020-r0 (CVE-2026-111943) to distrust the compromised eMudhra intermediate CAs."
+  - "st-cli hashivault and full extras - require certifi>=2026.10.19 to distrust the compromised eMudhra intermediate CAs (CVE-2026-111943)."

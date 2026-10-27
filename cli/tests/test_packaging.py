@@ -23,8 +23,8 @@ def test_pyproject_optional_dependencies_extras():
         return [re.split(r"[=<>~!]", r, maxsplit=1)[0] for r in reqs]
 
     assert names(extras["ansible"]) == ["ansible-core"]
-    assert names(extras["hashivault"]) == ["hvac"]
-    assert names(extras["full"]) == ["ansible-core", "hvac"]
+    assert names(extras["hashivault"]) == ["hvac", "certifi"]
+    assert names(extras["full"]) == ["ansible-core", "hvac", "certifi"]
     # base deps unchanged: ansible-core / hvac must not sneak into
     # [project].dependencies
     base = data["project"]["dependencies"]
