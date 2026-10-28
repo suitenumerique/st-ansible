@@ -90,7 +90,29 @@ argument_specs:
         description:
           - "Additional files needed for deployment."
           - "Could be an env file, a configuration file mounted in the container or anything else."
-          - "If in a subdirectory, the directory has to be created with `st_podman_application_directories` first"
+          - "If in a subdirectory, the directory has to be created with `st_podman_application_directories` first."
+          - "Each item has `dest`, and one of `src` (a template) or `content` (an inline string)."
+          - "Optional item keys are `mode`, `template`, `container_uid`, `container_gid`, `when` and `no_log`."
+          - "Set `no_log` to true to hide the file value from the task output and the diff. The default is false."
+      st_podman_application_secret_files:
+        type: "list"
+        elements: "dict"
+        description:
+          - "Secret files to deploy in the `secrets` directory of the application."
+          - "Each item has `env` in UPPER_SNAKE_CASE, and one of `src` (a template) or `content` (an inline string)."
+          - "The role writes the item to `secrets/<env>` with mode 0440, and hides its value from the task output."
+          - "The role deletes the other files in `secrets`. It deletes the directory when the list is empty."
+          - "The compose template must mount `secrets` in the container and set the `<env>_FILE` variable."
+          - "The role manages `secrets` only when this variable is defined. An application that does not set it keeps its `secrets` directory."
+          - "The name `secrets` is reserved. `st_podman_application_directories` and `st_podman_application_files` must not use it."
+      st_podman_application_secret_files_container_uid:
+        type: "str"
+        description:
+          - "The owner uid, inside the container, of the `secrets` directory and of each secret file."
+          - "Set it to the uid of the container user that reads the secret files."
+          - "The container gid stays 0 (the application user on the host)."
+          - "When the uid is not 0, the `secrets` directory has mode 2770 and the application user keeps write access through the group."
+        default: "0"
       st_podman_application_compose_template:
         type: "str"
         description: "Local path to the docker compose template for the application."

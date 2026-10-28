@@ -7,3 +7,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+{% if st_podman_application_secret_files | default([]) | length > 0 %}
+    environment:
+{% for secret in st_podman_application_secret_files %}
+      {{ secret.env }}_FILE: /run/secrets/{{ secret.env }}
+{% endfor %}
+    volumes:
+      - ./secrets:/run/secrets:ro
+{% endif %}

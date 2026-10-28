@@ -141,6 +141,57 @@ You can either:
   content inline
 - Set the matching `_env_template` variable to use a custom template
 
+## Secrets from Files
+
+The drive backend reads some secrets from a file. The backend reads the file when the variable
+`<NAME>_FILE` holds the path of the file. The role writes these files and sets these variables for you.
+
+Set `st_drive_backend_secret_files` to a list. Each item has the key `env`, the name of the variable, and one
+of `src` (a template) or `content` (an inline value):
+
+```yaml
+st_drive_backend_secret_files:
+  - env: DB_PASSWORD
+    content: "{{ vault_drive_db_password }}"
+  - env: AWS_S3_SECRET_ACCESS_KEY
+    src: "drive_s3_secret.j2"
+```
+
+For each item, the role:
+
+- writes the file `secrets/<env>` in the application directory (mode `0440`), for example
+  `{{ st_drive_dir }}/secrets/DB_PASSWORD`;
+- mounts the `secrets` directory read-only at `/run/secrets` in the container;
+- sets `<ENV>_FILE` in the compose `environment`, for example `DB_PASSWORD_FILE: /run/secrets/DB_PASSWORD`.
+
+The role removes the files of the items that you remove from the list.
+It removes the `secrets` directory when the list is empty.
+
+The drive workers use `st_drive_workers_secret_files`. The default value is `st_drive_backend_secret_files`.
+
+The file has priority over the same variable in `st_drive_backend_env`. If both are set, the backend uses the file.
+
+Upstream drive `v0.22.0` supports `_FILE` for these variables (`SecretFileValue` in `src/backend/drive/settings.py`):
+
+- `DJANGO_SECRET_KEY`: Django secret key.
+- `DB_PASSWORD`: Database password.
+- `AWS_S3_ACCESS_KEY_ID`: S3 access key.
+- `AWS_S3_SECRET_ACCESS_KEY`: S3 secret key.
+- `DJANGO_EMAIL_HOST_PASSWORD`: SMTP password.
+- `OIDC_RP_CLIENT_SECRET`: OIDC client secret.
+- `POSTHOG_KEY`: PostHog key.
+- `WOPI_ONLYOFFICE_CONVERT_JWT_SECRET`: JWT secret of the OnlyOffice conversion.
+
+Upstream does not support `_FILE` for other variables.
+If you add an item for another variable, the backend ignores the file.
+Multi-line values, such as a PEM key, work with `content: |` or with a template.
+No variable of this list holds a PEM key.
+
+If you use a custom compose template (`st_drive_compose_template` or `st_drive_workers_compose_template`),
+the template must declare the `environment:` and `volumes:` entries itself.
+
+If `DATABASE_URL` is set, the DB settings come from the URL. Then `DB_PASSWORD_FILE` has no effect.
+
 ## Troubleshooting
 
 ```bash

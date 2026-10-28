@@ -141,6 +141,47 @@ You can either:
   content inline
 - Set the matching `_env_template` variable to use a custom template
 
+## Secrets from Files
+
+The backend can read a secret from a file. For a variable `NAME`, the container reads the file that `NAME_FILE` names.
+The role writes the files and sets the `NAME_FILE` variables.
+
+Set `st_meet_backend_secret_files` to a list of items.
+Each item has the key `env` and one of the keys `src` or `content`.
+
+```yaml
+st_meet_backend_secret_files:
+  - env: DB_PASSWORD
+    content: "{{ vault_db_password }}"
+  - env: OIDC_RS_PRIVATE_KEY_STR
+    content: "{{ vault_oidc_rs_private_key }}"
+```
+
+- `env` is the variable name in upper case.
+- `src` is a local template. `content` is an inline value. Both keys can hold a multi-line value, such as a PEM key.
+- The role writes `{{ st_meet_dir }}/secrets/<env>` with mode `0440`.
+- The role mounts the `secrets` directory read-only at `/run/secrets`.
+- The role sets `<ENV>_FILE` in the `environment` of the compose service.
+- The role deletes the files that are no longer in the list. It deletes `secrets` when the list is empty.
+- The `<ENV>_FILE` variable has priority over the same variable in `st_meet_backend_env`.
+- A custom compose template must declare the `environment` and `volumes` entries itself.
+
+The backend accepts the `_FILE` suffix for these variables (upstream meet `v1.33.0`):
+
+| Area | Variables |
+|------|-----------|
+| Django | `DJANGO_SECRET_KEY`, `DJANGO_EMAIL_HOST_PASSWORD` |
+| Database and storage | `DB_PASSWORD`, `AWS_S3_ACCESS_KEY_ID`, `AWS_S3_SECRET_ACCESS_KEY` |
+| Authentication | `OIDC_RP_CLIENT_SECRET`, `OIDC_RS_CLIENT_SECRET`, `OIDC_RS_PRIVATE_KEY_STR` |
+| LiveKit | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `ROOMKIT_SERVER_TO_SERVER_API_TOKEN` |
+| Summary service | `SUMMARY_SERVICE_API_TOKEN`, `SUMMARY_SERVICE_WEBHOOK_API_TOKEN` |
+| Add-ons and API | `APPLICATION_JWT_SECRET_KEY`, `ADDONS_CSRF_SECRET`, `ADDONS_TOKEN_SECRET_KEY` |
+| Third-party services | `BREVO_API_KEY` |
+
+Meet has no workers. Only the backend service gets the secret files.
+
+If `DATABASE_URL` is set, the DB settings come from the URL. Then `DB_PASSWORD_FILE` has no effect.
+
 ## Custom Logo
 
 You can override the meet frontend logo without rebuilding the image. Set

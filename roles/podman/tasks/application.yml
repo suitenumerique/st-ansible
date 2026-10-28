@@ -53,6 +53,24 @@
   become_method: ansible.builtin.sudo
   become_flags: "-i"
   block:
+    - name: "Assert {{ st_podman_application_name }} application does not use the reserved secrets directory."
+      when: st_podman_application_secret_files is defined
+      vars:
+        _reserved_dirs: >-
+          {{ st_podman_application_directories | default([], true) | map(attribute='name', default='')
+          | select('match', '^(\\./)?secrets(/.*)?$') | list }}
+        _reserved_files: >-
+          {{ st_podman_application_files | default([], true) | map(attribute='dest', default='')
+          | select('match', '^(\\./)?secrets(/.*)?$') | list }}
+      ansible.builtin.assert:
+        that:
+          - _reserved_dirs | length == 0
+          - _reserved_files | length == 0
+        quiet: true
+        fail_msg: >-
+          The secrets directory is reserved for st_podman_application_secret_files.
+          Do not use it in st_podman_application_directories or st_podman_application_files.
+
     # INFO:
     #  - we want some files (env files, config files...) to be accessible by a subuid inside the container
     #  - Linux does not really care if the subuid belongs to you when checking the permissions -
@@ -81,6 +99,9 @@
         - st_podman_application_files is defined
         - st_podman_application_files | length > 0
         - item.when | default(true)
+
+    - name: "Ensure {{ st_podman_application_name }} application secret files."
+      ansible.builtin.include_tasks: application/secret_files.yml
 
     - name: "Deploy {{ st_podman_application_name }} application compose file."
       ansible.builtin.template:

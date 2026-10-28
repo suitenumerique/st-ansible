@@ -36,9 +36,19 @@ services:
     container_name: drive-backend
     image: "{{ st_drive_backend_image }}:{{ st_drive_tag }}"
     env_file: ./backend_env
+{% if st_drive_backend_secret_files | length > 0 %}
+    environment:
+{% for secret in st_drive_backend_secret_files %}
+      {{ secret.env }}_FILE: /run/secrets/{{ secret.env }}
+{% endfor %}
+{% endif %}
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "--header", "Host: {{ st_drive_public_host }}", "http://127.0.0.1:8000/__heartbeat__"]
       interval: 30s
       timeout: 15s
       retries: 3
       start_period: 10s
+{% if st_drive_backend_secret_files | length > 0 %}
+    volumes:
+      - ./secrets:/run/secrets:ro
+{% endif %}

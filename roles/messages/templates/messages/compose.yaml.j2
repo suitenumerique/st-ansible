@@ -17,3 +17,11 @@ services:
     container_name: messages-backend
     image: "{{ st_messages_backend_image }}:{{ st_messages_tag }}"
     env_file: ./backend_env
+{% if st_messages_backend_secret_files | length > 0 %}
+    environment:
+{% for secret in st_messages_backend_secret_files %}
+      {{ secret.env }}_FILE: /run/secrets/{{ secret.env }}
+{% endfor %}
+    volumes:
+      - ./secrets:/run/secrets:ro
+{% endif %}

@@ -7,9 +7,19 @@ services:
     container_name: docs-worker
     image: "{{ st_docs_backend_image }}:{{ st_docs_tag }}"
     env_file: ./env
+{% if st_docs_workers_secret_files | length > 0 %}
+    environment:
+{% for secret in st_docs_workers_secret_files %}
+      {{ secret.env }}_FILE: /run/secrets/{{ secret.env }}
+{% endfor %}
+{% endif %}
     command: celery -A impress.celery_app worker -l INFO -c {{ ansible_processor_nproc }}
     healthcheck:
       test: ["CMD-SHELL", "celery -A impress.celery_app inspect ping"]
       interval: 1m
       timeout: 10s
       start_interval: 5s
+{% if st_docs_workers_secret_files | length > 0 %}
+    volumes:
+      - ./secrets:/run/secrets:ro
+{% endif %}

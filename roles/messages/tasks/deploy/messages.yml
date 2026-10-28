@@ -9,6 +9,8 @@
     st_podman_application_dir: "{{ st_messages_dir }}"
     st_podman_application_rollback_enabled: "{{ st_messages_rollback_enabled }}"
     st_podman_application_compose_template: "{{ st_messages_compose_template }}"
+    st_podman_application_secret_files: "{{ st_messages_backend_secret_files }}"
+    st_podman_application_secret_files_container_uid: "65532"
     st_podman_application_files:
       - src: "{{ st_messages_backend_env_template }}"
         dest: "backend_env"

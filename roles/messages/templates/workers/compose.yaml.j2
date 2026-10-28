@@ -7,6 +7,14 @@ services:
     container_name: messages-worker
     image: "{{ st_messages_backend_image }}:{{ st_messages_tag }}"
     env_file: ./env
+{% if st_messages_workers_secret_files | length > 0 %}
+    environment:
+{% for secret in st_messages_workers_secret_files %}
+      {{ secret.env }}_FILE: /run/secrets/{{ secret.env }}
+{% endfor %}
+    volumes:
+      - ./secrets:/run/secrets:ro
+{% endif %}
     command: python worker.py --concurrency={{ ansible_processor_nproc }}
     healthcheck:
       test: ["CMD", "celery", "-A", "messages.celery_app", "inspect", "ping"]

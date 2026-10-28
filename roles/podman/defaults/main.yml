@@ -26,6 +26,11 @@ st_podman_application_name: ''
 st_podman_application_dir: '{{ st_podman_home }}/{{ st_podman_application_name }}'
 # The permissions to apply to the base directory to deploy the application compose to.
 st_podman_application_dir_mode: '0750'
+# The owner uid, inside the container, of the `secrets` directory and of each secret file.
+# Set it to the uid of the container user that reads the secret files.
+# The container gid stays 0 (the application user on the host).
+# When the uid is not 0, the `secrets` directory has mode 2770 and the application user keeps write access through the group.
+st_podman_application_secret_files_container_uid: '0'
 # The restart policy to apply to the systemd unit of the application.
 st_podman_application_restart_policy: on-abnormal
 # Whether or not to trigger the rollback tasks if the deployment fails.

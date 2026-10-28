@@ -20,6 +20,8 @@ st_meet_tag: v1.33.0
 st_meet_backend_env_template: meet/backend_env.j2
 # Content of the default backend_env_template, not used if st_meet_backend_env_template is defined.
 st_meet_backend_env: ''
+# Secrets that the container reads from files. Each item has the key "env" (the variable name in upper case) and one of the keys "src" (local template) or "content" (inline value). The role writes the file "secrets/<env>" in the application directory. The role mounts the "secrets" directory read-only at /run/secrets. The role sets "<ENV>_FILE" in the compose environment. The "<ENV>_FILE" variable has priority over the same variable in the env content.
+st_meet_backend_secret_files: []
 # Whether to run database migrations on meet backend startup.
 st_meet_backend_run_migrations: true
 # Local path to the custom template to use for meet frontend env file.

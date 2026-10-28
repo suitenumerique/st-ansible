@@ -8,13 +8,19 @@
 #     container_uid: 999     # will set the owner to uid 999 inside the container
 #     container_gid: 0       # will set the group to root inside the container (st_podman_user on host - default)
 #     when: "{{ foo_enabled }}"
+#   - content: "{{ foo_value }}"   # inline value, instead of src
+#     dest: config/bar
+#     no_log: true               # hide the value from the task output and the diff (default false)
 #
 # NOTE: `template: false` copies src verbatim (no Jinja), required for binary files the template
 # module cannot decode/render (e.g. .ttf/.otf). The ownership reconciliation below applies to
 # copied files too. It is SINGLE-PATH: src must be a FILE — for directories use
 # st_podman_application_directories (recursive, setgid + ACL aware).
 - name: "Deploy {{ st_podman_application_name }} file {{ item.dest }}."
-  when: item.template | default(true)
+  when:
+    - item.content is not defined
+    - item.template | default(true)
+  no_log: "{{ item.no_log | default(false) }}"
   ansible.builtin.template:
     src: "{{ item.src }}"
     dest: "{{ st_podman_application_dir }}/{{ item.dest }}"
@@ -25,9 +31,22 @@
 # Copy verbatim DOES NOT support directory mode. You need to go through ./directories.yml to create
 # directories with correct ownership.
 - name: "Copy {{ st_podman_application_name }} file {{ item.dest }} verbatim."
-  when: not (item.template | default(true))
+  when:
+    - item.content is not defined
+    - not (item.template | default(true))
+  no_log: "{{ item.no_log | default(false) }}"
   ansible.builtin.copy:
     src: "{{ item.src }}"
+    dest: "{{ st_podman_application_dir }}/{{ item.dest }}"
+    mode: "{{ item.mode | default('0660') }}"
+  notify:
+    - "systemctl --user restart {{ st_podman_application_name }}"
+
+- name: "Write {{ st_podman_application_name }} file {{ item.dest }} from inline content."
+  when: item.content is defined
+  no_log: "{{ item.no_log | default(false) }}"
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
     dest: "{{ st_podman_application_dir }}/{{ item.dest }}"
     mode: "{{ item.mode | default('0660') }}"
   notify:

@@ -43,6 +43,14 @@ services:
     image: "{{ st_meet_backend_image }}:{{ st_meet_tag }}"
     user: 1001:127
     env_file: ./backend_env
+{% if st_meet_backend_secret_files | length > 0 %}
+    environment:
+{% for secret in st_meet_backend_secret_files %}
+      {{ secret.env }}_FILE: /run/secrets/{{ secret.env }}
+{% endfor %}
+    volumes:
+      - ./secrets:/run/secrets:ro
+{% endif %}
     healthcheck:
       test: ["CMD", "python", "manage.py", "check"]
       interval: 30s

@@ -34,6 +34,7 @@ Installs and configures the docs application from La Suite Territoriale on Debia
 | st_docs_tag | Tag of the docs docker images to deploy. | str | no | v5.6.1 |
 | st_docs_backend_env_template | Local path to the custom template to use for docs backend env file. | str | no | docs/backend_env.j2 |
 | st_docs_backend_env | Content of the default backend_env_template, not used if st_docs_backend_env_template is defined. | str | no |  |
+| st_docs_backend_secret_files | Secrets that the container reads from files. Each item has the key "env" (the variable name in upper case) and one of the keys "src" (local template) or "content" (inline value). The role writes the file "secrets/<env>" in the application directory. The role mounts the "secrets" directory read-only at /run/secrets. The role sets "<ENV>_FILE" in the compose environment. The "<ENV>_FILE" variable has priority over the same variable in the env content. | list of 'dict' | no | [] |
 | st_docs_backend_run_migrations | Whether to run database migrations on docs backend startup. | bool | no | True |
 | st_docs_frontend_env_template | Local path to the custom template to use for docs frontend env file. | str | no | docs/frontend_env.j2 |
 | st_docs_frontend_env | Content of the default frontend_env_template, not used if st_docs_frontend_env_template is defined. | str | no |  |
@@ -51,6 +52,7 @@ Installs and configures the docs application from La Suite Territoriale on Debia
 | st_docs_workers_dir | Remote path to the base directory for docs workers. | str | no | /opt/docs/workers |
 | st_docs_workers_env_template | Local path to the custom template to use for docs workers env file. | str | no | workers/env.j2 |
 | st_docs_workers_env | Content of the default workers_env_template, not used if st_docs_workers_env_template is defined. | str | no | {{ st_docs_backend_env }} |
+| st_docs_workers_secret_files | Secrets that the container reads from files. Each item has the key "env" (the variable name in upper case) and one of the keys "src" (local template) or "content" (inline value). The role writes the file "secrets/<env>" in the application directory. The role mounts the "secrets" directory read-only at /run/secrets. The role sets "<ENV>_FILE" in the compose environment. The "<ENV>_FILE" variable has priority over the same variable in the env content. The default value is the list of the backend. | list of 'dict' | no | {{ st_docs_backend_secret_files }} |
 | st_docs_workers_rollback_enabled | Whether or not to trigger the rollback tasks if the workers deployment fails. | bool | no | False |
 | st_docs_workers_compose_template | Local path to the custom template to use for workers compose file. | str | no | workers/compose.yaml.j2 |
 | st_docs_yprovider_enabled | Triggers the installation of the docs y-provider collaboration server. | bool | no | False |

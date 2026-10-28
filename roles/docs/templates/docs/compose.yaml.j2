@@ -41,6 +41,12 @@ services:
     container_name: docs-backend
     image: "{{ st_docs_backend_image }}:{{ st_docs_tag }}"
     env_file: ./backend_env
+{% if st_docs_backend_secret_files | length > 0 %}
+    environment:
+{% for secret in st_docs_backend_secret_files %}
+      {{ secret.env }}_FILE: /run/secrets/{{ secret.env }}
+{% endfor %}
+{% endif %}
     healthcheck:
       # manage.py check boots the whole Django application on every run, which
       # is slow on a small host.
@@ -49,10 +55,18 @@ services:
       timeout: 60s
       retries: 3
       start_period: 30s
-{% if st_docs_theme_customization_src is defined and st_docs_theme_customization_src | length > 0 %}
+{% set docs_theme = st_docs_theme_customization_src is defined and st_docs_theme_customization_src | length > 0 %}
+{% if docs_theme or st_docs_backend_secret_files | length > 0 %}
+{% if docs_theme %}
     # Custom theme staged on the host by the docs role.
+{% endif %}
     volumes:
+{% if docs_theme %}
       - {{ st_docs_dir }}/theme.json:/app/impress/configuration/theme/default.json:ro
+{% endif %}
+{% if st_docs_backend_secret_files | length > 0 %}
+      - ./secrets:/run/secrets:ro
+{% endif %}
 {% endif %}
 
   # Conversion service for the .docx import (docx → blocknote); the backend

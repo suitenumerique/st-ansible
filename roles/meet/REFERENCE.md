@@ -33,6 +33,7 @@ Installs and configures the meet application from La Suite Territoriale on Debia
 | st_meet_tag | Tag of the meet docker image to deploy. | str | no | v1.33.0 |
 | st_meet_backend_env_template | Local path to the custom template to use for meet env file. | str | no | meet/backend_env.j2 |
 | st_meet_backend_env | Content of the default backend_env_template, not used if st_meet_backend_env_template is defined. | str | no |  |
+| st_meet_backend_secret_files | Secrets that the container reads from files. Each item has the key "env" (the variable name in upper case) and one of the keys "src" (local template) or "content" (inline value). The role writes the file "secrets/<env>" in the application directory. The role mounts the "secrets" directory read-only at /run/secrets. The role sets "<ENV>_FILE" in the compose environment. The "<ENV>_FILE" variable has priority over the same variable in the env content. | list of 'dict' | no | [] |
 | st_meet_backend_run_migrations | Whether to run database migrations on meet backend startup. | bool | no | True |
 | st_meet_frontend_env_template | Local path to the custom template to use for meet frontend env file. | str | no | meet/frontend_env.j2 |
 | st_meet_frontend_env | Content of the default frontend_env_template, not used if st_meet_frontend_env_template is defined. | str | no |  |

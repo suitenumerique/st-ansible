@@ -2,6 +2,13 @@
 - name: Verify
   hosts: instance
   become: true
+  vars:
+    secret_content: |
+      -----BEGIN TEST KEY-----
+      line one
+      line two
+      -----END TEST KEY-----
+    secret_container: "testapp_redis_1"
   tasks:
     - name: "Verify podman package is installed"
       ansible.builtin.package_facts:
@@ -21,9 +28,11 @@
         fail_msg: "podman-compose package is not installed."
         success_msg: "podman-compose package is installed."
 
+    # A namespace keeps these defaults from overriding the vars of the role imports below.
     - name: "Read the podman role defaults"
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../../../roles/podman/defaults/main.yml"
+        name: podman_defaults
 
     - name: "Compare the installed podman-compose version with the pinned version"
       ansible.builtin.command:
@@ -32,7 +41,7 @@
           - --compare-versions
           - "{{ ansible_facts.packages['podman-compose'][0].version }}"
           - ge
-          - "{{ st_podman_compose_version }}"
+          - "{{ podman_defaults.st_podman_compose_version }}"
       register: podman_compose_version_check
       changed_when: false
       failed_when: podman_compose_version_check.rc > 1
@@ -41,7 +50,7 @@
       ansible.builtin.assert:
         that:
           - podman_compose_version_check.rc == 0
-        fail_msg: "podman-compose version is {{ ansible_facts.packages['podman-compose'][0].version }}, older than {{ st_podman_compose_version }}."
+        fail_msg: "podman-compose version is {{ ansible_facts.packages['podman-compose'][0].version }}, older than {{ podman_defaults.st_podman_compose_version }}."
         success_msg: "podman-compose version is {{ ansible_facts.packages['podman-compose'][0].version }}."
 
     - name: "Verify testuser exists"
@@ -319,3 +328,167 @@
           - app_env_content.content | b64decode == "TEST_ENV_VAR=hello_world\nTEST_ANOTHER_VAR=12345\n"
         fail_msg: "Application env file content is incorrect."
         success_msg: "Application env file content is correct."
+
+    - name: "Verify secrets directory"
+      ansible.builtin.stat:
+        path: "/opt/testuser/testapp/secrets"
+      register: secrets_dir
+
+    - name: "Assert secrets directory has mode 2770 and the container owner"
+      ansible.builtin.assert:
+        that:
+          - secrets_dir.stat.isdir
+          - secrets_dir.stat.mode | int == 2770
+          - secrets_dir.stat.uid == expected_container_uid | int
+          - secrets_dir.stat.gid == 1100
+        fail_msg: "The secrets directory is missing or has incorrect permissions or owner."
+        success_msg: "The secrets directory has correct permissions and owner."
+
+    - name: "Verify secret files"
+      ansible.builtin.stat:
+        path: "/opt/testuser/testapp/secrets/{{ item }}"
+      register: secret_files
+      loop:
+        - TEST_MULTILINE_SECRET
+        - TEST_TEMPLATED_SECRET
+
+    - name: "Assert secret files have mode 0440 and the container owner"
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.mode | int == 440
+          - item.stat.uid == expected_container_uid | int
+          - item.stat.gid == 1100
+        fail_msg: "Secret file {{ item.item }} is missing or has incorrect permissions or owner."
+        success_msg: "Secret file {{ item.item }} has correct permissions and owner."
+      loop: "{{ secret_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "Read secrets in the container as the non-root container user"
+      become: true
+      become_user: testuser
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.command:
+        cmd: "podman exec --user 999:999 {{ secret_container }} cat /run/secrets/{{ item }}"
+      register: secret_reads
+      changed_when: false
+      retries: 10
+      delay: 3
+      until: secret_reads.rc == 0
+      loop:
+        - TEST_MULTILINE_SECRET
+        - TEST_TEMPLATED_SECRET
+
+    - name: "Assert the container reads the exact secret content"
+      ansible.builtin.assert:
+        that:
+          - secret_reads.results[0].stdout + "\n" == secret_content
+          - secret_reads.results[1].stdout == "templated-secret-for-testuser"
+        fail_msg: "The secret content in the container is incorrect."
+        success_msg: "The secret content in the container is correct."
+
+    - name: "Read the _FILE variables in the container"
+      become: true
+      become_user: testuser
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.command:
+        cmd: "podman exec {{ secret_container }} printenv {{ item }}_FILE"
+      register: secret_envs
+      changed_when: false
+      loop:
+        - TEST_MULTILINE_SECRET
+        - TEST_TEMPLATED_SECRET
+
+    - name: "Assert the _FILE variables hold the secret paths"
+      ansible.builtin.assert:
+        that:
+          - secret_envs.results[0].stdout == "/run/secrets/TEST_MULTILINE_SECRET"
+          - secret_envs.results[1].stdout == "/run/secrets/TEST_TEMPLATED_SECRET"
+        fail_msg: "The _FILE variables are incorrect."
+        success_msg: "The _FILE variables are correct."
+
+    - name: "Deploy test application again with one secret file removed"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.podman
+        tasks_from: application.yml
+      vars:
+        st_podman_user: "testuser"
+        st_podman_application_name: "testapp"
+        st_podman_application_compose_template: "test.compose.yml.j2"
+        st_podman_application_directories:
+          - name: config
+        st_podman_application_files:
+          - src: "test-app-env.j2"
+            dest: "config/app.env"
+            mode: "0640"
+          - src: "test-app-config.j2"
+            dest: "config/app.config"
+            container_uid: "999"
+        st_podman_application_secret_files_container_uid: "999"
+        st_podman_application_secret_files:
+          - env: TEST_TEMPLATED_SECRET
+            content: "rewritten-secret"
+
+    - name: "Verify the secret files after the removal"
+      ansible.builtin.stat:
+        path: "/opt/testuser/testapp/secrets/{{ item }}"
+      register: secret_files_after_removal
+      loop:
+        - TEST_MULTILINE_SECRET
+        - TEST_TEMPLATED_SECRET
+
+    - name: "Assert only the removed secret file is deleted"
+      ansible.builtin.assert:
+        that:
+          - not secret_files_after_removal.results[0].stat.exists
+          - secret_files_after_removal.results[1].stat.exists
+          - secret_files_after_removal.results[1].stat.uid == expected_container_uid | int
+        fail_msg: "The stale secret file was not deleted, or the kept secret file is missing."
+        success_msg: "The stale secret file is deleted."
+
+    - name: "Read the rewritten secret file"
+      ansible.builtin.slurp:
+        src: "/opt/testuser/testapp/secrets/TEST_TEMPLATED_SECRET"
+      register: rewritten_secret
+
+    - name: "Assert the secret file owned by the container user is rewritten"
+      ansible.builtin.assert:
+        that:
+          - rewritten_secret.content | b64decode == "rewritten-secret"
+        fail_msg: "The secret file was not rewritten."
+        success_msg: "The secret file is rewritten."
+
+    - name: "Deploy test application again with no secret files"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.podman
+        tasks_from: application.yml
+      vars:
+        st_podman_user: "testuser"
+        st_podman_application_name: "testapp"
+        st_podman_application_compose_template: "test.compose.yml.j2"
+        st_podman_application_directories:
+          - name: config
+        st_podman_application_files:
+          - src: "test-app-env.j2"
+            dest: "config/app.env"
+            mode: "0640"
+          - src: "test-app-config.j2"
+            dest: "config/app.config"
+            container_uid: "999"
+        st_podman_application_secret_files_container_uid: "999"
+        st_podman_application_secret_files: []
+
+    - name: "Verify the secrets directory after the empty list"
+      ansible.builtin.stat:
+        path: "/opt/testuser/testapp/secrets"
+      register: secrets_dir_after_empty
+
+    - name: "Assert the secrets directory is deleted"
+      ansible.builtin.assert:
+        that:
+          - not secrets_dir_after_empty.stat.exists
+        fail_msg: "The secrets directory still exists."
+        success_msg: "The secrets directory is deleted."

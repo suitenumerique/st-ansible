@@ -28,3 +28,13 @@
           - src: "test-app-config.j2"
             dest: "config/app.config"
             container_uid: "999"
+        st_podman_application_secret_files_container_uid: "999"
+        st_podman_application_secret_files:
+          - env: TEST_MULTILINE_SECRET
+            content: |
+              -----BEGIN TEST KEY-----
+              line one
+              line two
+              -----END TEST KEY-----
+          - env: TEST_TEMPLATED_SECRET
+            src: "test-secret.j2"

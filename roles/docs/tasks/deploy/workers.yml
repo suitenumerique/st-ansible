@@ -9,6 +9,8 @@
     st_podman_application_dir: "{{ st_docs_workers_dir }}"
     st_podman_application_rollback_enabled: "{{ st_docs_workers_rollback_enabled }}"
     st_podman_application_compose_template: "{{ st_docs_workers_compose_template }}"
+    st_podman_application_secret_files: "{{ st_docs_workers_secret_files }}"
+    st_podman_application_secret_files_container_uid: "1001"
     st_podman_application_files:
       - src: "{{ st_docs_workers_env_template }}"
         dest: "env"
