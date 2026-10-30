@@ -50,7 +50,7 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 | st_drive_workers_compose_template | Local path to the custom template to use for workers compose file. | str | no | `workers/compose.yaml.j2` |
 | st_drive_collabora_enabled | Triggers the installation of collabora. | bool | no | `False` |
 | st_drive_collabora_image | Image repository for collabora. | str | no | `docker.io/collabora/code` |
-| st_drive_collabora_tag | Tag of the collabora docker image to deploy. | str | no | `26.04.3.2.1` |
+| st_drive_collabora_tag | Tag of the collabora docker image to deploy. | str | no | `26.04.5.2.1` |
 | st_drive_collabora_dir | Remote path to the base directory for collabora app. | str | no | `/opt/drive/collabora` |
 | st_drive_collabora_env_template | Local path to the custom template to use for collabora env file. | str | no | `collabora/env.j2` |
 | st_drive_collabora_env | Content of the default collabora_env_template, not used if st_drive_collabora_env_template is defined. | str | no |  |

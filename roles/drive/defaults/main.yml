@@ -60,7 +60,7 @@ st_drive_collabora_enabled: false
 # Image repository for collabora.
 st_drive_collabora_image: docker.io/collabora/code
 # Tag of the collabora docker image to deploy.
-st_drive_collabora_tag: 26.04.3.2.1
+st_drive_collabora_tag: 26.04.5.2.1
 # Remote path to the base directory for collabora app.
 st_drive_collabora_dir: /opt/drive/collabora
 # Local path to the custom template to use for collabora env file.
