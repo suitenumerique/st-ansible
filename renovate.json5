@@ -32,6 +32,12 @@
       matchPackageNames: ["certifi"],
       rangeStrategy: "bump",
     },
+    // Hold the cli image on Python 3.14: ansible breaks on 3.15.
+    {
+      matchDatasources: ["docker"],
+      matchPackageNames: ["python", "docker.io/python", "docker.io/library/python"],
+      allowedVersions: "<3.15",
+    },
     // cadvisor is pinned in 4 roles, caddy in 3 and valkey in 2. Collapse each
     // into a single grouped PR instead of one per file.
     {
