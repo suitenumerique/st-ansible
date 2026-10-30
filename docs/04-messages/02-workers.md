@@ -7,8 +7,11 @@ using the same backend image with a Celery entrypoint.
 
 ```text
 messages-worker (ghcr.io/suitenumerique/messages-backend)
-  └── celery -A messages.celery_app worker --task-events --beat
+  └── python worker.py --concurrency=<nproc> [--disable-scheduler]
 ```
+
+`worker.py` starts a Celery worker with beat embedded. The role adds `--disable-scheduler` when
+`st_messages_workers_beat_enabled` is `false`. `worker.py` accepts this flag from upstream `v0.10.0`.
 
 The worker uses the same Docker image as the messages backend, but runs the Celery worker process instead of the
 Django web server.
@@ -33,6 +36,7 @@ See [roles/messages/REFERENCE.md](../../roles/messages/REFERENCE.md) for the com
 | `st_messages_workers_dir` | Application directory | `/opt/messages/workers` |
 | `st_messages_workers_env` | Environment content | `{{ st_messages_backend_env }}` |
 | `st_messages_workers_rollback_enabled` | Rollback on failure | `false` |
+| `st_messages_workers_beat_enabled` | Run Celery beat inside the worker | `true` |
 
 ## Network & Ports
 
@@ -41,6 +45,12 @@ No ports are published to the host. The worker connects to external services (da
 ## Data & Volumes
 
 Stateless. No persistent bind mounts.
+
+## Periodic Jobs
+
+Run beat on exactly one workers host. Each beat scheduler enqueues every periodic task, so
+two hosts with beat run every task twice. Set `st_messages_workers_beat_enabled: false` on
+every other workers host. The hosts without beat still consume the tasks from the queue.
 
 ## Troubleshooting
 

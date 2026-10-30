@@ -110,6 +110,10 @@ argument_specs:
         type: "bool"
         description: "Whether or not to trigger the rollback tasks if the workers deployment fails."
         default: false
+      st_conversations_workers_beat_enabled:
+        type: "bool"
+        description: "Runs the Celery beat scheduler inside the worker. Set it to false on every workers host except one, because each beat scheduler enqueues every periodic task."
+        default: true
       st_conversations_workers_compose_template:
         type: "str"
         description: "Local path to the custom template to use for workers compose file."

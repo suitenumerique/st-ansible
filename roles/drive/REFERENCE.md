@@ -47,6 +47,7 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 | st_drive_workers_env | Content of the default workers_env_template, not used if st_drive_workers_env_template is defined. | str | no | `{{ st_drive_backend_env }}` |
 | st_drive_workers_secret_files | Secrets that the container reads from files. Each item has the key "env" (the variable name in upper case) and one of the keys "src" (local template) or "content" (inline value). The role writes the file "secrets/<env>" in the application directory. The role mounts the "secrets" directory read-only at /run/secrets. The role sets "<ENV>_FILE" in the compose environment. The "<ENV>_FILE" variable has priority over the same variable in the env content. The default value is the list of the backend. | list of `dict` | no | `{{ st_drive_backend_secret_files }}` |
 | st_drive_workers_rollback_enabled | Whether or not to trigger the rollback tasks if the workers deployment fails. | bool | no | `False` |
+| st_drive_workers_beat_enabled | Runs the Celery beat scheduler inside the worker. Set it to false on every workers host except one, because each beat scheduler enqueues every periodic task. | bool | no | `True` |
 | st_drive_workers_compose_template | Local path to the custom template to use for workers compose file. | str | no | `workers/compose.yaml.j2` |
 | st_drive_collabora_enabled | Triggers the installation of collabora. | bool | no | `False` |
 | st_drive_collabora_image | Image repository for collabora. | str | no | `docker.io/collabora/code` |

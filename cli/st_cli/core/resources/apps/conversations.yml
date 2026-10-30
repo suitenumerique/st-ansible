@@ -26,6 +26,8 @@ components:
       # so the role's run_once migrations task fires on every host — gate it to the
       # first play host. Braces are quadrupled so str.format emits literal {{ }}.
       st_conversations_backend_run_migrations: "{{{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}}}"
+      # The workers play loads this file. Beat runs on its first play host only.
+      st_conversations_workers_beat_enabled: "{{{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}}}"
     env_render:
       backend:
         blob_var: st_conversations_backend_env

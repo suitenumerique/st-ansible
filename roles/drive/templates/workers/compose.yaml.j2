@@ -13,7 +13,7 @@ services:
       {{ secret.env }}_FILE: /run/secrets/{{ secret.env }}
 {% endfor %}
 {% endif %}
-    command: celery -A drive.celery_app worker --task-events --beat -l INFO -c {{ ansible_processor_nproc }} -Q celery,default --schedule=/tmp/celerybeat-schedule
+    command: celery -A drive.celery_app worker --task-events -l INFO -c {{ ansible_processor_nproc }} -Q celery,default{% if st_drive_workers_beat_enabled | bool %} --beat --schedule=/tmp/celerybeat-schedule{% endif %}
     healthcheck:
       test: ["CMD-SHELL", "celery -A drive.celery_app inspect ping"]
       interval: 1m

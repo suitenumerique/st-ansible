@@ -9,7 +9,7 @@ services:
     # The published image sets USER 1001:127:-1000 (upstream CI bug). Podman rejects that gid.
     user: 1001:127
     env_file: ./env
-    command: celery -A conversations.celery_app worker --task-events --beat -l INFO -c {{ ansible_processor_nproc }} --schedule=/tmp/celerybeat-schedule
+    command: celery -A conversations.celery_app worker --task-events -l INFO -c {{ ansible_processor_nproc }}{% if st_conversations_workers_beat_enabled | bool %} --beat --schedule=/tmp/celerybeat-schedule{% endif %}
     healthcheck:
       test: ["CMD", "celery", "-A", "conversations.celery_app", "inspect", "ping"]
       interval: 1m

@@ -45,6 +45,7 @@ Installs and configures the Conversations application from La Suite Territoriale
 | st_conversations_workers_env_template | Local path to the custom template to use for conversations workers env file. | str | no | `workers/env.j2` |
 | st_conversations_workers_env | Content of the default workers_env_template, not used if st_conversations_workers_env_template is defined. | str | no | `{{ st_conversations_backend_env }}` |
 | st_conversations_workers_rollback_enabled | Whether or not to trigger the rollback tasks if the workers deployment fails. | bool | no | `False` |
+| st_conversations_workers_beat_enabled | Runs the Celery beat scheduler inside the worker. Set it to false on every workers host except one, because each beat scheduler enqueues every periodic task. | bool | no | `True` |
 | st_conversations_workers_compose_template | Local path to the custom template to use for workers compose file. | str | no | `workers/compose.yaml.j2` |
 | st_conversations_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | `False` |
 | st_conversations_cadvisor_image | Image repository for the cadvisor container. | str | no | `ghcr.io/google/cadvisor` |
