@@ -105,9 +105,9 @@ releases:
       - 'cli: ``st-cli upgrade`` now checks upstream first and, without pipx (container
         installs), tells the user to run ``docker pull ghcr.io/suitenumerique/st-cli:latest``
         and re-run ``st-cli upgrade`` instead of the pip hint'
-      - "cli: the behind-upstream warning on other commands now branches on pipx \u2014
-        without pipx it names the exact ``docker pull ghcr.io/suitenumerique/st-cli:latest``
-        command to run before ``st-cli upgrade``"
+      - "cli: the behind-upstream warning on other commands now branches on pipx \u2014\
+        \ without pipx it names the exact ``docker pull ghcr.io/suitenumerique/st-cli:latest``\
+        \ command to run before ``st-cli upgrade``"
       - 'plugins: the compact callback now prints the ``msg`` of a ``debug`` task
         in a green box in place of the ok line and the JSON dump'
     fragments:
@@ -130,15 +130,15 @@ releases:
       - (cli) added docs app support to st-cli
       - (docs) added the docs role, deploying the Docs (impress) application as a
         caddy + frontend + backend core, with workers and yprovider sub-apps
-      - "(projects) new ``projects`` role and st-cli support to deploy Projects (``suitenumerique/projects``,
-        a Planka fork) \u2014 a single Sails.js container with external PostgreSQL,
-        OIDC-enforced SSO (Keycloak/ProConnect provider switch) and optional S3-backed
-        uploads; ``st-cli bootstrap projects <env>`` / ``st-cli deploy projects <env>``
-        behave like the other apps."
-      - "(st-cli) the bootstrap \"Requirements\" checklist is now app-aware \u2014
-        each app declares the external infrastructure it needs via a ``requirements``
-        manifest key \u2014 so ``projects`` and ``keycloak`` operators are no longer
-        told to provision a Redis they never use."
+      - "(projects) new ``projects`` role and st-cli support to deploy Projects (``suitenumerique/projects``,\
+        \ a Planka fork) \u2014 a single Sails.js container with external PostgreSQL,\
+        \ OIDC-enforced SSO (Keycloak/ProConnect provider switch) and optional S3-backed\
+        \ uploads; ``st-cli bootstrap projects <env>`` / ``st-cli deploy projects\
+        \ <env>`` behave like the other apps."
+      - "(st-cli) the bootstrap \"Requirements\" checklist is now app-aware \u2014\
+        \ each app declares the external infrastructure it needs via a ``requirements``\
+        \ manifest key \u2014 so ``projects`` and ``keycloak`` operators are no longer\
+        \ told to provision a Redis they never use."
       - Update dependency molecule to v26.8.0
       - Update dependency suitenumerique/meet to v1.27.0
       - Update dependency suitenumerique/messages to v0.9.0
@@ -342,13 +342,13 @@ releases:
         start and a raised ``st_file_scanner_timeout``. The clamav defaults also gain
         ``MaxScanTime`` and ``AlertExceedsMax``, without which clamd answers OK on
         a scan it could not finish and the file is reported clean unscanned.'
-      - "file_scanner: the clamav container is now configurable through a new ``st_file_scanner_clamav_env``
-        blob, empty by default and falling back to the role's built-in tuning (the
-        image maps ``CLAMD_CONF_<Option>``/``FRESHCLAM_CONF_<Option>`` lines onto
-        clamd.conf/freshclam.conf). The default raises clamd's size caps (``StreamMaxLength``/``MaxFileSize``/``MaxScanSize``
-        to 2200M) above the scanner's 2 GiB ``MAX_URL_SIZE`` \u2014 with clamd's stock
-        limits a big file either failed mid-INSTREAM on every retry or, above MaxFileSize/MaxScanSize,
-        was skipped and reported clean without being scanned."
+      - "file_scanner: the clamav container is now configurable through a new ``st_file_scanner_clamav_env``\
+        \ blob, empty by default and falling back to the role's built-in tuning (the\
+        \ image maps ``CLAMD_CONF_<Option>``/``FRESHCLAM_CONF_<Option>`` lines onto\
+        \ clamd.conf/freshclam.conf). The default raises clamd's size caps (``StreamMaxLength``/``MaxFileSize``/``MaxScanSize``\
+        \ to 2200M) above the scanner's 2 GiB ``MAX_URL_SIZE`` \u2014 with clamd's\
+        \ stock limits a big file either failed mid-INSTREAM on every retry or, above\
+        \ MaxFileSize/MaxScanSize, was skipped and reported clean without being scanned."
       - 'keycloak: add ``st_keycloak_http_port`` (default ``50201``) and ``st_keycloak_management_port``
         (default ``50202``). The default compose template sets ``KC_HTTP_PORT`` and
         ``KC_HTTP_MANAGEMENT_PORT`` from them, so with ``network_mode: host`` Keycloak
@@ -397,12 +397,12 @@ releases:
         its hosts, broker and caller keys, keycloak no Redis/S3/OIDC ones, messages
         adds OpenSearch and MX/SPF/DKIM DNS prep, meet the LiveKit/TURN domains);
         the list is mandatory per app manifest, replacing the old generic one.
-      - "st-cli - add ``transfers`` app support (backend core + workers) to bootstrap,
-        reusing the django-lasuite base env with transfers-specific overrides (``transfers.settings``
-        module, frontend Caddy S3 origin, ``USE_X_FORWARDED_FOR``, optional Drive
-        file-picker integration, and an optional file-scanner / antivirus integration
-        \u2014 the ``SCAN_*`` keys with the EdDSA signing key kept in the vault and
-        the tuning knobs left to their upstream defaults unless answered)."
+      - "st-cli - add ``transfers`` app support (backend core + workers) to bootstrap,\
+        \ reusing the django-lasuite base env with transfers-specific overrides (``transfers.settings``\
+        \ module, frontend Caddy S3 origin, ``USE_X_FORWARDED_FOR``, optional Drive\
+        \ file-picker integration, and an optional file-scanner / antivirus integration\
+        \ \u2014 the ``SCAN_*`` keys with the EdDSA signing key kept in the vault\
+        \ and the tuning knobs left to their upstream defaults unless answered)."
       - st-cli - new ``generate-keypairs APP ENV`` command minting Ed25519 caller
         keypairs for the file-scanner JWT auth (pure-python RFC 8032 derivation, no
         crypto dependency) - asks an issuer name per keypair and prints a wiring summary
@@ -526,3 +526,70 @@ releases:
     - renovate-pr-116.yml
     - transfers-dramatiq.yml
     release_date: '2026-10-26'
+  0.7.0:
+    changes:
+      breaking_changes:
+      - docs, drive, meet and messages roles - the role now manages `<app dir>/secrets`
+        and deletes it when the secret file list is empty. If you used a custom `secrets`
+        directory, move it to the new `*_secret_files` variables.
+      minor_changes:
+      - Update aar-doc to v2.4.0
+      - Update actions/setup-python digest to 6d4fd22
+      - Update dependency collabora/code to 26.04.3.2.1
+      - Update dependency containers.podman to v1.21.2
+      - Update dependency pytest-mock to v3.17.0
+      - Update dependency suitenumerique/drive to v0.25.3
+      - Update dependency suitenumerique/meet to v1.36.3
+      - Update docker.io/livekit/egress Docker tag to v1.15.0
+      - Update docker.io/livekit/livekit-server Docker tag to v1.13.10
+      - Update docker/login-action digest to 81c6f93
+      - 'cli: the bootstrap of conversations, drive, messages and transfers sets ``st_<app>_workers_beat_enabled``
+        so that beat runs on the first workers play host only.'
+      - 'conversations, drive, messages, transfers: add a ``st_<app>_workers_beat_enabled``
+        variable (default ``true``) that controls the Celery beat scheduler embedded
+        in the workers container. Set it to ``false`` on every workers host except
+        one to scale the workers without duplicate periodic tasks.'
+      - docs, drive, meet and messages roles - add `st_docs_backend_secret_files`,
+        `st_docs_workers_secret_files`, `st_drive_backend_secret_files`, `st_drive_workers_secret_files`,
+        `st_meet_backend_secret_files`, `st_messages_backend_secret_files` and `st_messages_workers_secret_files`.
+        The role mounts the secret files at `/run/secrets` and sets `<ENV>_FILE` in
+        the compose file.
+      - podman role - add `st_podman_application_secret_files_container_uid` (default
+        0). It sets the owner uid, inside the container, of `secrets` and of each
+        secret file. A non-zero uid sets the mode of `secrets` to 2770.
+      - 'podman role - add `st_podman_application_secret_files`. The role writes each
+        `{env, src|content}` item to `secrets/<env>`, deletes stale files, and removes
+        the directory when the list is empty. The role manages `secrets` only when
+        the variable is defined. The name `secrets` is reserved: the role fails if
+        `st_podman_application_directories` or `st_podman_application_files` uses
+        it.'
+      - podman role - add the `content` key to the items of `st_podman_application_files`.
+        It writes an inline string instead of a `src` template.
+      - podman role - add the `no_log` key to the items of `st_podman_application_files`.
+        It hides the value from the task output and the diff.
+      release_summary: 'Allow user to deploy secrets as files on supported apps. Adds
+        the
+
+        `st_<app>_workers_beat_enabled` on related roles to run beat on one celery
+        host.
+
+        Meet 1.36.0, Drive 0.25.3, Collabora 26.04.5.2.1, and multiple minor upgrades.
+
+        '
+      security_fixes:
+      - st-cli hashivault and full extras - require certifi>=2026.10.19 to distrust
+        the compromised eMudhra intermediate CAs (CVE-2026-111943).
+      - st-cli image - move to Python 3.14.10 (CVE-2026-115557, CVE-2026-114583) and
+        Alpine ca-certificates 20261020-r0 (CVE-2026-111943) to distrust the compromised
+        eMudhra intermediate CAs.
+    fragments:
+    - cli-emudhra-distrust.yml
+    - release_summary.yml
+    - renovate-pr-101.yml
+    - renovate-pr-102.yml
+    - renovate-pr-117.yml
+    - renovate-pr-127.yml
+    - renovate-pr-128.yml
+    - secret-files.yml
+    - workers-beat-enabled.yml
+    release_date: '2026-10-30'

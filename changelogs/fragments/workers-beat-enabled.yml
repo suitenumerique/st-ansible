@@ -1,3 +1,0 @@
-minor_changes:
-  - "conversations, drive, messages, transfers: add a ``st_<app>_workers_beat_enabled`` variable (default ``true``) that controls the Celery beat scheduler embedded in the workers container. Set it to ``false`` on every workers host except one to scale the workers without duplicate periodic tasks."
-  - "cli: the bootstrap of conversations, drive, messages and transfers sets ``st_<app>_workers_beat_enabled`` so that beat runs on the first workers play host only."

@@ -2,50 +2,97 @@
 
 **Topics**
 
-- <a href="#v0-6-0">v0\.6\.0</a>
+- <a href="#v0-7-0">v0\.7\.0</a>
     - <a href="#release-summary">Release Summary</a>
     - <a href="#minor-changes">Minor Changes</a>
-- <a href="#v0-5-1">v0\.5\.1</a>
+    - <a href="#breaking-changes">Breaking Changes</a>
+    - <a href="#security-fixes">Security Fixes</a>
+- <a href="#v0-6-0">v0\.6\.0</a>
+    - <a href="#release-summary-1">Release Summary</a>
     - <a href="#minor-changes-1">Minor Changes</a>
+- <a href="#v0-5-1">v0\.5\.1</a>
+    - <a href="#minor-changes-2">Minor Changes</a>
     - <a href="#bugfixes">Bugfixes</a>
 - <a href="#v0-5-0">v0\.5\.0</a>
-    - <a href="#release-summary-1">Release Summary</a>
-    - <a href="#minor-changes-2">Minor Changes</a>
-    - <a href="#breaking-changes">Breaking Changes</a>
-    - <a href="#deprecated-features">Deprecated Features</a>
-- <a href="#v0-4-0">v0\.4\.0</a>
     - <a href="#release-summary-2">Release Summary</a>
     - <a href="#minor-changes-3">Minor Changes</a>
+    - <a href="#breaking-changes-1">Breaking Changes</a>
+    - <a href="#deprecated-features">Deprecated Features</a>
+- <a href="#v0-4-0">v0\.4\.0</a>
+    - <a href="#release-summary-3">Release Summary</a>
+    - <a href="#minor-changes-4">Minor Changes</a>
     - <a href="#bugfixes-1">Bugfixes</a>
 - <a href="#v0-3-1">v0\.3\.1</a>
-    - <a href="#minor-changes-4">Minor Changes</a>
-- <a href="#v0-3-0">v0\.3\.0</a>
-    - <a href="#release-summary-3">Release Summary</a>
     - <a href="#minor-changes-5">Minor Changes</a>
+- <a href="#v0-3-0">v0\.3\.0</a>
+    - <a href="#release-summary-4">Release Summary</a>
+    - <a href="#minor-changes-6">Minor Changes</a>
     - <a href="#bugfixes-2">Bugfixes</a>
     - <a href="#new-plugins">New Plugins</a>
         - <a href="#callback">Callback</a>
 - <a href="#v0-2-2">v0\.2\.2</a>
-    - <a href="#minor-changes-6">Minor Changes</a>
+    - <a href="#minor-changes-7">Minor Changes</a>
     - <a href="#bugfixes-3">Bugfixes</a>
 - <a href="#v0-2-1">v0\.2\.1</a>
-    - <a href="#minor-changes-7">Minor Changes</a>
-- <a href="#v0-2-0">v0\.2\.0</a>
-    - <a href="#release-summary-4">Release Summary</a>
     - <a href="#minor-changes-8">Minor Changes</a>
+- <a href="#v0-2-0">v0\.2\.0</a>
+    - <a href="#release-summary-5">Release Summary</a>
+    - <a href="#minor-changes-9">Minor Changes</a>
     - <a href="#bugfixes-4">Bugfixes</a>
 - <a href="#v0-1-1">v0\.1\.1</a>
-    - <a href="#minor-changes-9">Minor Changes</a>
+    - <a href="#minor-changes-10">Minor Changes</a>
     - <a href="#bugfixes-5">Bugfixes</a>
 - <a href="#v0-1-0">v0\.1\.0</a>
-    - <a href="#release-summary-5">Release Summary</a>
+    - <a href="#release-summary-6">Release Summary</a>
     - <a href="#major-changes">Major Changes</a>
-    - <a href="#minor-changes-10">Minor Changes</a>
+    - <a href="#minor-changes-11">Minor Changes</a>
+
+<a id="v0-7-0"></a>
+## v0\.7\.0
+
+<a id="release-summary"></a>
+### Release Summary
+
+Allow user to deploy secrets as files on supported apps\. Adds the
+<em class="title-reference">st\_\<app\>\_workers\_beat\_enabled</em> on related roles to run beat on one celery host\.
+Meet 1\.36\.0\, Drive 0\.25\.3\, Collabora 26\.04\.5\.2\.1\, and multiple minor upgrades\.
+
+<a id="minor-changes"></a>
+### Minor Changes
+
+* Update aar\-doc to v2\.4\.0
+* Update actions/setup\-python digest to 6d4fd22
+* Update dependency collabora/code to 26\.04\.3\.2\.1
+* Update dependency containers\.podman to v1\.21\.2
+* Update dependency pytest\-mock to v3\.17\.0
+* Update dependency suitenumerique/drive to v0\.25\.3
+* Update dependency suitenumerique/meet to v1\.36\.3
+* Update docker\.io/livekit/egress Docker tag to v1\.15\.0
+* Update docker\.io/livekit/livekit\-server Docker tag to v1\.13\.10
+* Update docker/login\-action digest to 81c6f93
+* cli\: the bootstrap of conversations\, drive\, messages and transfers sets <code>st\_\<app\>\_workers\_beat\_enabled</code> so that beat runs on the first workers play host only\.
+* conversations\, drive\, messages\, transfers\: add a <code>st\_\<app\>\_workers\_beat\_enabled</code> variable \(default <code>true</code>\) that controls the Celery beat scheduler embedded in the workers container\. Set it to <code>false</code> on every workers host except one to scale the workers without duplicate periodic tasks\.
+* docs\, drive\, meet and messages roles \- add <em class="title-reference">st\_docs\_backend\_secret\_files</em>\, <em class="title-reference">st\_docs\_workers\_secret\_files</em>\, <em class="title-reference">st\_drive\_backend\_secret\_files</em>\, <em class="title-reference">st\_drive\_workers\_secret\_files</em>\, <em class="title-reference">st\_meet\_backend\_secret\_files</em>\, <em class="title-reference">st\_messages\_backend\_secret\_files</em> and <em class="title-reference">st\_messages\_workers\_secret\_files</em>\. The role mounts the secret files at <em class="title-reference">/run/secrets</em> and sets <em class="title-reference">\<ENV\>\_FILE</em> in the compose file\.
+* podman role \- add <em class="title-reference">st\_podman\_application\_secret\_files\_container\_uid</em> \(default 0\)\. It sets the owner uid\, inside the container\, of <em class="title-reference">secrets</em> and of each secret file\. A non\-zero uid sets the mode of <em class="title-reference">secrets</em> to 2770\.
+* podman role \- add <em class="title-reference">st\_podman\_application\_secret\_files</em>\. The role writes each <em class="title-reference">\{env\, src\|content\}</em> item to <em class="title-reference">secrets/\<env\></em>\, deletes stale files\, and removes the directory when the list is empty\. The role manages <em class="title-reference">secrets</em> only when the variable is defined\. The name <em class="title-reference">secrets</em> is reserved\: the role fails if <em class="title-reference">st\_podman\_application\_directories</em> or <em class="title-reference">st\_podman\_application\_files</em> uses it\.
+* podman role \- add the <em class="title-reference">content</em> key to the items of <em class="title-reference">st\_podman\_application\_files</em>\. It writes an inline string instead of a <em class="title-reference">src</em> template\.
+* podman role \- add the <em class="title-reference">no\_log</em> key to the items of <em class="title-reference">st\_podman\_application\_files</em>\. It hides the value from the task output and the diff\.
+
+<a id="breaking-changes"></a>
+### Breaking Changes
+
+* docs\, drive\, meet and messages roles \- the role now manages <em class="title-reference">\<app dir\>/secrets</em> and deletes it when the secret file list is empty\. If you used a custom <em class="title-reference">secrets</em> directory\, move it to the new <em class="title-reference">\*\_secret\_files</em> variables\.
+
+<a id="security-fixes"></a>
+### Security Fixes
+
+* st\-cli hashivault and full extras \- require certifi\>\=2026\.10\.19 to distrust the compromised eMudhra intermediate CAs \(CVE\-2026\-111943\)\.
+* st\-cli image \- move to Python 3\.14\.10 \(CVE\-2026\-115557\, CVE\-2026\-114583\) and Alpine ca\-certificates 20261020\-r0 \(CVE\-2026\-111943\) to distrust the compromised eMudhra intermediate CAs\.
 
 <a id="v0-6-0"></a>
 ## v0\.6\.0
 
-<a id="release-summary"></a>
+<a id="release-summary-1"></a>
 ### Release Summary
 
 Adds the Conversations application\, deployable end to end with st\-cli\.
@@ -56,7 +103,7 @@ healthcheck and pins file\-scanner 0\.4\.0\. The messages mpa app can run exav
 instead of clamav behind rspamd\, and deploys the rspamd bayes classifier
 config\. Bumps clamav 1\.5\.4 and rspamd 4\.2\.2\.
 
-<a id="minor-changes"></a>
+<a id="minor-changes-1"></a>
 ### Minor Changes
 
 * Update clamav/clamav Docker tag to v1\.5\.4
@@ -72,7 +119,7 @@ config\. Bumps clamav 1\.5\.4 and rspamd 4\.2\.2\.
 <a id="v0-5-1"></a>
 ## v0\.5\.1
 
-<a id="minor-changes-1"></a>
+<a id="minor-changes-2"></a>
 ### Minor Changes
 
 * Update dependency molecule to v26\.10\.0
@@ -88,14 +135,14 @@ config\. Bumps clamav 1\.5\.4 and rspamd 4\.2\.2\.
 <a id="v0-5-0"></a>
 ## v0\.5\.0
 
-<a id="release-summary-1"></a>
+<a id="release-summary-2"></a>
 ### Release Summary
 
 Added file\-scanner and transfers\. Added IP filtering on Keycloak admin path
 and Django Admin paths\. Bump podman compose to 1\.6\.0\. Deprecate messages mta\-in\,
 added messages pymta\.
 
-<a id="minor-changes-2"></a>
+<a id="minor-changes-3"></a>
 ### Minor Changes
 
 * Update dependency ansible\-core to v2\.21\.5
@@ -128,7 +175,7 @@ added messages pymta\.
 * transfers role \- add a <code>transfers</code> role deploying the Transfers application \(suitenumerique/transfers\) \- a Django backend\, a Caddy\-served React frontend and an optional Celery worker \(with the beat scheduler embedded\) \- on the rootless podman base\, with S3\-backed uploads and OIDC login\.
 * transfers\: the worker gets the Celery ping healthcheck as a <code>CMD</code> list\, replacing <code>healthcheck\: disable\: true</code>\. The probe was disabled because podman\-compose 1\.3\.0 wraps even a <code>CMD</code> list in <code>/bin/sh \-c</code>\, which the distroless backend image has no shell for\; 1\.5\.0 and later exec it directly\. The ping is a broadcast on the broker\, so with several hosts on one Redis another host\'s worker can answer for this one\.
 
-<a id="breaking-changes"></a>
+<a id="breaking-changes-1"></a>
 ### Breaking Changes
 
 * keycloak\: the default compose template sets <code>PORT</code> instead of <code>KC\_HTTP\_PORT</code>\, because the <code>messages\-keycloak</code> image now runs Caddy in front of Keycloak and Caddy owns the public port\. The role requires image tag 0\.10\.0 or later \(messages PR \#793\)\, and the default tag is now 0\.10\.0\. A custom <code>st\_keycloak\_compose\_template</code> must set <code>PORT</code>\, <code>KC\_HTTP\_PORT</code> and <code>KC\_HTTP\_MANAGEMENT\_PORT</code> too\.
@@ -142,12 +189,12 @@ added messages pymta\.
 <a id="v0-4-0"></a>
 ## v0\.4\.0
 
-<a id="release-summary-2"></a>
+<a id="release-summary-3"></a>
 ### Release Summary
 
 Added cli rebootstrap and improve upgrades\, added an IP filtering setup in front of Django Admins paths\, bump drive\, docs and meet\.
 
-<a id="minor-changes-3"></a>
+<a id="minor-changes-4"></a>
 ### Minor Changes
 
 * Update dependency suitenumerique/docs to v5\.6\.1
@@ -183,7 +230,7 @@ Added cli rebootstrap and improve upgrades\, added an IP filtering setup in fron
 <a id="v0-3-1"></a>
 ## v0\.3\.1
 
-<a id="minor-changes-4"></a>
+<a id="minor-changes-5"></a>
 ### Minor Changes
 
 * Update dependency suitenumerique/docs to v5\.5\.0
@@ -195,7 +242,7 @@ Added cli rebootstrap and improve upgrades\, added an IP filtering setup in fron
 <a id="v0-3-0"></a>
 ## v0\.3\.0
 
-<a id="release-summary-3"></a>
+<a id="release-summary-4"></a>
 ### Release Summary
 
 Adds two new applications\: Docs \(impress\, with workers and yprovider
@@ -203,7 +250,7 @@ sub\-apps\) and Projects \(a Planka fork\)\, both deployable end to end with
 st\-cli\. The bootstrap \"Requirements\" checklist is now app\-aware\, and
 several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\.
 
-<a id="minor-changes-5"></a>
+<a id="minor-changes-6"></a>
 ### Minor Changes
 
 * 1. added docs app support to st\-cli
@@ -233,7 +280,7 @@ several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\
 <a id="v0-2-2"></a>
 ## v0\.2\.2
 
-<a id="minor-changes-6"></a>
+<a id="minor-changes-7"></a>
 ### Minor Changes
 
 * Update docker\.io/clamav/clamav Docker tag to v1\.5\.4
@@ -253,7 +300,7 @@ several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\
 <a id="v0-2-1"></a>
 ## v0\.2\.1
 
-<a id="minor-changes-7"></a>
+<a id="minor-changes-8"></a>
 ### Minor Changes
 
 * callback\: added the suitenumerique\.st\.compact stdout callback\, one line per task and host\, a live progress line on a TTY\, diffs for changed tasks\, and full default\-style error output
@@ -263,13 +310,13 @@ several dependencies were bumped \(meet 1\.27\.0\, messages 0\.9\.0\, LiveKit\)\
 <a id="v0-2-0"></a>
 ## v0\.2\.0
 
-<a id="release-summary-4"></a>
+<a id="release-summary-5"></a>
 ### Release Summary
 
 Adds support for meet recordings\, fix openbao markers on st\-cli bootstrap
 and multiple versions upgrades\.
 
-<a id="minor-changes-8"></a>
+<a id="minor-changes-9"></a>
 ### Minor Changes
 
 * Update actions/checkout digest to 3d3c42e
@@ -290,7 +337,7 @@ and multiple versions upgrades\.
 <a id="v0-1-1"></a>
 ## v0\.1\.1
 
-<a id="minor-changes-9"></a>
+<a id="minor-changes-10"></a>
 ### Minor Changes
 
 * Added Renovate configuration \(<code>renovate\.json5</code>\) and renovate Makefile target
@@ -311,7 +358,7 @@ and multiple versions upgrades\.
 <a id="v0-1-0"></a>
 ## v0\.1\.0
 
-<a id="release-summary-5"></a>
+<a id="release-summary-6"></a>
 ### Release Summary
 
 Added st\-cli to manage LST environments bootstraps and deployments\, refactored roles to make single\-host deployments easier\, started the CHANGELOG dance\.
@@ -322,7 +369,7 @@ Added st\-cli to manage LST environments bootstraps and deployments\, refactored
 * cli\: added st\-cli \#27
 * roles\: refactor every uid\, gid and ports to allow single\-host deployments \#26
 
-<a id="minor-changes-10"></a>
+<a id="minor-changes-11"></a>
 ### Minor Changes
 
 * changelog\: added antsibull\-changelog config\, Makefile targets and CI job \#13
