@@ -1,7 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.drive
 Version: 0.6.0
-
 This role deploys the Drive applications from La Suite Territoriale on a rootless podman base on Debian systems.
 
 Tags: suiteterritoriale, system
@@ -14,7 +13,6 @@ Tags: suiteterritoriale, system
 
 ## Role Arguments
 
-
 ### Entrypoint: main
 
 Installs and configures the Drive application from La Suite Territoriale on Debian systems.
@@ -22,57 +20,56 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 |Option|Description|Type|Required|Default|
 |---|---|---|---|---|
 | st_drive_public_host | The public hostname used to access the drive application. | str | no |  |
-| st_drive_uid | UID of the `drive` user, used for the podman role. | int | no | 1101 |
-| st_drive_gid | GID of the `drive` group, used for the podman role. | int | no | {{ st_drive_uid }} |
-| st_drive_registries | Optional private container registries to login the `drive` user onto. | list of 'dict' | no |  |
-| st_drive_frontend_image | Image repository for the drive frontend. | str | no | docker.io/lasuite/drive-frontend |
-| st_drive_backend_image | Image repository for the drive backend. | str | no | docker.io/lasuite/drive-backend |
-| st_drive_tag | Tag of the drive docker images to deploy. | str | no | v0.22.0 |
-| st_drive_enabled | Triggers the installation of the drive application. | bool | no | False |
-| st_drive_dir | Remote path to the base directory for drive app. | str | no | /opt/drive/drive |
-| st_drive_port | The host published port for the drive caddy edge. | str | no | 50100 |
-| st_drive_rollback_enabled | Whether or not to trigger the rollback tasks if the drive deployment fails. | bool | no | False |
-| st_drive_compose_template | Local path to the custom template to use for drive compose file. | str | no | drive/compose.yaml.j2 |
-| st_drive_backend_env_template | Local path to the custom template to use for drive backend env file. | str | no | drive/backend_env.j2 |
+| st_drive_uid | UID of the `drive` user, used for the podman role. | int | no | `1101` |
+| st_drive_gid | GID of the `drive` group, used for the podman role. | int | no | `{{ st_drive_uid }}` |
+| st_drive_registries | Optional private container registries to login the `drive` user onto. | list of `dict` | no |  |
+| st_drive_frontend_image | Image repository for the drive frontend. | str | no | `docker.io/lasuite/drive-frontend` |
+| st_drive_backend_image | Image repository for the drive backend. | str | no | `docker.io/lasuite/drive-backend` |
+| st_drive_tag | Tag of the drive docker images to deploy. | str | no | `v0.25.3` |
+| st_drive_enabled | Triggers the installation of the drive application. | bool | no | `False` |
+| st_drive_dir | Remote path to the base directory for drive app. | str | no | `/opt/drive/drive` |
+| st_drive_port | The host published port for the drive caddy edge. | str | no | `50100` |
+| st_drive_rollback_enabled | Whether or not to trigger the rollback tasks if the drive deployment fails. | bool | no | `False` |
+| st_drive_compose_template | Local path to the custom template to use for drive compose file. | str | no | `drive/compose.yaml.j2` |
+| st_drive_backend_env_template | Local path to the custom template to use for drive backend env file. | str | no | `drive/backend_env.j2` |
 | st_drive_backend_env | Content of the default backend_env_template, not used if st_drive_backend_env_template is defined. | str | no |  |
-| st_drive_backend_secret_files | Secrets that the container reads from files. Each item has the key "env" (the variable name in upper case) and one of the keys "src" (local template) or "content" (inline value). The role writes the file "secrets/<env>" in the application directory. The role mounts the "secrets" directory read-only at /run/secrets. The role sets "<ENV>_FILE" in the compose environment. The "<ENV>_FILE" variable has priority over the same variable in the env content. | list of 'dict' | no | [] |
-| st_drive_backend_run_migrations | Whether to run database migrations on drive backend startup. | bool | no | True |
-| st_drive_frontend_env_template | Local path to the custom template to use for drive frontend env file. | str | no | drive/frontend_env.j2 |
+| st_drive_backend_secret_files | Secrets that the container reads from files. Each item has the key "env" (the variable name in upper case) and one of the keys "src" (local template) or "content" (inline value). The role writes the file "secrets/<env>" in the application directory. The role mounts the "secrets" directory read-only at /run/secrets. The role sets "<ENV>_FILE" in the compose environment. The "<ENV>_FILE" variable has priority over the same variable in the env content. | list of `dict` | no | `[]` |
+| st_drive_backend_run_migrations | Whether to run database migrations on drive backend startup. | bool | no | `True` |
+| st_drive_frontend_env_template | Local path to the custom template to use for drive frontend env file. | str | no | `drive/frontend_env.j2` |
 | st_drive_frontend_env | Content of the default frotnend_env_template, not used if st_drive_frotnend_env_template is defined. | str | no |  |
-| st_drive_caddy_env_template | Local path to the custom template to use for drive caddy env file. | str | no | drive/caddy_env.j2 |
+| st_drive_caddy_env_template | Local path to the custom template to use for drive caddy env file. | str | no | `drive/caddy_env.j2` |
 | st_drive_caddy_env | Content of the default caddy_env_template, not used if st_drive_caddy_env_template is defined. The Caddyfile requires CADDY_S3_PROTOCOL, CADDY_S3_HOST and CADDY_S3_BUCKET. Optional: CADDY_ADMIN_IP_ALLOWLIST (space-separated CIDR list of client IPs allowed on the Django admin URL, default allows all) and CADDY_TRUSTED_PROXIES (space-separated CIDR list of proxies whose X-Forwarded-For sets the client IP, default private_ranges). | str | no |  |
-| st_drive_caddy_image | Image repository for the drive caddy reverse-proxy. | str | no | docker.io/caddy |
-| st_drive_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | 2.11.7-alpine |
-| st_drive_workers_enabled | Triggers the installation of the drive workers | bool | no | False |
-| st_drive_workers_dir | Remote path to the base directory for drive workers. | str | no | /opt/drive/workers |
-| st_drive_workers_env_template | Local path to the custom template to use for drive workers env file. | str | no | workers/env.j2 |
-| st_drive_workers_env | Content of the default workers_env_template, not used if st_drive_workers_env_template is defined. | str | no | {{ st_drive_backend_env }} |
-| st_drive_workers_secret_files | Secrets that the container reads from files. Each item has the key "env" (the variable name in upper case) and one of the keys "src" (local template) or "content" (inline value). The role writes the file "secrets/<env>" in the application directory. The role mounts the "secrets" directory read-only at /run/secrets. The role sets "<ENV>_FILE" in the compose environment. The "<ENV>_FILE" variable has priority over the same variable in the env content. The default value is the list of the backend. | list of 'dict' | no | {{ st_drive_backend_secret_files }} |
-| st_drive_workers_rollback_enabled | Whether or not to trigger the rollback tasks if the workers deployment fails. | bool | no | False |
-| st_drive_workers_compose_template | Local path to the custom template to use for workers compose file. | str | no | workers/compose.yaml.j2 |
-| st_drive_collabora_enabled | Triggers the installation of collabora. | bool | no | False |
-| st_drive_collabora_image | Image repository for collabora. | str | no | docker.io/collabora/code |
-| st_drive_collabora_tag | Tag of the collabora docker image to deploy. | str | no | 26.04.3.2.1 |
-| st_drive_collabora_dir | Remote path to the base directory for collabora app. | str | no | /opt/drive/collabora |
-| st_drive_collabora_env_template | Local path to the custom template to use for collabora env file. | str | no | collabora/env.j2 |
+| st_drive_caddy_image | Image repository for the drive caddy reverse-proxy. | str | no | `docker.io/caddy` |
+| st_drive_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | `2.11.7-alpine` |
+| st_drive_workers_enabled | Triggers the installation of the drive workers | bool | no | `False` |
+| st_drive_workers_dir | Remote path to the base directory for drive workers. | str | no | `/opt/drive/workers` |
+| st_drive_workers_env_template | Local path to the custom template to use for drive workers env file. | str | no | `workers/env.j2` |
+| st_drive_workers_env | Content of the default workers_env_template, not used if st_drive_workers_env_template is defined. | str | no | `{{ st_drive_backend_env }}` |
+| st_drive_workers_secret_files | Secrets that the container reads from files. Each item has the key "env" (the variable name in upper case) and one of the keys "src" (local template) or "content" (inline value). The role writes the file "secrets/<env>" in the application directory. The role mounts the "secrets" directory read-only at /run/secrets. The role sets "<ENV>_FILE" in the compose environment. The "<ENV>_FILE" variable has priority over the same variable in the env content. The default value is the list of the backend. | list of `dict` | no | `{{ st_drive_backend_secret_files }}` |
+| st_drive_workers_rollback_enabled | Whether or not to trigger the rollback tasks if the workers deployment fails. | bool | no | `False` |
+| st_drive_workers_compose_template | Local path to the custom template to use for workers compose file. | str | no | `workers/compose.yaml.j2` |
+| st_drive_collabora_enabled | Triggers the installation of collabora. | bool | no | `False` |
+| st_drive_collabora_image | Image repository for collabora. | str | no | `docker.io/collabora/code` |
+| st_drive_collabora_tag | Tag of the collabora docker image to deploy. | str | no | `26.04.3.2.1` |
+| st_drive_collabora_dir | Remote path to the base directory for collabora app. | str | no | `/opt/drive/collabora` |
+| st_drive_collabora_env_template | Local path to the custom template to use for collabora env file. | str | no | `collabora/env.j2` |
 | st_drive_collabora_env | Content of the default collabora_env_template, not used if st_drive_collabora_env_template is defined. | str | no |  |
-| st_drive_collabora_rollback_enabled | Whether or not to trigger the rollback tasks if the collabora deployment fails. | bool | no | False |
-| st_drive_collabora_compose_template | Local path to the custom template to use for collabora compose file. | str | no | collabora/compose.yaml.j2 |
-| st_drive_collabora_port | The port to open on the host, redirecting to port 9980 in the container. It can also specify the ip address, something like 127.0.0.1:9980. | str | no | 50101 |
-| st_drive_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
-| st_drive_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
-| st_drive_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.6 |
-| st_drive_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:50199 |
+| st_drive_collabora_rollback_enabled | Whether or not to trigger the rollback tasks if the collabora deployment fails. | bool | no | `False` |
+| st_drive_collabora_compose_template | Local path to the custom template to use for collabora compose file. | str | no | `collabora/compose.yaml.j2` |
+| st_drive_collabora_port | The port to open on the host, redirecting to port 9980 in the container. It can also specify the ip address, something like 127.0.0.1:9980. | str | no | `50101` |
+| st_drive_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | `False` |
+| st_drive_cadvisor_image | Image repository for the cadvisor container. | str | no | `ghcr.io/google/cadvisor` |
+| st_drive_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | `v0.60.6` |
+| st_drive_cadvisor_port | The host published port of the cadvisor container. | str | no | `127.0.0.1:50199` |
 | st_drive_collabora_fonts_src | Local path to a directory containing ttf / otf fonts to install on the collabora instance | str | no |  |
 
-
-
 ## Dependencies
+
 None.
 
 ## Example Playbook
 
-```
+```yaml
 - hosts: all
   tasks:
     - name: Importing role: suitenumerique.st.drive
@@ -86,6 +83,7 @@ None.
 MIT
 
 ## Author and Project Information
+
 La Suite territoriale @ Agence Nationale de la Cohésion des Territoires
 
 Issues: [tracker](https://github.com/suitenumerique/st-ansible/issues)

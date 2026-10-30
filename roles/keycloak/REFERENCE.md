@@ -1,7 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.keycloak
 Version: 0.6.0
-
 This role deploys a Keycloak instance for La Suite Territoriale applications on a rootless podman base on Debian systems.
 
 Tags: suiteterritoriale, system
@@ -14,40 +13,38 @@ Tags: suiteterritoriale, system
 
 ## Role Arguments
 
-
 ### Entrypoint: main
 
 Installs and configures the keycloak application from La Suite Territoriale on Debian systems.
 
 |Option|Description|Type|Required|Default|
 |---|---|---|---|---|
-| st_keycloak_uid | UID of the `keycloak` user, used for the podman role. | int | no | 1102 |
-| st_keycloak_gid | GID of the `keycloak` group, used for the podman role. | int | no | {{ st_keycloak_uid }} |
-| st_keycloak_registries | Optional private container registries to login the `keycloak` user onto. | list of 'dict' | no |  |
-| st_keycloak_enabled | Triggers the installation of keycloak. | bool | no | False |
-| st_keycloak_image | Image repository for keycloak. | str | no | ghcr.io/suitenumerique/messages-keycloak |
-| st_keycloak_tag | Tag of the keycloak docker image to deploy. | str | no | 0.10.0 |
-| st_keycloak_env_template | Local path to the custom template to use for keycloak env file. | str | no | keycloak/env.j2 |
+| st_keycloak_uid | UID of the `keycloak` user, used for the podman role. | int | no | `1102` |
+| st_keycloak_gid | GID of the `keycloak` group, used for the podman role. | int | no | `{{ st_keycloak_uid }}` |
+| st_keycloak_registries | Optional private container registries to login the `keycloak` user onto. | list of `dict` | no |  |
+| st_keycloak_enabled | Triggers the installation of keycloak. | bool | no | `False` |
+| st_keycloak_image | Image repository for keycloak. | str | no | `ghcr.io/suitenumerique/messages-keycloak` |
+| st_keycloak_tag | Tag of the keycloak docker image to deploy. | str | no | `0.10.0` |
+| st_keycloak_env_template | Local path to the custom template to use for keycloak env file. | str | no | `keycloak/env.j2` |
 | st_keycloak_env | Content of the default keycloak_env_template, not used if st_keycloak_env_template is defined. Do not set `PORT`, `KC_HTTP_PORT` or `KC_HTTP_MANAGEMENT_PORT` here. The compose `environment` block owns them and overrides the env file. | str | no |  |
-| st_keycloak_compose_template | Local path to the custom template to use for keycloak compose file. | str | no | keycloak/compose.yaml.j2 |
-| st_keycloak_port | Host port Caddy listens on in front of Keycloak, when running with network_mode: host. | str | no | 50200 |
-| st_keycloak_http_port | Host port Keycloak listens on behind Caddy (`KC_HTTP_PORT`), when running with network_mode: host. The image binds it to `127.0.0.1`. Caddy connects to it. | str | no | 50201 |
-| st_keycloak_management_port | Host port of the Keycloak management interface for `/health` and `/metrics` (`KC_HTTP_MANAGEMENT_PORT`), when running with network_mode: host. The image binds it on all interfaces. The firewall must block it from the internet. | str | no | 50202 |
-| st_keycloak_start_command | When using the default compose template, specify the `command` to use to start keycloak. | str | no | start --optimized |
-| st_keycloak_rollback_enabled | Whether or not to trigger the rollback tasks if the keycloak deployment fails. | bool | no | False |
-| st_keycloak_cadvisor_enabled | Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server. | bool | no | False |
-| st_keycloak_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
-| st_keycloak_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.6 |
-| st_keycloak_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:50299 |
-
-
+| st_keycloak_compose_template | Local path to the custom template to use for keycloak compose file. | str | no | `keycloak/compose.yaml.j2` |
+| st_keycloak_port | Host port Caddy listens on in front of Keycloak, when running with network_mode: host. | str | no | `50200` |
+| st_keycloak_http_port | Host port Keycloak listens on behind Caddy (`KC_HTTP_PORT`), when running with network_mode: host. The image binds it to `127.0.0.1`. Caddy connects to it. | str | no | `50201` |
+| st_keycloak_management_port | Host port of the Keycloak management interface for `/health` and `/metrics` (`KC_HTTP_MANAGEMENT_PORT`), when running with network_mode: host. The image binds it on all interfaces. The firewall must block it from the internet. | str | no | `50202` |
+| st_keycloak_start_command | When using the default compose template, specify the `command` to use to start keycloak. | str | no | `start --optimized` |
+| st_keycloak_rollback_enabled | Whether or not to trigger the rollback tasks if the keycloak deployment fails. | bool | no | `False` |
+| st_keycloak_cadvisor_enabled | Triggers the installation of the cadvisor container, used to send metrics to a Prometheus compatible server and logs to a Loki server. | bool | no | `False` |
+| st_keycloak_cadvisor_image | Image repository for the cadvisor container. | str | no | `ghcr.io/google/cadvisor` |
+| st_keycloak_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | `v0.60.6` |
+| st_keycloak_cadvisor_port | The host published port of the cadvisor container. | str | no | `127.0.0.1:50299` |
 
 ## Dependencies
+
 None.
 
 ## Example Playbook
 
-```
+```yaml
 - hosts: all
   tasks:
     - name: Importing role: suitenumerique.st.keycloak
@@ -61,6 +58,7 @@ None.
 MIT
 
 ## Author and Project Information
+
 La Suite territoriale @ Agence Nationale de la Cohésion des Territoires
 
 Issues: [tracker](https://github.com/suitenumerique/st-ansible/issues)

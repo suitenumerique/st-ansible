@@ -1,7 +1,6 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 # Ansible Role: suitenumerique.st.messages
 Version: 0.6.0
-
 This role deploys the Messages applications from La Suite Territoriale on a rootless podman base on Debian systems.
 
 Tags: suiteterritoriale, system
@@ -14,108 +13,107 @@ Tags: suiteterritoriale, system
 
 ## Role Arguments
 
-
 ### Entrypoint: main
 
 Installs and configures the Messages application from La Suite Territoriale on Debian systems.
 
 |Option|Description|Type|Required|Default|
 |---|---|---|---|---|
-| st_messages_uid | UID of the `messages` user, used for the podman role. | int | no | 1104 |
-| st_messages_gid | GID of the `messages` group, used for the podman role. | int | no | {{ st_messages_uid }} |
-| st_messages_registries | Optional private container registries to login the `messages` user onto. | list of 'dict' | no |  |
-| st_messages_frontend_image | Image repository for the messages frontend. | str | no | ghcr.io/suitenumerique/messages-frontend |
-| st_messages_backend_image | Image repository for the messages backend. | str | no | ghcr.io/suitenumerique/messages-backend |
-| st_messages_tag | Tag of the messages docker images to deploy. | str | no | 0.10.0 |
-| st_messages_enabled | Triggers the installation of the messages application. | bool | no | False |
-| st_messages_dir | Remote path to the base directory for messages app. | str | no | /opt/messages/messages |
-| st_messages_port | The host published port for the messages frontend. | str | no | 50400 |
-| st_messages_rollback_enabled | Whether or not to trigger the rollback tasks if the messages deployment fails. | bool | no | False |
-| st_messages_compose_template | Local path to the custom template to use for messages compose file. | str | no | messages/compose.yaml.j2 |
-| st_messages_backend_env_template | Local path to the custom template to use for messages env file. | str | no | messages/backend_env.j2 |
+| st_messages_uid | UID of the `messages` user, used for the podman role. | int | no | `1104` |
+| st_messages_gid | GID of the `messages` group, used for the podman role. | int | no | `{{ st_messages_uid }}` |
+| st_messages_registries | Optional private container registries to login the `messages` user onto. | list of `dict` | no |  |
+| st_messages_frontend_image | Image repository for the messages frontend. | str | no | `ghcr.io/suitenumerique/messages-frontend` |
+| st_messages_backend_image | Image repository for the messages backend. | str | no | `ghcr.io/suitenumerique/messages-backend` |
+| st_messages_tag | Tag of the messages docker images to deploy. | str | no | `0.10.0` |
+| st_messages_enabled | Triggers the installation of the messages application. | bool | no | `False` |
+| st_messages_dir | Remote path to the base directory for messages app. | str | no | `/opt/messages/messages` |
+| st_messages_port | The host published port for the messages frontend. | str | no | `50400` |
+| st_messages_rollback_enabled | Whether or not to trigger the rollback tasks if the messages deployment fails. | bool | no | `False` |
+| st_messages_compose_template | Local path to the custom template to use for messages compose file. | str | no | `messages/compose.yaml.j2` |
+| st_messages_backend_env_template | Local path to the custom template to use for messages env file. | str | no | `messages/backend_env.j2` |
 | st_messages_backend_env | Content of the default backend_env_template, not used if st_messages_backend_env_template is defined. | str | no |  |
-| st_messages_backend_secret_files | Secrets that the container reads from files. Each item has the key "env" (the variable name in upper case) and one of the keys "src" (local template) or "content" (inline value). The role writes the file "secrets/<env>" in the application directory. The role mounts the "secrets" directory read-only at /run/secrets. The role sets "<ENV>_FILE" in the compose environment. The "<ENV>_FILE" variable has priority over the same variable in the env content. The exception is CELERY_BROKER_URL: do not set it in the env content when you set CELERY_BROKER_URL_FILE. See the docs. The feature needs a messages release that contains the upstream commit 07ed2bc9 (newer than 0.10.0). | list of 'dict' | no | [] |
-| st_messages_backend_run_migrations | Triggers the migrations task on the host. By default this is true, but the task has `run_once:` set on it which will trigger the migrations once per play. This var is useful if your deployment workflow uses `serial:`, in this case the play is separated in X plays of 1 host each, and `run_once` will effectively run once per play, resulting running the migrations on all hosts. If you use `serial:`, set this var to false on every host except one. | bool | no | True |
-| st_messages_frontend_env_template | Local path to the custom template to use for messages env file. | str | no | messages/frontend_env.j2 |
+| st_messages_backend_secret_files | Secrets that the container reads from files. Each item has the key "env" (the variable name in upper case) and one of the keys "src" (local template) or "content" (inline value). The role writes the file "secrets/<env>" in the application directory. The role mounts the "secrets" directory read-only at /run/secrets. The role sets "<ENV>_FILE" in the compose environment. The "<ENV>_FILE" variable has priority over the same variable in the env content. The exception is CELERY_BROKER_URL: do not set it in the env content when you set CELERY_BROKER_URL_FILE. See the docs. The feature needs a messages release that contains the upstream commit 07ed2bc9 (newer than 0.10.0). | list of `dict` | no | `[]` |
+| st_messages_backend_run_migrations | Triggers the migrations task on the host. By default this is true, but the task has `run_once:` set on it which will trigger the migrations once per play. This var is useful if your deployment workflow uses `serial:`, in this case the play is separated in X plays of 1 host each, and `run_once` will effectively run once per play, resulting running the migrations on all hosts. If you use `serial:`, set this var to false on every host except one. | bool | no | `True` |
+| st_messages_frontend_env_template | Local path to the custom template to use for messages env file. | str | no | `messages/frontend_env.j2` |
 | st_messages_frontend_env | Content of the default frontend_env_template, not used if st_messages_frontend_env_template is defined. | str | no |  |
-| st_messages_workers_enabled | Triggers the installation of the messages workers | bool | no | False |
-| st_messages_workers_dir | Remote path to the base directory for messages workers. | str | no | /opt/messages/workers |
-| st_messages_workers_env_template | Local path to the custom template to use for messages workers env file. | str | no | workers/env.j2 |
-| st_messages_workers_env | Content of the default workers_env_template, not used if st_messages_workers_env_template is defined. | str | no | {{ st_messages_backend_env }} |
-| st_messages_workers_secret_files | Secrets that the container reads from files. Each item has the key "env" (the variable name in upper case) and one of the keys "src" (local template) or "content" (inline value). The role writes the file "secrets/<env>" in the application directory. The role mounts the "secrets" directory read-only at /run/secrets. The role sets "<ENV>_FILE" in the compose environment. The "<ENV>_FILE" variable has priority over the same variable in the env content. The exception is CELERY_BROKER_URL: do not set it in the env content when you set CELERY_BROKER_URL_FILE. See the docs. The default value is the list of the backend. The feature needs a messages release that contains the upstream commit 07ed2bc9 (newer than 0.10.0). | list of 'dict' | no | {{ st_messages_backend_secret_files }} |
-| st_messages_workers_rollback_enabled | Whether or not to trigger the rollback tasks if the workers deployment fails. | bool | no | False |
-| st_messages_workers_compose_template | Local path to the custom template to use for messages workers compose file. | str | no | workers/compose.yaml.j2 |
-| st_messages_mta_in_enabled | DEPRECATED (use st_messages_pymta_enabled): triggers the installation of the mta-in. | bool | no | False |
-| st_messages_mta_in_image | DEPRECATED (use st_messages_pymta_image): image repository for mta-in. | str | no | ghcr.io/suitenumerique/messages-mta-in |
-| st_messages_mta_in_tag | DEPRECATED (use st_messages_pymta_tag): tag of the mta-in docker image to deploy. | str | no | 0.10.0 |
-| st_messages_mta_in_dir | DEPRECATED (use st_messages_pymta_dir): remote path to the base directory for mta-in app. | str | no | /opt/messages/mta-in |
-| st_messages_mta_in_port | DEPRECATED (use st_messages_pymta_port): the host published port for the mta-in SMTP endpoint. | str | no | 50425 |
-| st_messages_mta_in_env_template | DEPRECATED (use st_messages_pymta_env_template): local path to the custom template to use for mta-in env file. | str | no | mta_in/env.j2 |
+| st_messages_workers_enabled | Triggers the installation of the messages workers | bool | no | `False` |
+| st_messages_workers_dir | Remote path to the base directory for messages workers. | str | no | `/opt/messages/workers` |
+| st_messages_workers_env_template | Local path to the custom template to use for messages workers env file. | str | no | `workers/env.j2` |
+| st_messages_workers_env | Content of the default workers_env_template, not used if st_messages_workers_env_template is defined. | str | no | `{{ st_messages_backend_env }}` |
+| st_messages_workers_secret_files | Secrets that the container reads from files. Each item has the key "env" (the variable name in upper case) and one of the keys "src" (local template) or "content" (inline value). The role writes the file "secrets/<env>" in the application directory. The role mounts the "secrets" directory read-only at /run/secrets. The role sets "<ENV>_FILE" in the compose environment. The "<ENV>_FILE" variable has priority over the same variable in the env content. The exception is CELERY_BROKER_URL: do not set it in the env content when you set CELERY_BROKER_URL_FILE. See the docs. The default value is the list of the backend. The feature needs a messages release that contains the upstream commit 07ed2bc9 (newer than 0.10.0). | list of `dict` | no | `{{ st_messages_backend_secret_files }}` |
+| st_messages_workers_rollback_enabled | Whether or not to trigger the rollback tasks if the workers deployment fails. | bool | no | `False` |
+| st_messages_workers_compose_template | Local path to the custom template to use for messages workers compose file. | str | no | `workers/compose.yaml.j2` |
+| st_messages_mta_in_enabled | DEPRECATED (use st_messages_pymta_enabled): triggers the installation of the mta-in. | bool | no | `False` |
+| st_messages_mta_in_image | DEPRECATED (use st_messages_pymta_image): image repository for mta-in. | str | no | `ghcr.io/suitenumerique/messages-mta-in` |
+| st_messages_mta_in_tag | DEPRECATED (use st_messages_pymta_tag): tag of the mta-in docker image to deploy. | str | no | `0.10.0` |
+| st_messages_mta_in_dir | DEPRECATED (use st_messages_pymta_dir): remote path to the base directory for mta-in app. | str | no | `/opt/messages/mta-in` |
+| st_messages_mta_in_port | DEPRECATED (use st_messages_pymta_port): the host published port for the mta-in SMTP endpoint. | str | no | `50425` |
+| st_messages_mta_in_env_template | DEPRECATED (use st_messages_pymta_env_template): local path to the custom template to use for mta-in env file. | str | no | `mta_in/env.j2` |
 | st_messages_mta_in_env | DEPRECATED (use st_messages_pymta_env): content of the default mta_in_env_template, not used if st_messages_mta_in_env_template is defined. | str | no |  |
 | st_messages_mta_in_starttls_certificate_path | DEPRECATED (use st_messages_pymta_starttls_certificate_path). Path of the starttls certificate on the remote host. The certificate must be in the smtpd_tls_chain_files format, see https://www.postfix.org/postconf.5.html#smtpd_tls_chain_files. The file must be accessible by the `messages` user. | str | no |  |
-| st_messages_mta_in_compose_template | DEPRECATED (use st_messages_pymta_compose_template): local path to the custom template to use for mta-in compose file. | str | no | mta_in/compose.yaml.j2 |
-| st_messages_mta_in_rollback_enabled | DEPRECATED (use st_messages_pymta_rollback_enabled): whether or not to trigger the rollback tasks if the mta-in deployment fails. | bool | no | False |
-| st_messages_pymta_enabled | Triggers the installation of pymta, the Python inbound MTA that replaces mta-in. | bool | no | False |
-| st_messages_pymta_image | Image repository for pymta. | str | no | ghcr.io/suitenumerique/messages-mta-in-py |
-| st_messages_pymta_tag | Tag of the pymta docker image to deploy. | str | no | 0.10.0 |
-| st_messages_pymta_dir | Remote path to the base directory for pymta app. | str | no | /opt/messages/pymta |
-| st_messages_pymta_port | The host port pymta listens on for SMTP (`PYMTA_SMTP_BIND_PORT`). pymta runs with `network_mode: host`, so this is a port on the host network stack, not a published port. | str | no | 50425 |
-| st_messages_pymta_metrics_port | The host port of the pymta Prometheus metrics endpoint (`PYMTA_METRICS_BIND_PORT`). The role binds it to `127.0.0.1` only. Set it to `0` to disable the endpoint. | str | no | 50426 |
-| st_messages_pymta_env_template | Local path to the custom template to use for pymta env file. | str | no | pymta/env.j2 |
+| st_messages_mta_in_compose_template | DEPRECATED (use st_messages_pymta_compose_template): local path to the custom template to use for mta-in compose file. | str | no | `mta_in/compose.yaml.j2` |
+| st_messages_mta_in_rollback_enabled | DEPRECATED (use st_messages_pymta_rollback_enabled): whether or not to trigger the rollback tasks if the mta-in deployment fails. | bool | no | `False` |
+| st_messages_pymta_enabled | Triggers the installation of pymta, the Python inbound MTA that replaces mta-in. | bool | no | `False` |
+| st_messages_pymta_image | Image repository for pymta. | str | no | `ghcr.io/suitenumerique/messages-mta-in-py` |
+| st_messages_pymta_tag | Tag of the pymta docker image to deploy. | str | no | `0.10.0` |
+| st_messages_pymta_dir | Remote path to the base directory for pymta app. | str | no | `/opt/messages/pymta` |
+| st_messages_pymta_port | The host port pymta listens on for SMTP (`PYMTA_SMTP_BIND_PORT`). pymta runs with `network_mode: host`, so this is a port on the host network stack, not a published port. | str | no | `50425` |
+| st_messages_pymta_metrics_port | The host port of the pymta Prometheus metrics endpoint (`PYMTA_METRICS_BIND_PORT`). The role binds it to `127.0.0.1` only. Set it to `0` to disable the endpoint. | str | no | `50426` |
+| st_messages_pymta_env_template | Local path to the custom template to use for pymta env file. | str | no | `pymta/env.j2` |
 | st_messages_pymta_env | Content of the default pymta_env_template, not used if st_messages_pymta_env_template is defined. Do not set `PYMTA_SMTP_BIND_PORT`, `PYMTA_METRICS_BIND_HOST`, `PYMTA_METRICS_BIND_PORT`, `PYMTA_TLS_CERT_FILE` or `PYMTA_TLS_KEY_FILE` here. The compose `environment` block owns them and overrides the env file. | str | no |  |
 | st_messages_pymta_starttls_certificate_path | Path of the STARTTLS PEM file on the remote host (private key followed by the certificate chain). The role bind-mounts it at `/starttls_certificate.pem` and sets `PYMTA_TLS_CERT_FILE` and `PYMTA_TLS_KEY_FILE` to that path. The file must be readable by the container user (uid 65532), see docs/04-messages/06-pymta.md. | str | no |  |
-| st_messages_pymta_compose_template | Local path to the custom template to use for pymta compose file. | str | no | pymta/compose.yaml.j2 |
-| st_messages_pymta_rollback_enabled | Whether or not to trigger the rollback tasks if the pymta deployment fails. | bool | no | False |
-| st_messages_socks_proxy_enabled | Triggers the installation of the socks-proxy. | bool | no | False |
-| st_messages_socks_proxy_image | Image repository for socks-proxy. | str | no | ghcr.io/suitenumerique/messages-socks-proxy |
-| st_messages_socks_proxy_tag | Tag of the socks-proxy docker image to deploy. | str | no | 0.10.0 |
-| st_messages_socks_proxy_dir | Remote path to the base directory for socks-proxy app. | str | no | /opt/messages/socks-proxy |
-| st_messages_socks_proxy_env_template | Local path to the custom template to use for socks-proxy env file. | str | no | socks_proxy/env.j2 |
+| st_messages_pymta_compose_template | Local path to the custom template to use for pymta compose file. | str | no | `pymta/compose.yaml.j2` |
+| st_messages_pymta_rollback_enabled | Whether or not to trigger the rollback tasks if the pymta deployment fails. | bool | no | `False` |
+| st_messages_socks_proxy_enabled | Triggers the installation of the socks-proxy. | bool | no | `False` |
+| st_messages_socks_proxy_image | Image repository for socks-proxy. | str | no | `ghcr.io/suitenumerique/messages-socks-proxy` |
+| st_messages_socks_proxy_tag | Tag of the socks-proxy docker image to deploy. | str | no | `0.10.0` |
+| st_messages_socks_proxy_dir | Remote path to the base directory for socks-proxy app. | str | no | `/opt/messages/socks-proxy` |
+| st_messages_socks_proxy_env_template | Local path to the custom template to use for socks-proxy env file. | str | no | `socks_proxy/env.j2` |
 | st_messages_socks_proxy_env | Content of the default socks_proxy_env_template, not used if st_messages_socks_proxy_env_template is defined. | str | no |  |
-| st_messages_socks_proxy_compose_template | Local path to the custom template to use for socks-proxy compose file. | str | no | socks_proxy/compose.yaml.j2 |
-| st_messages_socks_proxy_rollback_enabled | Whether or not to trigger the rollback tasks if the socks-proxy deployment fails. | bool | no | False |
-| st_messages_mpa_enabled | Triggers the installation of the mpa. | bool | no | False |
-| st_messages_mpa_dir | Remote path to the base directory for mpa app. | str | no | /opt/messages/mpa |
+| st_messages_socks_proxy_compose_template | Local path to the custom template to use for socks-proxy compose file. | str | no | `socks_proxy/compose.yaml.j2` |
+| st_messages_socks_proxy_rollback_enabled | Whether or not to trigger the rollback tasks if the socks-proxy deployment fails. | bool | no | `False` |
+| st_messages_mpa_enabled | Triggers the installation of the mpa. | bool | no | `False` |
+| st_messages_mpa_dir | Remote path to the base directory for mpa app. | str | no | `/opt/messages/mpa` |
 | st_messages_mpa_auth_bearer | Add a caddy container in front of the rspamd worker with a simple authorization check. The value of this variable should then be used as a Bearer token when calling the /checkv2 rspamd endpoint. | str | no |  |
-| st_messages_mpa_caddy_image | Image repository for the mpa caddy. | str | no | docker.io/caddy |
-| st_messages_mpa_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | 2.11.7-alpine |
-| st_messages_mpa_caddy_port | The host published port for the caddy /checkv2 endpoint. | str | no | 50402 |
-| st_messages_mpa_caddy_healthcheck_port | The host published port for the caddy /healthcheck endpoint. | str | no | 50403 |
-| st_messages_mpa_rspamd_image | Image repository for the mpa rspamd. | str | no | docker.io/rspamd/rspamd |
-| st_messages_mpa_rspamd_tag | The tag of the rspamd docker image to use. See https://hub.docker.com/r/rspamd/rspamd/tags. | str | no | 4.2.2 |
+| st_messages_mpa_caddy_image | Image repository for the mpa caddy. | str | no | `docker.io/caddy` |
+| st_messages_mpa_caddy_tag | The tag of the caddy docker image to use. See https://hub.docker.com/_/caddy/tags. | str | no | `2.11.7-alpine` |
+| st_messages_mpa_caddy_port | The host published port for the caddy /checkv2 endpoint. | str | no | `50402` |
+| st_messages_mpa_caddy_healthcheck_port | The host published port for the caddy /healthcheck endpoint. | str | no | `50403` |
+| st_messages_mpa_rspamd_image | Image repository for the mpa rspamd. | str | no | `docker.io/rspamd/rspamd` |
+| st_messages_mpa_rspamd_tag | The tag of the rspamd docker image to use. See https://hub.docker.com/r/rspamd/rspamd/tags. | str | no | `4.2.2` |
 | st_messages_mpa_rspamd_controller_password | Password of the rspamd controller webui. | str | no |  |
-| st_messages_mpa_rspamd_controller_port | The host published port for the rspamd controller/webui. | str | no | 50404 |
-| st_messages_mpa_rspamd_add_header_score | The score triggering the add_header action on Messages. | str | no | 4 |
-| st_messages_mpa_rspamd_rewrite_subject_score | The score triggering the rewrite_subject action on Messages. | str | no | 6 |
-| st_messages_mpa_rspamd_reject_score | The score triggering the reject action on Messages. | str | no | 9 |
-| st_messages_mpa_rspamd_redirectors | The list of domains that should be checked by URL redirector in addition to the default ones. | list of 'str' | no | [] |
-| st_messages_mpa_rspamd_history_nrows | The maximum rows of the redis history index, before old history lines get removed. Good idea to try to keep this between 2 weeks and 1 month. | str | no | 100000 |
-| st_messages_mpa_blacklist_domains | Domains to blacklist via rspamd multimap. | list of 'str' | no | [] |
-| st_messages_mpa_blacklist_ips | IPs or CIDRs to blacklist via rspamd multimap. | list of 'str' | no | [] |
-| st_messages_mpa_whitelist_domains | Domains to whitelist via rspamd multimap. | list of 'str' | no | [] |
-| st_messages_mpa_whitelist_ips | IPs or CIDRs to whitelist via rspamd multimap. | list of 'str' | no | [] |
-| st_messages_mpa_rspamd_config_templates | List of rspamd configs to deploy, merged with the default configuration list. | list of 'dict' | no | [] |
-| st_messages_mpa_unbound_image | Image repository for the mpa unbound. | str | no | docker.io/alpinelinux/unbound |
-| st_messages_mpa_unbound_tag | Tag of the unbound docker image to use. alpinelinux/unbound publishes no versioned tags, only latest. | str | no | latest |
-| st_messages_mpa_unbound_config_template | Local path to the unbound.conf template. | str | no | mpa/unbound.conf.j2 |
-| st_messages_mpa_clamav_image | Image repository for the mpa clamav. | str | no | docker.io/clamav/clamav |
-| st_messages_mpa_clamav_tag | The tag of the clamav docker image to use. See https://hub.docker.com/r/clamav/clamav/tags. | str | no | 1.5.4 |
-| st_messages_mpa_clamav_config_template | Local path to the clamd.conf template. | str | no | mpa/clamd.conf.j2 |
-| st_messages_mpa_antivirus_engine | The antivirus engine behind rspamd. `clamav` runs the clamav daemon. `exav` runs the exav daemon instead, on the same clamd protocol, and serves the prebuilt database from `st_messages_mpa_exav_db_url`. | str | no | clamav |
-| st_messages_mpa_exav_image | Image repository for the mpa exav. | str | no | ghcr.io/sylvinus/exav |
-| st_messages_mpa_exav_tag | The tag of the exav docker image to use. See https://github.com/sylvinus/exav/pkgs/container/exav. | str | no | 0.0.2 |
+| st_messages_mpa_rspamd_controller_port | The host published port for the rspamd controller/webui. | str | no | `50404` |
+| st_messages_mpa_rspamd_add_header_score | The score triggering the add_header action on Messages. | str | no | `4` |
+| st_messages_mpa_rspamd_rewrite_subject_score | The score triggering the rewrite_subject action on Messages. | str | no | `6` |
+| st_messages_mpa_rspamd_reject_score | The score triggering the reject action on Messages. | str | no | `9` |
+| st_messages_mpa_rspamd_redirectors | The list of domains that should be checked by URL redirector in addition to the default ones. | list of `str` | no | `[]` |
+| st_messages_mpa_rspamd_history_nrows | The maximum rows of the redis history index, before old history lines get removed. Good idea to try to keep this between 2 weeks and 1 month. | str | no | `100000` |
+| st_messages_mpa_blacklist_domains | Domains to blacklist via rspamd multimap. | list of `str` | no | `[]` |
+| st_messages_mpa_blacklist_ips | IPs or CIDRs to blacklist via rspamd multimap. | list of `str` | no | `[]` |
+| st_messages_mpa_whitelist_domains | Domains to whitelist via rspamd multimap. | list of `str` | no | `[]` |
+| st_messages_mpa_whitelist_ips | IPs or CIDRs to whitelist via rspamd multimap. | list of `str` | no | `[]` |
+| st_messages_mpa_rspamd_config_templates | List of rspamd configs to deploy, merged with the default configuration list. | list of `dict` | no | `[]` |
+| st_messages_mpa_unbound_image | Image repository for the mpa unbound. | str | no | `docker.io/alpinelinux/unbound` |
+| st_messages_mpa_unbound_tag | Tag of the unbound docker image to use. alpinelinux/unbound publishes no versioned tags, only latest. | str | no | `latest` |
+| st_messages_mpa_unbound_config_template | Local path to the unbound.conf template. | str | no | `mpa/unbound.conf.j2` |
+| st_messages_mpa_clamav_image | Image repository for the mpa clamav. | str | no | `docker.io/clamav/clamav` |
+| st_messages_mpa_clamav_tag | The tag of the clamav docker image to use. See https://hub.docker.com/r/clamav/clamav/tags. | str | no | `1.5.4` |
+| st_messages_mpa_clamav_config_template | Local path to the clamd.conf template. | str | no | `mpa/clamd.conf.j2` |
+| st_messages_mpa_antivirus_engine | The antivirus engine behind rspamd. `clamav` runs the clamav daemon. `exav` runs the exav daemon instead, on the same clamd protocol, and serves the prebuilt database from `st_messages_mpa_exav_db_url`. | str | no | `clamav` |
+| st_messages_mpa_exav_image | Image repository for the mpa exav. | str | no | `ghcr.io/sylvinus/exav` |
+| st_messages_mpa_exav_tag | The tag of the exav docker image to use. See https://github.com/sylvinus/exav/pkgs/container/exav. | str | no | `0.0.2` |
 | st_messages_mpa_exav_db_url | URL of the prebuilt `.exavdb` that exav pulls and serves. Required when the engine is `exav`. Any HTTP(S) URL. Basic auth as `user:pass@` works over `https://` only. exav re-checks the URL every 300 seconds and hot-reloads a changed file. | str | no |  |
-| st_messages_mpa_exav_env_template | Local path to the exav env file template. | str | no | mpa/exav_env.j2 |
+| st_messages_mpa_exav_env_template | Local path to the exav env file template. | str | no | `mpa/exav_env.j2` |
 | st_messages_mpa_exav_env | Content of the exav env file: extra `EXAV_*` lines, for example `EXAV_WORKERS` or `EXAV_MAX_PROCESS_BYTES`. The compose file sets `EXAV_DB_URL` from `st_messages_mpa_exav_db_url`. | str | no |  |
-| st_messages_mpa_valkey_image | Image repository for the mpa valkey. | str | no | docker.io/valkey/valkey |
-| st_messages_mpa_valkey_tag | The tag of the valkey docker image to use. See https://hub.docker.com/r/valkey/valkey/tags. | str | no | 9.1.2 |
-| st_messages_mpa_rollback_enabled | Whether or not to trigger the rollback tasks if the mpa deployment fails. | bool | no | False |
-| st_messages_mpa_compose_template | Local path to the custom template to use for mpa compose file. | str | no | mpa/compose.yaml.j2 |
-| st_messages_mpa_timeout | Seconds the systemd unit waits for every container of the mpa stack to report healthy. The first exav start downloads the prebuilt database before it reports healthy. | int | no | 300 |
-| st_messages_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | False |
-| st_messages_cadvisor_image | Image repository for the cadvisor container. | str | no | ghcr.io/google/cadvisor |
-| st_messages_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | v0.60.6 |
-| st_messages_cadvisor_port | The host published port of the cadvisor container. | str | no | 127.0.0.1:50499 |
+| st_messages_mpa_valkey_image | Image repository for the mpa valkey. | str | no | `docker.io/valkey/valkey` |
+| st_messages_mpa_valkey_tag | The tag of the valkey docker image to use. See https://hub.docker.com/r/valkey/valkey/tags. | str | no | `9.1.2` |
+| st_messages_mpa_rollback_enabled | Whether or not to trigger the rollback tasks if the mpa deployment fails. | bool | no | `False` |
+| st_messages_mpa_compose_template | Local path to the custom template to use for mpa compose file. | str | no | `mpa/compose.yaml.j2` |
+| st_messages_mpa_timeout | Seconds the systemd unit waits for every container of the mpa stack to report healthy. The first exav start downloads the prebuilt database before it reports healthy. | int | no | `300` |
+| st_messages_cadvisor_enabled | Triggers the installation of the cadvisor container, a Prometheus-compliant containers monitoring tool. | bool | no | `False` |
+| st_messages_cadvisor_image | Image repository for the cadvisor container. | str | no | `ghcr.io/google/cadvisor` |
+| st_messages_cadvisor_tag | Tag of the cadvisor docker image to deploy. | str | no | `v0.60.6` |
+| st_messages_cadvisor_port | The host published port of the cadvisor container. | str | no | `127.0.0.1:50499` |
 
 #### Choices for main > st_messages_mpa_antivirus_engine
 
@@ -124,14 +122,13 @@ Installs and configures the Messages application from La Suite Territoriale on D
 | clamav |
 | exav |
 
-
-
 ## Dependencies
+
 None.
 
 ## Example Playbook
 
-```
+```yaml
 - hosts: all
   tasks:
     - name: Importing role: suitenumerique.st.messages
@@ -145,6 +142,7 @@ None.
 MIT
 
 ## Author and Project Information
+
 La Suite territoriale @ Agence Nationale de la Cohésion des Territoires
 
 Issues: [tracker](https://github.com/suitenumerique/st-ansible/issues)

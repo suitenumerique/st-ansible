@@ -9,7 +9,7 @@ st_drive_frontend_image: docker.io/lasuite/drive-frontend
 # Image repository for the drive backend.
 st_drive_backend_image: docker.io/lasuite/drive-backend
 # Tag of the drive docker images to deploy.
-st_drive_tag: v0.22.0
+st_drive_tag: v0.25.3
 # Triggers the installation of the drive application.
 st_drive_enabled: false
 # Remote path to the base directory for drive app.
