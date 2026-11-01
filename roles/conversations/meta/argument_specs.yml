@@ -30,7 +30,7 @@ argument_specs:
         type: "str"
         description: "Tag of the conversations docker images to deploy."
         # renovate: datasource=github-releases depName=suitenumerique/conversations versioning=semver
-        default: "v0.0.25"
+        default: "v0.0.26"
       st_conversations_enabled:
         type: "bool"
         description: "Triggers the installation of the conversations application."
