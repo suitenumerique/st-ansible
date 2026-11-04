@@ -1450,6 +1450,86 @@ def test_ask_core_conversations_forces_db_vars_and_prompts_llm(monkeypatch):
     assert "st_conversations_caddy_env" not in rendered
 
 
+def test_ask_core_calendars_wires_caldav_and_plain_email(monkeypatch):
+    """`_ask_core` for calendars skips the DB-mode select and S3, generates the
+    salt and the three CalDAV API keys, derives the dramatiq URLs from
+    REDIS_URL, and writes the plain EMAIL_* keys. The caldav blob reuses the
+    DB_* answers and the same API key refs as the backend blob."""
+    sq = script_questionary(
+        monkeypatch,
+        [
+            ("text", "Public domain for calendars", "calendars.example.org"),
+            ("text", "DB_HOST", "db.example.org"),
+            ("text", "DB_NAME", "calendars"),
+            ("text", "DB_USER", "calendars"),
+            ("password", "DB_PASSWORD", "dbpass123"),
+            ("text", "DB_PORT", "5432"),
+            ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("select", "Identity provider:", "keycloak"),
+            ("text", "Keycloak base URL", "https://idp.example.org"),
+            ("text", "Keycloak realm", "master"),
+            ("text", "OIDC_RP_CLIENT_ID", "calendars-client-id"),
+            ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+            ("confirm", "Configure transactional email (SMTP) settings?", True),
+            ("text", "EMAIL_HOST", "smtp.example.org"),
+            ("text", "EMAIL_PORT", "587"),
+            ("text", "EMAIL_HOST_USER (optional)", ""),
+            ("password", "EMAIL_HOST_PASSWORD", "smtppass"),
+            ("confirm", "EMAIL_USE_TLS?", True),
+            ("confirm", "EMAIL_USE_SSL?", False),
+            ("text", "DEFAULT_FROM_EMAIL", "calendars@example.org"),
+        ],
+    )
+    meta = appmeta.load_app("calendars")
+    answers = bootstrap._ask_core(meta, AnsibleVaultBackend())
+
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+    assert not sq.asked("select", "Database configuration:")
+    assert not sq.asked("text", "AWS_S3_ENDPOINT_URL")
+    assert not sq.asked("text", "DJANGO_EMAIL_HOST")
+
+    assert answers["DJANGO_SETTINGS_MODULE"] == "calendars.settings"
+    assert "DATABASE_URL" not in answers
+    assert "CELERY_BROKER_URL" not in answers
+    assert "MEDIA_BASE_URL" not in answers
+    assert answers["DRAMATIQ_BROKER_URL"] == "{{ vault_redis_url }}"
+    assert answers["DRAMATIQ_RESULT_BACKEND_URL"] == "{{ vault_redis_url }}"
+    assert answers["SALT_KEY"] == "{{ vault_salt_key }}"
+    for key in (
+        "CALDAV_INBOUND_API_KEY",
+        "CALDAV_OUTBOUND_API_KEY",
+        "CALDAV_INTERNAL_API_KEY",
+    ):
+        assert answers[key] == f"{{{{ vault_{key.lower()} }}}}"
+    assert answers["APP_URL"] == "https://{{ st_calendars_public_host }}"
+
+    rendered = envrender.render_env("calendars", "calendars", answers)
+    backend_body = rendered["st_calendars_backend_env"]
+    assert "DB_HOST=db.example.org" in backend_body
+    assert "CELERY_BROKER_URL=" not in backend_body
+    assert "AWS_S3_ENDPOINT_URL=" not in backend_body
+    assert "DJANGO_EMAIL_HOST=" not in backend_body
+    assert "EMAIL_HOST=smtp.example.org" in backend_body
+    assert "EMAIL_HOST_PASSWORD={{ vault_email_host_password }}" in backend_body
+    assert "EMAIL_HOST_USER=" not in backend_body
+    assert "DEFAULT_FROM_EMAIL=calendars@example.org" in backend_body
+    assert "CALDAV_URL=http://caldav:80" in backend_body
+    assert "DRAMATIQ_BROKER_URL={{ vault_redis_url }}" in backend_body
+
+    caldav_body = rendered["st_calendars_caldav_env"]
+    assert "PGHOST=db.example.org" in caldav_body
+    assert "PGPORT=5432" in caldav_body
+    assert "PGDATABASE=calendars" in caldav_body
+    assert "PGUSER=calendars" in caldav_body
+    assert "PGPASSWORD={{ vault_db_password }}" in caldav_body
+    assert "CALDAV_DB_SCHEMA=sabre" in caldav_body
+    assert "CALDAV_BASE_URI=/caldav/" in caldav_body
+    assert "CALDAV_OUTBOUND_API_KEY={{ vault_caldav_outbound_api_key }}" in caldav_body
+    assert (
+        "CALDAV_CALLBACK_BASE_URL=https://{{ st_calendars_public_host }}" in caldav_body
+    )
+
+
 def test_bootstrap_docs_full_deploys_yprovider(repo, monkeypatch):
     """Full `bootstrap docs prod` deploying yprovider on a single host generates
     and mirrors the shared secrets without re-prompting for them."""

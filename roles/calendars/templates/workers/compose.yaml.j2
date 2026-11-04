@@ -1,0 +1,31 @@
+---
+{{ ansible_managed | comment }}
+
+name: calendars_workers
+services:
+  worker:
+    container_name: calendars-worker
+    image: "{{ st_calendars_backend_image }}:{{ st_calendars_backend_tag }}"
+    env_file: ./env
+{% if st_calendars_workers_secret_files | length > 0 %}
+    environment:
+{% for secret in st_calendars_workers_secret_files %}
+      {{ secret.env }}_FILE: /run/secrets/{{ secret.env }}
+{% endfor %}
+    volumes:
+      - ./secrets:/run/secrets:ro
+{% endif %}
+    # Dramatiq worker. worker.py has no health probe command, so this service has no healthcheck.
+    command: ["python", "worker.py", "--concurrency={{ ansible_processor_nproc }}"]
+
+  # The tasks call the CalDAV server at http://caldav:80. The workers host can be another host
+  # than the core, so it runs its own CalDAV server on the same database.
+  caldav:
+    container_name: calendars-workers-caldav
+    image: "{{ st_calendars_caldav_image }}:{{ st_calendars_caldav_tag }}"
+    env_file: ./caldav_env
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1/caldav/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

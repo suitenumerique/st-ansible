@@ -118,10 +118,12 @@ When you add or change a prompt:
 4. Decide whether the release needs an entry in `upgrades.yml` (next section).
 
 Per-app entry points: `_ask_core` (Django apps: meet, drive, messages, docs,
-conversations), `_ask_keycloak`, `_ask_projects`. `_handle_dependency` runs
+conversations, calendars), `_ask_keycloak`, `_ask_projects`. `_handle_dependency` runs
 the provider questionnaires. Keycloak is not a Django app. Messages uses
 `STORAGE_MESSAGE_*`, never `AWS_S3_*`. Conversations reads `DB_*` only
 (`_DISCRETE_DB_APPS`): no DB-mode select, `DATABASE_URL` is never written.
+Calendars is in `_DISCRETE_DB_APPS` too: its caldav blob builds `PG*` from
+`DB_*`. It has no S3 and uses the plain `EMAIL_*` keys (`_PLAIN_EMAIL_APPS`).
 
 ### 3.2 Release flags (`resources/upgrades.yml`)
 
@@ -241,7 +243,8 @@ global callback and the upstream gate of `st-cli upgrade`.
 - Each app role ships distinct uid/gid and host ports so co-located stacks do
   not collide: drive 1101/50100, keycloak 1102/50200, meet 1103/50300,
   messages 1104/50400, projects 1105/50500, docs 1106/50600,
-  transfers 1107/50700, file-scanner 1108/50800. An app name with a dash is
+  transfers 1107/50700, file-scanner 1108/50800, conversations 1109/50900,
+  calendars 1110/51000. An app name with a dash is
   normalised in every ansible var and inventory group (`st_file_scanner_*`).
 - `ssh/config` and `ssh/known_hosts` are committed; `ssh/config.local` is
   per-operator and gitignored.

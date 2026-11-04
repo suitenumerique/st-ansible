@@ -31,6 +31,8 @@ forwards port `:25` to pymta with the PROXY protocol.
      │      └── meet (1+2)
      │      └── conversations (1+2)
      │            └── workers (1)
+     │      └── calendars (1+2)
+     │            └── workers (1)
      │
      ├─── socks-proxy (1+2, public IPs)
      │
@@ -57,6 +59,8 @@ forwards port `:25` to pymta with the PROXY protocol.
 | egress | | x | | |
 | conversations | x | x | | x |
 | conversations workers | x | x | | x |
+| calendars | x | x | | |
+| calendars workers | x | x | | |
 
 > [!NOTE]
 > LiveKit ships with a co-located valkey (redis-compatible) in its compose stack, and when egress runs on the
@@ -95,6 +99,8 @@ first host stays on the new version and the second can be debugged manually.
 | playbook_egress.yml | egress | 1 | - | meet (egress) |
 | playbook_conversations.yml | conversations | 2 | 1 | conversations |
 | playbook_conversations_workers.yml | conversations_workers | 1 | - | conversations (workers) |
+| playbook_calendars.yml | calendars | 2 | 1 | calendars |
+| playbook_calendars_workers.yml | calendars_workers | 1 | - | calendars (workers) |
 
 Each workers playbook deploys one host. Celery beat runs inside the worker, so a second host
 with beat runs every periodic task twice. To add workers hosts, set
@@ -106,6 +112,9 @@ st_messages_workers_beat_enabled: "{{ true if inventory_hostname == ansible_play
 
 `ansible_play_hosts_all` lists every host of the play, also under `serial: 1`, so the expression
 picks the same host in each batch. The st-cli scaffold sets this expression by itself.
+
+The calendars workers run Dramatiq and have no scheduler, so you can add calendars workers
+hosts without this flag.
 
 ## Running
 

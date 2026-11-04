@@ -1,0 +1,21 @@
+---
+- name: "Deploy calendars."
+  ansible.builtin.import_tasks: deploy/calendars.yml
+  when: st_calendars_enabled
+  tags: ['calendars_calendars']
+
+- name: "Deploy calendars workers."
+  ansible.builtin.import_tasks: deploy/workers.yml
+  when: st_calendars_workers_enabled
+  tags: ['calendars_workers']
+
+- name: "Create cadvisor application."
+  when: st_calendars_cadvisor_enabled
+  tags: ['calendars_cadvisor']
+  ansible.builtin.import_role:
+    name: suitenumerique.st.podman
+    tasks_from: application.yml
+  vars:
+    st_podman_user: "calendars"
+    st_podman_application_name: "cadvisor"
+    st_podman_application_compose_template: monitoring/compose_cadvisor.yaml.j2

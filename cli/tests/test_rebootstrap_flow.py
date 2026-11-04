@@ -12,6 +12,7 @@ import pytest
 from helpers import (
     ACCEPT_DEFAULT,
     accept_defaults,
+    calendars_first_run_script,
     conversations_first_run_script,
     docs_first_run_script,
     drive_first_run_script,
@@ -397,6 +398,53 @@ def test_conversations_round_trip_byte_identical(repo, monkeypatch):
     assert (
         repo / "conversations/prod/conversations/vault.yml"
     ).read_bytes() == core_vault_before
+
+
+def test_calendars_round_trip_byte_identical(repo, monkeypatch):
+    """An Enter-through calendars rebootstrap keeps the caldav blob, the plain
+    EMAIL_* keys and the generated CalDAV keys, and stays byte-identical across
+    a Modify replay and a later Silent replay."""
+    seed_creds(repo)
+    sq1 = script_questionary(monkeypatch, calendars_first_run_script())
+    bootstrap.bootstrap("calendars", "prod")
+    assert not sq1._scripts, f"unconsumed scripts: {sq1._scripts}"
+
+    vars_path = repo / "calendars/prod/calendars/vars.yml"
+    vault_path = repo / "calendars/prod/calendars/vault.yml"
+    core_vars_before = vars_path.read_text()
+    core_vault_before = vault_path.read_bytes()
+
+    assert "st_calendars_caldav_env:" in core_vars_before
+    assert "PGPASSWORD={{ vault_db_password }}" in core_vars_before
+    assert "EMAIL_HOST=smtp.example.org" in core_vars_before
+    assert "DEFAULT_FROM_EMAIL=calendars@example.org" in core_vars_before
+    assert "DJANGO_EMAIL_HOST=" not in core_vars_before
+
+    decrypted = vault.decrypt_to_dict(
+        paths.vault_path("calendars", "prod", "calendars")
+    )
+    assert decrypted["vault_email_host_password"] == "smtppass"
+    assert decrypted["vault_caldav_internal_api_key"]
+    assert decrypted["vault_salt_key"]
+
+    sq2 = accept_defaults(monkeypatch)
+    bootstrap.bootstrap("calendars", "prod", replay=bootstrap.ReplayAction.MODIFY)
+    assert not sq2._scripts, f"unconsumed scripts: {sq2._scripts}"
+    assert not sq2.asked("select", "Database configuration:")
+    assert vars_path.read_text() == core_vars_before
+    assert vault_path.read_bytes() == core_vault_before
+
+    m = manifest.load_manifest()
+    for u in m.units:
+        u.bootstrapped_with = "0.0.1"
+    manifest.save_manifest(m)
+
+    sq3 = script_questionary(monkeypatch, [])
+    bootstrap.bootstrap("calendars", "prod", replay=bootstrap.ReplayAction.SILENT)
+    assert not sq3._scripts, f"unconsumed scripts: {sq3._scripts}"
+    assert not sq3.select_calls, f"a select fired: {sq3.select_calls}"
+    assert vars_path.read_text() == core_vars_before
+    assert vault_path.read_bytes() == core_vault_before
 
 
 def test_messages_round_trip_byte_identical(repo, monkeypatch):

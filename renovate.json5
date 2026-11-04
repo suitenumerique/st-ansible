@@ -85,8 +85,10 @@
       managerFilePatterns: ["/roles/[^/]+/meta/argument_specs\\.yml$/"],
       // Matches a `# renovate: datasource=… depName=… [versioning=…] [extractVersion=…]`
       // comment immediately followed by the `default: "<value>"` line it annotates.
+      // A `<tag>@sha256:<digest>` value (calendars pins the mutable `main` tag) also
+      // captures the digest, so Renovate updates it when the tag moves.
       matchStrings: [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*default: \"?(?<currentValue>[^\"\\n]+)\"?",
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*default: \"?(?<currentValue>[^\"\\n@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?\"?",
       ],
       // Most annotated deps are Docker tags (e.g. `2.11.4-alpine`, `26.04.2.1.1`)
       // which the semver default mishandles, so default to `docker` versioning.

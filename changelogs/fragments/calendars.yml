@@ -1,0 +1,4 @@
+minor_changes:
+  - "calendars: add a ``calendars`` role that deploys the Calendars application (suitenumerique/calendars) as a caddy + frontend + backend + SabreDAV CalDAV server core with a Dramatiq workers sub-app on the rootless podman base. The deploy runs the Django migrations, then the CalDAV schema script ``init-database.sh``. The images pin the upstream ``main`` tag by digest."
+  - "cli: add ``calendars`` app support to bootstrap: discrete ``DB_*`` database prompts, a ``st_calendars_caldav_env`` blob built from the same answers, generated ``SALT_KEY`` and ``CALDAV_*_API_KEY`` secrets, ``DRAMATIQ_*`` URLs derived from ``REDIS_URL``, and SMTP prompts on the plain ``EMAIL_*`` keys."
+  - "renovate: the role default annotation also matches a ``<tag>@sha256:<digest>`` value, so Renovate updates the digest of a pinned mutable tag."
