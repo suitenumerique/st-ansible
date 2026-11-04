@@ -79,10 +79,12 @@ _DOCS_CORE_SECRETS = ("COLLABORATION_SERVER_SECRET", "Y_PROVIDER_API_KEY")
 # questionnaire never prompts for SMTP config.
 _EMAIL_APPS = {"drive", "meet", "docs", "transfers", "conversations", "calendars"}
 
-# Upstream reads only the discrete DB_* vars and ignores DATABASE_URL, so
-# `_ask_db` shows no "Database configuration:" select for these apps. The
-# calendars CalDAV server reads the same database from the discrete PG* vars,
-# which the caldav env blob builds from DB_*.
+# Apps that need the discrete DB_* vars, so `_ask_db` shows no
+# "Database configuration:" select for them:
+# - conversations reads only DB_* and ignores DATABASE_URL;
+# - the calendars backend accepts DATABASE_URL, but its CalDAV server
+#   reads the same database from the PG* vars. The caldav env blob builds
+#   them from the DB_* answers.
 _DISCRETE_DB_APPS = {"conversations", "calendars"}
 
 # Upstream calendars reads the plain Django EMAIL_* and DEFAULT_FROM_EMAIL
