@@ -1,4 +1,15 @@
 ---
+- name: "Assert the Messages integration settings."
+  when: st_calendars_messages_enabled | bool
+  ansible.builtin.assert:
+    that:
+      - st_calendars_messages_api_url | length > 0
+      - st_calendars_messages_channel_id | length > 0
+      - st_calendars_messages_api_key | length > 0
+    fail_msg: "st_calendars_messages_enabled needs st_calendars_messages_api_url, st_calendars_messages_channel_id and st_calendars_messages_api_key."
+    quiet: true
+  tags: ['calendars_calendars', 'calendars_workers']
+
 - name: "Deploy calendars."
   ansible.builtin.import_tasks: deploy/calendars.yml
   when: st_calendars_enabled

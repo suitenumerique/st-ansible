@@ -1465,6 +1465,7 @@ def test_ask_core_calendars_wires_caldav_and_plain_email(monkeypatch):
             ("password", "DB_PASSWORD", "dbpass123"),
             ("text", "DB_PORT", "5432"),
             ("text", "REDIS_URL", "redis://redis:6379/0"),
+            ("confirm", "Enable the Messages integration", False),
             ("select", "Identity provider:", "keycloak"),
             ("text", "Keycloak base URL", "https://idp.example.org"),
             ("text", "Keycloak realm", "master"),
@@ -1502,6 +1503,8 @@ def test_ask_core_calendars_wires_caldav_and_plain_email(monkeypatch):
     ):
         assert answers[key] == f"{{{{ vault_{key.lower()} }}}}"
     assert answers["APP_URL"] == "https://{{ st_calendars_public_host }}"
+    assert answers["FEATURE_MESSAGES_INTEGRATION"] == "false"
+    assert answers["MESSAGES_API_KEY"] == ""
 
     rendered = envrender.render_env("calendars", "calendars", answers)
     backend_body = rendered["st_calendars_backend_env"]
@@ -1515,6 +1518,7 @@ def test_ask_core_calendars_wires_caldav_and_plain_email(monkeypatch):
     assert "DEFAULT_FROM_EMAIL=calendars@example.org" in backend_body
     assert "CALDAV_URL=http://caldav:80" in backend_body
     assert "DRAMATIQ_BROKER_URL={{ vault_redis_url }}" in backend_body
+    assert "MESSAGES_" not in backend_body
 
     caldav_body = rendered["st_calendars_caldav_env"]
     assert "PGHOST=db.example.org" in caldav_body

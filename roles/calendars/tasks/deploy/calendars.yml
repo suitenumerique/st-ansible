@@ -9,7 +9,7 @@
     st_podman_application_dir: "{{ st_calendars_dir }}"
     st_podman_application_rollback_enabled: "{{ st_calendars_rollback_enabled }}"
     st_podman_application_compose_template: "{{ st_calendars_compose_template }}"
-    st_podman_application_secret_files: "{{ st_calendars_backend_secret_files }}"
+    st_podman_application_secret_files: "{{ _st_calendars_backend_secret_files }}"
     st_podman_application_files:
       - src: "{{ st_calendars_backend_env_template }}"
         dest: "backend_env"

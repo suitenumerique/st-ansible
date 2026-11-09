@@ -1249,7 +1249,7 @@ def _ask_calendars(answers: dict, backend: SecretBackend, core_key: str) -> None
 
     The backend and the CalDAV server share the three CALDAV_*_API_KEY
     secrets. Each fixed value is a `setdefault`, so a hand edit survives a
-    replay. The Messages integration stays a hand-written block.
+    replay.
     """
     host = "{{ st_calendars_public_host }}"
     answers.setdefault("APP_URL", f"https://{host}")
@@ -1268,6 +1268,44 @@ def _ask_calendars(answers: dict, backend: SecretBackend, core_key: str) -> None
         "CALDAV_INTERNAL_API_KEY",
     ):
         _ask_secret(answers, backend, key, core_key, gen=secrets.gen_token)
+    _ask_calendars_messages(answers, backend, core_key)
+
+
+def _ask_calendars_messages(
+    answers: dict, backend: SecretBackend, core_key: str
+) -> None:
+    """Ask for the Messages integration of calendars.
+
+    The answers feed role variables, not env lines. Every key always gets a
+    value, because a component var with a missing answer renders as its
+    literal template. Turning the integration off keeps the other values.
+    """
+    for key in ("MESSAGES_API_URL", "MESSAGES_CHANNEL_ID", "MESSAGES_API_KEY"):
+        answers.setdefault(key, "")
+    enabled = _recall_bool(answers, "FEATURE_MESSAGES_INTEGRATION", False)
+    prompt = (
+        "The Messages integration is enabled. Keep it?"
+        if enabled
+        else "Enable the Messages integration (mailbox calendars)?"
+    )
+    if not _confirm(prompt, default=enabled):
+        answers["FEATURE_MESSAGES_INTEGRATION"] = "false"
+        return
+    answers["FEATURE_MESSAGES_INTEGRATION"] = "true"
+    answers["MESSAGES_API_URL"] = _ask(
+        "Messages base URL (MESSAGES_API_URL)",
+        _recall(answers, "MESSAGES_API_URL"),
+        placeholder="https://messages.example.org",
+    )
+    answers["MESSAGES_CHANNEL_ID"] = _ask(
+        "Id of the Messages api_key channel (MESSAGES_CHANNEL_ID)",
+        _recall(answers, "MESSAGES_CHANNEL_ID"),
+    )
+    # Messages generates the key when it creates the channel. An empty value
+    # means "not asked yet", so remove it to let _ask_secret prompt.
+    if not answers["MESSAGES_API_KEY"]:
+        del answers["MESSAGES_API_KEY"]
+    _ask_secret(answers, backend, "MESSAGES_API_KEY", core_key)
 
 
 def _ask_messages_provider(

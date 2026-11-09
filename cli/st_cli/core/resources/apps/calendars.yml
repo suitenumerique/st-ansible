@@ -24,6 +24,12 @@ components:
       # so the role's run_once migrations task fires on every host — gate it to the
       # first play host. Braces are quadrupled so str.format emits literal {{ }}.
       st_calendars_backend_run_migrations: "{{{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}}}"
+      st_calendars_messages_enabled: "{FEATURE_MESSAGES_INTEGRATION}"
+      st_calendars_messages_api_url: "{MESSAGES_API_URL}"
+      st_calendars_messages_channel_id: "{MESSAGES_CHANNEL_ID}"
+      st_calendars_messages_api_key: "{MESSAGES_API_KEY}"
+      # The workers play loads this file. The mailbox sync timer runs on its first play host only.
+      st_calendars_workers_mailbox_sync_enabled: "{{{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}}}"
     env_render:
       backend:
         blob_var: st_calendars_backend_env

@@ -113,8 +113,9 @@ st_messages_workers_beat_enabled: "{{ true if inventory_hostname == ansible_play
 `ansible_play_hosts_all` lists every host of the play, also under `serial: 1`, so the expression
 picks the same host in each batch. The st-cli scaffold sets this expression by itself.
 
-The calendars workers run Dramatiq and have no scheduler, so you can add calendars workers
-hosts without this flag.
+The calendars workers run Dramatiq and have no scheduler. With the Messages integration, a
+systemd timer runs the mailbox sync instead. To add calendars workers hosts, set
+`st_calendars_workers_mailbox_sync_enabled` with the same expression.
 
 ## Running
 

@@ -81,6 +81,7 @@ See [roles/calendars/REFERENCE.md](../../roles/calendars/REFERENCE.md) for the c
 | `st_calendars_caldav_env` | CalDAV server environment content | _(empty)_ |
 | `st_calendars_caddy_env` | Caddy env content: optional `CADDY_ADMIN_IP_ALLOWLIST` / `CADDY_TRUSTED_PROXIES` | _(empty)_ |
 | `st_calendars_backend_run_migrations` | Run the Django migrations and the CalDAV schema script on deploy | `true` |
+| `st_calendars_messages_enabled` | Turn on the Messages integration | `false` |
 
 ## Network & Ports
 
@@ -173,7 +174,7 @@ The upstream backend supports `_FILE` for these variables (`SecretFileValue` in 
 - `OIDC_RP_CLIENT_SECRET`: OIDC client secret.
 - `EMAIL_HOST_PASSWORD`: SMTP password.
 - `CALDAV_INBOUND_API_KEY`, `CALDAV_OUTBOUND_API_KEY`, `CALDAV_INTERNAL_API_KEY`: CalDAV API keys.
-- `MESSAGES_API_KEY`: Messages API key.
+- `MESSAGES_API_KEY`: Messages API key. Do not add it here: set `st_calendars_messages_api_key`, see [Messages Integration](#messages-integration).
 
 Upstream does not support `_FILE` for other variables.
 If you add an item for another variable, the backend ignores the file.
@@ -252,6 +253,45 @@ You can either:
   provide env content inline. There is no frontend env: the frontend reads no environment variables.
 - Set the matching `_env_template` variable to use a custom template
 
+## Messages Integration
+
+The Messages integration lets users create a calendar for a Messages mailbox. Invitations then
+go out through that mailbox. Messages stays the source of truth for the mailbox access. See
+the upstream [mailboxes.md](https://github.com/suitenumerique/calendars/blob/main/docs/mailboxes.md).
+It is off by default.
+
+| Variable | Backend setting | Description |
+|----------|-----------------|-------------|
+| `st_calendars_messages_enabled` | `FEATURE_MESSAGES_INTEGRATION` | Turn on the integration |
+| `st_calendars_messages_api_url` | `MESSAGES_API_URL` | Base URL of Messages, for example `https://messages.example.org` |
+| `st_calendars_messages_channel_id` | `MESSAGES_CHANNEL_ID` | Id of the Messages `api_key` channel, sent as `X-Channel-Id` |
+| `st_calendars_messages_api_key` | `MESSAGES_API_KEY` | Key of this channel, sent as `X-API-Key` |
+
+When `st_calendars_messages_enabled` is `true`, the role:
+
+- sets `FEATURE_MESSAGES_INTEGRATION`, `MESSAGES_API_URL` and `MESSAGES_CHANNEL_ID` in the compose
+  `environment` of the backend and of the worker;
+- writes the API key to `secrets/MESSAGES_API_KEY` and sets `MESSAGES_API_KEY_FILE`;
+- runs the mailbox sync on a timer on one workers host. See
+  [02-workers.md](02-workers.md#mailbox-sync).
+
+These values have priority over the same variables in `st_calendars_backend_env`.
+
+### On the Messages Side
+
+1. A Messages superadmin creates a channel in the Messages Django admin:
+   - type `api_key`;
+   - scope level `global`;
+   - scopes `mailboxes:read` and `messages:send`.
+2. Messages shows the API key once, when it creates the channel. Copy it, and copy the
+   channel id.
+3. Set the channel id in `st_calendars_messages_channel_id`, and the key in
+   `st_calendars_messages_api_key`. Keep the key in the vault.
+
+Calendars reads the organization of a mailbox from the custom attributes of its Messages mail
+domain, with the key in `OIDC_USERINFO_ORGANIZATION_CLAIM`. Without this claim, the creation of
+a mailbox calendar fails. See [Optional Features](#optional-features).
+
 ## Optional Features
 
 `st-cli` does not prompt for these features. Add the env lines by hand to
@@ -259,7 +299,6 @@ You can either:
 
 | Feature | Env lines | Upstream doc |
 |---------|-----------|--------------|
-| Mailbox calendars (Messages integration) | `FEATURE_MESSAGES_INTEGRATION=true`, `MESSAGES_API_URL`, `MESSAGES_API_KEY`, `MESSAGES_CHANNEL_ID` | [mailboxes.md](https://github.com/suitenumerique/calendars/blob/main/docs/mailboxes.md) |
 | Organizations | `OIDC_USERINFO_ORGANIZATION_CLAIM` | [organizations.md](https://github.com/suitenumerique/calendars/blob/main/docs/organizations.md) |
 | Entitlements | `ENTITLEMENTS_BACKEND`, `ENTITLEMENTS_BACKEND_PARAMETERS` | [entitlements.md](https://github.com/suitenumerique/calendars/blob/main/docs/entitlements.md) |
 | iTIP METHOD in the ICS attachments | `CALENDAR_ITIP_ENABLED=true` | [invitations.md](https://github.com/suitenumerique/calendars/blob/main/docs/invitations.md) |
@@ -287,7 +326,12 @@ podman-compose -f /opt/calendars/calendars/compose.yaml run --rm backend python 
 database values, `REDIS_URL`, the identity provider, optional SMTP (the plain `EMAIL_*` keys),
 and cadvisor. It generates `DJANGO_SECRET_KEY`, `SALT_KEY` and the three `CALDAV_*_API_KEY`
 secrets. It writes `st_calendars_caldav_env` from the same answers, with
-`CALDAV_DB_SCHEMA=sabre` and `CALDAV_CALLBACK_BASE_URL` set to the public URL. See
+`CALDAV_DB_SCHEMA=sabre` and `CALDAV_CALLBACK_BASE_URL` set to the public URL.
+
+It also asks whether to turn on the Messages integration. If yes, it prompts for the Messages
+base URL, the channel id and the API key. Messages generates this key, so st-cli does not
+generate it. st-cli writes the `st_calendars_messages_*` variables, with the key in the vault.
+It turns on the mailbox sync on the first workers host only. See
 [00-getting-started/01-st-cli.md](../00-getting-started/01-st-cli.md) for general st-cli usage.
 
 ## Troubleshooting

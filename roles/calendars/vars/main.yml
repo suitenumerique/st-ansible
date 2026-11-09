@@ -1,0 +1,6 @@
+---
+_st_calendars_messages_secret_files: >-
+  {{ [{'env': 'MESSAGES_API_KEY', 'content': st_calendars_messages_api_key}] if st_calendars_messages_enabled | bool else [] }}
+_st_calendars_backend_secret_files: "{{ st_calendars_backend_secret_files + _st_calendars_messages_secret_files }}"
+_st_calendars_workers_secret_files: "{{ st_calendars_workers_secret_files + _st_calendars_messages_secret_files }}"
+_st_calendars_mailbox_sync_enabled: "{{ st_calendars_messages_enabled | bool and st_calendars_workers_mailbox_sync_enabled | bool }}"

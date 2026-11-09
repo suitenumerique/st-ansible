@@ -1,0 +1,49 @@
+---
+- name: "Deploy calendars mailbox sync systemd unit and timer."
+  when: _st_calendars_mailbox_sync_enabled | bool
+  ansible.builtin.template:
+    src: "mailbox_sync/{{ item }}.j2"
+    dest: "/opt/calendars/.config/systemd/user/mailbox-sync.{{ item }}"
+    owner: "calendars"
+    group: "calendars"
+    mode: "0600"
+  loop: ["service", "timer"]
+  register: mailbox_sync_units
+
+- name: "Manage calendars mailbox sync timer."
+  become: true
+  become_user: "calendars"
+  become_method: ansible.builtin.sudo
+  become_flags: "-i"
+  block:
+    - name: "Ensure calendars mailbox sync timer is started and enabled."
+      when: _st_calendars_mailbox_sync_enabled | bool
+      ansible.builtin.systemd_service:
+        name: "mailbox-sync.timer"
+        daemon_reload: "{{ mailbox_sync_units is changed }}"
+        enabled: true
+        state: started
+        scope: user
+
+    - name: "Check calendars mailbox sync timer."
+      when: not _st_calendars_mailbox_sync_enabled | bool
+      ansible.builtin.stat:
+        path: "/opt/calendars/.config/systemd/user/mailbox-sync.timer"
+      register: mailbox_sync_timer
+
+    - name: "Ensure calendars mailbox sync timer is stopped and disabled."
+      when:
+        - not _st_calendars_mailbox_sync_enabled | bool
+        - mailbox_sync_timer.stat.exists
+      ansible.builtin.systemd_service:
+        name: "mailbox-sync.timer"
+        enabled: false
+        state: stopped
+        scope: user
+
+- name: "Remove calendars mailbox sync systemd unit and timer."
+  when: not _st_calendars_mailbox_sync_enabled | bool
+  ansible.builtin.file:
+    path: "/opt/calendars/.config/systemd/user/mailbox-sync.{{ item }}"
+    state: absent
+  loop: ["service", "timer"]

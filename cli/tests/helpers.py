@@ -475,7 +475,18 @@ def conversations_first_run_script() -> list[tuple]:
     ]
 
 
-def calendars_first_run_script() -> list[tuple]:
+def calendars_first_run_script(*, messages: bool = False) -> list[tuple]:
+    """Build a first-run calendars core script, up to and including the
+    "cadvisor" confirm."""
+    if messages:
+        messages_steps = [
+            ("confirm", "Enable the Messages integration", True),
+            ("text", "Messages base URL", "https://messages.example.org"),
+            ("text", "Id of the Messages api_key channel", "calendars-channel"),
+            ("password", "MESSAGES_API_KEY", "msgk_secret"),
+        ]
+    else:
+        messages_steps = [("confirm", "Enable the Messages integration", False)]
     return [
         ("select", "Secret backend:", "ansible-vault"),
         ("text", "calendars host(s)", "10.0.0.13"),
@@ -487,6 +498,7 @@ def calendars_first_run_script() -> list[tuple]:
         ("password", "DB_PASSWORD", "dbpass123"),
         ("text", "DB_PORT", "5432"),
         ("text", "REDIS_URL", "redis://redis:6379/0"),
+        *messages_steps,
         ("select", "Identity provider:", "keycloak"),
         ("text", "Keycloak base URL", "https://idp.example.org"),
         ("text", "Keycloak realm", "master"),

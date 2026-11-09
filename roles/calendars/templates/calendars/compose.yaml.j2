@@ -36,11 +36,18 @@ services:
     container_name: calendars-backend
     image: "{{ st_calendars_backend_image }}:{{ st_calendars_backend_tag }}"
     env_file: ./backend_env
-{% if st_calendars_backend_secret_files | length > 0 %}
+{% if _st_calendars_backend_secret_files | length > 0 or st_calendars_messages_enabled | bool %}
     environment:
-{% for secret in st_calendars_backend_secret_files %}
+{% for secret in _st_calendars_backend_secret_files %}
       {{ secret.env }}_FILE: /run/secrets/{{ secret.env }}
 {% endfor %}
+{% if st_calendars_messages_enabled | bool %}
+      FEATURE_MESSAGES_INTEGRATION: "true"
+      MESSAGES_API_URL: {{ st_calendars_messages_api_url | to_json }}
+      MESSAGES_CHANNEL_ID: {{ st_calendars_messages_channel_id | to_json }}
+{% endif %}
+{% endif %}
+{% if _st_calendars_backend_secret_files | length > 0 %}
     volumes:
       - ./secrets:/run/secrets:ro
 {% endif %}

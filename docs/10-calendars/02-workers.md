@@ -16,7 +16,30 @@ Without this unit, the features below do not run: the tasks stay in the Redis qu
 | Feature | Task | Queue | When it fires |
 |---------|------|-------|---------------|
 | ICS import | `core.tasks.import_events_task` | `import` | A user imports an ICS file. The frontend polls the task status. |
-| Mailbox ACL sync (optional) | `core.tasks.sync_all_mailbox_acls` | `sync` | Upstream does not schedule it. It runs only with `FEATURE_MESSAGES_INTEGRATION=true`. |
+
+## Mailbox Sync
+
+With the Messages integration, Calendars copies the mailbox access from Messages into CalDAV
+shares. It does this for a user each time that user opens the app. The mailbox sync does it for
+every user, so that a change in Messages also reaches the users who do not open the app.
+
+When `st_calendars_messages_enabled` and `st_calendars_workers_mailbox_sync_enabled` are both
+`true`, the role installs two systemd user units for the `calendars` user:
+
+- `mailbox-sync.service` runs `python manage.py sync_mailbox_acls` in a one-off worker
+  container (`podman-compose run --rm`);
+- `mailbox-sync.timer` starts it on `st_calendars_workers_mailbox_sync_timer` (`hourly` by
+  default, a systemd `OnCalendar` value).
+
+One run syncs every user. Set `st_calendars_workers_mailbox_sync_enabled: false` on every
+workers host except one:
+
+```yaml
+st_calendars_workers_mailbox_sync_enabled: "{{ true if inventory_hostname == ansible_play_hosts_all[0] else false }}"
+```
+
+The st-cli scaffold sets this expression by itself. When one of the two variables is `false`,
+the role stops the timer and removes the units.
 
 ## Container Stack
 
@@ -49,6 +72,8 @@ See [roles/calendars/REFERENCE.md](../../roles/calendars/REFERENCE.md) for the c
 | `st_calendars_workers_env` | Worker environment content | `{{ st_calendars_backend_env }}` |
 | `st_calendars_workers_secret_files` | Worker secrets read from files | `{{ st_calendars_backend_secret_files }}` |
 | `st_calendars_workers_caldav_env` | Environment content of the workers CalDAV server | `{{ st_calendars_caldav_env }}` |
+| `st_calendars_workers_mailbox_sync_enabled` | Run the mailbox sync timer on this host | `true` |
+| `st_calendars_workers_mailbox_sync_timer` | `OnCalendar` value of the mailbox sync timer | `hourly` |
 | `st_calendars_workers_rollback_enabled` | Rollback on failure | `false` |
 
 ## Network & Ports
@@ -77,4 +102,9 @@ journalctl --user -u workers.service --since "3 hours ago"
 
 # Containers
 podman-compose -f /opt/calendars/workers/compose.yaml ps
+
+# Mailbox sync
+systemctl --user list-timers mailbox-sync.timer
+systemctl --user start mailbox-sync.service
+journalctl --user -u mailbox-sync.service
 ```

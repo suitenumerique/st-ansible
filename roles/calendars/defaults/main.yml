@@ -41,6 +41,14 @@ st_calendars_backend_run_migrations: true
 st_calendars_caldav_env_template: calendars/caldav_env.j2
 # Content of the default caldav_env_template, not used if st_calendars_caldav_env_template is defined. The CalDAV server requires PGHOST, PGDATABASE, PGUSER, PGPASSWORD, CALDAV_INBOUND_API_KEY, CALDAV_OUTBOUND_API_KEY, CALDAV_INTERNAL_API_KEY and CALDAV_CALLBACK_BASE_URL. The three API keys must have the same values as in the backend env.
 st_calendars_caldav_env: ''
+# Turns on the Messages integration (mailbox calendars). The role sets FEATURE_MESSAGES_INTEGRATION, MESSAGES_API_URL and MESSAGES_CHANNEL_ID in the compose environment of the backend and of the worker, and gives them MESSAGES_API_KEY as a secret file. These values have priority over the same variables in the env content.
+st_calendars_messages_enabled: false
+# Base URL of the Messages application, for example https://messages.example.org. Required when st_calendars_messages_enabled is true.
+st_calendars_messages_api_url: ''
+# Id of the global api_key channel that a Messages superadmin creates for Calendars. Required when st_calendars_messages_enabled is true.
+st_calendars_messages_channel_id: ''
+# API key of this Messages channel. Messages shows it once, at channel creation. Required when st_calendars_messages_enabled is true.
+st_calendars_messages_api_key: ''
 # Local path to the custom template to use for calendars caddy env file.
 st_calendars_caddy_env_template: calendars/caddy_env.j2
 # Content of the default caddy_env_template, not used if st_calendars_caddy_env_template is defined. Every key is optional: CADDY_ADMIN_IP_ALLOWLIST (space-separated CIDR list of client IPs allowed on the Django admin URL, default allows all) and CADDY_TRUSTED_PROXIES (space-separated CIDR list of proxies whose X-Forwarded-For sets the client IP, default private_ranges).
@@ -64,6 +72,10 @@ st_calendars_workers_secret_files: '{{ st_calendars_backend_secret_files }}'
 st_calendars_workers_caldav_env_template: workers/caldav_env.j2
 # Content of the default workers_caldav_env_template, not used if st_calendars_workers_caldav_env_template is defined.
 st_calendars_workers_caldav_env: '{{ st_calendars_caldav_env }}'
+# Runs the Messages mailbox sync (manage.py sync_mailbox_acls) on a systemd user timer on this workers host. The timer exists only when st_calendars_messages_enabled is true. Set it to false on every workers host except one, because one run syncs every user.
+st_calendars_workers_mailbox_sync_enabled: true
+# Systemd OnCalendar value of the mailbox sync timer.
+st_calendars_workers_mailbox_sync_timer: hourly
 # Whether or not to trigger the rollback tasks if the workers deployment fails.
 st_calendars_workers_rollback_enabled: false
 # Local path to the custom template to use for workers compose file.

@@ -419,6 +419,7 @@ def test_calendars_round_trip_byte_identical(repo, monkeypatch):
     assert "EMAIL_HOST=smtp.example.org" in core_vars_before
     assert "DEFAULT_FROM_EMAIL=calendars@example.org" in core_vars_before
     assert "DJANGO_EMAIL_HOST=" not in core_vars_before
+    assert "st_calendars_messages_enabled: 'false'" in core_vars_before
 
     decrypted = vault.decrypt_to_dict(
         paths.vault_path("calendars", "prod", "calendars")
@@ -443,6 +444,55 @@ def test_calendars_round_trip_byte_identical(repo, monkeypatch):
     bootstrap.bootstrap("calendars", "prod", replay=bootstrap.ReplayAction.SILENT)
     assert not sq3._scripts, f"unconsumed scripts: {sq3._scripts}"
     assert not sq3.select_calls, f"a select fired: {sq3.select_calls}"
+    assert vars_path.read_text() == core_vars_before
+    assert vault_path.read_bytes() == core_vault_before
+
+
+def test_calendars_messages_round_trip_byte_identical(repo, monkeypatch):
+    """The calendars Messages integration lands in role variables, with the
+    API key in the vault. Modify and Silent replays keep both files
+    byte-identical."""
+    seed_creds(repo)
+    sq1 = script_questionary(monkeypatch, calendars_first_run_script(messages=True))
+    bootstrap.bootstrap("calendars", "prod")
+    assert not sq1._scripts, f"unconsumed scripts: {sq1._scripts}"
+
+    vars_path = repo / "calendars/prod/calendars/vars.yml"
+    vault_path = repo / "calendars/prod/calendars/vault.yml"
+    core_vars_before = vars_path.read_text()
+    core_vault_before = vault_path.read_bytes()
+
+    assert "st_calendars_messages_enabled: 'true'" in core_vars_before
+    assert (
+        "st_calendars_messages_api_url: https://messages.example.org"
+        in core_vars_before
+    )
+    assert "st_calendars_messages_channel_id: calendars-channel" in core_vars_before
+    assert (
+        "st_calendars_messages_api_key: '{{ vault_messages_api_key }}'"
+        in core_vars_before
+    )
+    assert "MESSAGES_API_KEY=" not in core_vars_before
+    decrypted = vault.decrypt_to_dict(
+        paths.vault_path("calendars", "prod", "calendars")
+    )
+    assert decrypted["vault_messages_api_key"] == "msgk_secret"
+
+    sq2 = accept_defaults(monkeypatch)
+    bootstrap.bootstrap("calendars", "prod", replay=bootstrap.ReplayAction.MODIFY)
+    assert not sq2._scripts, f"unconsumed scripts: {sq2._scripts}"
+    assert not sq2.asked("password", "MESSAGES_API_KEY")
+    assert vars_path.read_text() == core_vars_before
+    assert vault_path.read_bytes() == core_vault_before
+
+    m = manifest.load_manifest()
+    for u in m.units:
+        u.bootstrapped_with = "0.0.1"
+    manifest.save_manifest(m)
+
+    sq3 = script_questionary(monkeypatch, [])
+    bootstrap.bootstrap("calendars", "prod", replay=bootstrap.ReplayAction.SILENT)
+    assert not sq3._scripts, f"unconsumed scripts: {sq3._scripts}"
     assert vars_path.read_text() == core_vars_before
     assert vault_path.read_bytes() == core_vault_before
 
