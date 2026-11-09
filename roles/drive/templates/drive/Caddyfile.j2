@@ -89,7 +89,10 @@
 	}
 
 	# Backend (mirrors ingress.yaml /api + /external_api, ingress_admin.yaml).
-	@backend path /api/* /external_api/* /admin /admin/* /static/*
+	# /metrics is public only with st_drive_metrics_public. The backend still requires
+	# PROMETHEUS_API_KEY as a bearer token on it. This edge is plain HTTP: the token
+	# crosses the LB to caddy hop in clear, so that hop must be trusted or tunnelled.
+	@backend path /api/* /external_api/* /admin /admin/* /static/*{% if st_drive_metrics_public %} /metrics /metrics/{% endif +%}
 	handle @backend {
 		reverse_proxy drive-backend:8000 {
 			header_up X-Forwarded-Proto https
@@ -101,3 +104,30 @@
 		reverse_proxy drive-frontend:8080
 	}
 }
+{% if st_drive_metrics_port | length > 0 %}
+
+# Metrics listener, published on st_drive_metrics_port (localhost by default) for a
+# scraper on the host. It serves the backend /metrics only. The scraper sends the
+# PROMETHEUS_API_KEY bearer token; Caddy passes the Authorization header through.
+# Plain HTTP: keep it on loopback, a remote scraper must use an encrypted path.
+:50102 {
+	header {
+		-Server
+		-Via
+	}
+
+	@metrics path /metrics /metrics/
+	handle @metrics {
+		reverse_proxy drive-backend:8000 {
+			# Django ALLOWED_HOSTS rejects the scraper's 127.0.0.1 Host.
+			header_up Host {{ st_drive_public_host }}
+			# Backend has SECURE_SSL_REDIRECT: without this the scrape is 301'd to https.
+			header_up X-Forwarded-Proto https
+		}
+	}
+
+	handle {
+		respond 404
+	}
+}
+{% endif %}

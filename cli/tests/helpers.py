@@ -420,7 +420,7 @@ def livekit_script(
     return script
 
 
-def drive_first_run_script() -> list[tuple]:
+def drive_first_run_script(*, prometheus: bool = True) -> list[tuple]:
     return [
         ("select", "Secret backend:", "ansible-vault"),
         ("text", "drive host(s)", "10.0.0.10"),
@@ -440,6 +440,7 @@ def drive_first_run_script() -> list[tuple]:
         ("text", "OIDC_RP_CLIENT_ID", "drive-client-id"),
         ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
         ("confirm", "Configure transactional email (SMTP) settings?", False),
+        ("confirm", "PROMETHEUS_METRICS_ENABLED", prometheus),
         ("confirm", "cadvisor", True),
         ("select", "Bootstrap collabora now?", "No — bootstrap later"),
     ]

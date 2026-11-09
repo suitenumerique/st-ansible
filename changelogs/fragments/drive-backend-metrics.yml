@@ -1,0 +1,4 @@
+minor_changes:
+  - drive - add a caddy listener for the backend ``/metrics`` endpoint, published on ``st_drive_metrics_port`` (``127.0.0.1:50102`` by default, empty string disables it), so a scraper on the host such as Alloy reads the metrics without exposing them to the internet.
+  - drive - add ``st_drive_metrics_public`` (default ``false``) to also serve the backend ``/metrics`` endpoint on the public caddy edge. The backend still requires the ``PROMETHEUS_API_KEY`` bearer token.
+  - st-cli - ``st-cli bootstrap drive`` asks whether to enable the backend Prometheus metrics. A yes writes ``PROMETHEUS_METRICS_ENABLED=true`` and generates ``PROMETHEUS_API_KEY``, a no writes ``false``. ``st-cli upgrade`` asks it once on an existing drive unit.

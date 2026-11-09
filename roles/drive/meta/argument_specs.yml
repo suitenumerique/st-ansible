@@ -43,6 +43,19 @@ argument_specs:
         type: "str"
         description: "The host published port for the drive caddy edge."
         default: "50100"
+      st_drive_metrics_port:
+        type: "str"
+        description:
+          - "The host published port of the caddy listener that serves only the backend `/metrics` endpoint, for a scraper on the host such as Alloy."
+          - "Use the form `ip:port`. The default binds to localhost only. Set it to an empty string to disable the listener."
+          - "The backend serves `/metrics` only with `PROMETHEUS_METRICS_ENABLED=true` and requires `PROMETHEUS_API_KEY` as a bearer token."
+        default: "127.0.0.1:50102"
+      st_drive_metrics_public:
+        type: "bool"
+        description:
+          - "Also serve the backend `/metrics` endpoint on the public caddy edge (`st_drive_port`)."
+          - "The backend still requires `PROMETHEUS_API_KEY` as a bearer token."
+        default: false
       st_drive_rollback_enabled:
         type: "bool"
         description: "Whether or not to trigger the rollback tasks if the drive deployment fails."

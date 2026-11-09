@@ -1,0 +1,2 @@
+bugfixes:
+  - drive, conversations, messages - the workers compose templates no longer glue ``healthcheck:`` to the end of the ``command:`` line. Jinja ``trim_blocks`` ate the newline after the ``st_<app>_workers_beat_enabled`` condition.

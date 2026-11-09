@@ -165,6 +165,8 @@ def test_drive_round_trip_byte_identical(repo, monkeypatch):
     assert "AWS_S3_ENDPOINT_URL=https://s3.fr-par.scw.cloud" in core_vars_before
     assert "CADDY_S3_HOST=s3.fr-par.scw.cloud" in core_vars_before
     assert "st_drive_s3_" not in core_vars_before
+    assert "PROMETHEUS_METRICS_ENABLED=true" in core_vars_before
+    assert "PROMETHEUS_API_KEY={{ vault_prometheus_api_key }}" in core_vars_before
 
     sq2 = accept_defaults(
         monkeypatch, [("select", "Database configuration:", "DATABASE_URL")]
@@ -176,6 +178,82 @@ def test_drive_round_trip_byte_identical(repo, monkeypatch):
     assert (repo / "drive/prod/drive/vault.yml").read_bytes() == core_vault_before
     assert (repo / "drive/prod/collabora/vars.yml").read_text() == collabora_vars_before
     assert not paths.vault_path("drive", "prod", "collabora").exists()
+
+
+def test_drive_prometheus_off_writes_false(repo, monkeypatch):
+    """A `no` at first bootstrap writes PROMETHEUS_METRICS_ENABLED=false and no
+    token, and an Enter-through replay keeps the tree byte-identical."""
+    seed_creds(repo)
+    script_questionary(monkeypatch, drive_first_run_script(prometheus=False))
+    bootstrap.bootstrap("drive", "prod")
+
+    vars_before = (repo / "drive/prod/drive/vars.yml").read_text()
+    assert "PROMETHEUS_METRICS_ENABLED=false" in vars_before
+    assert "PROMETHEUS_API_KEY" not in vars_before
+
+    accept_defaults(
+        monkeypatch,
+        [
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("select", "Bootstrap collabora now?", "No — bootstrap later"),
+        ],
+    )
+    bootstrap.bootstrap("drive", "prod", replay=bootstrap.ReplayAction.MODIFY)
+    assert (repo / "drive/prod/drive/vars.yml").read_text() == vars_before
+
+
+def test_drive_prometheus_silent_replay_asks_once(repo, monkeypatch, tmp_path):
+    """A unit committed before the gate (no PROMETHEUS_* line): the silent
+    replay asks it, the answer is written, and the next silent replay does not
+    ask again."""
+    seed_creds(repo)
+    script_questionary(monkeypatch, drive_first_run_script(prometheus=False))
+    bootstrap.bootstrap("drive", "prod")
+
+    data = tree.load_vars("drive", "prod", "drive")
+    blob = str(data["st_drive_backend_env"])
+    blob = blob.replace("PROMETHEUS_METRICS_ENABLED=false\n", "")
+    assert "PROMETHEUS_" not in blob
+    data["st_drive_backend_env"] = LiteralScalarString(blob)
+    tree.save_vars("drive", "prod", "drive", data)
+
+    sq = script_questionary(
+        monkeypatch, [("confirm", "PROMETHEUS_METRICS_ENABLED", False)]
+    )
+    bootstrap.bootstrap("drive", "prod", replay=bootstrap.ReplayAction.SILENT)
+    assert not sq._scripts, f"unconsumed scripts: {sq._scripts}"
+    vars_after = (repo / "drive/prod/drive/vars.yml").read_text()
+    assert "PROMETHEUS_METRICS_ENABLED=false" in vars_after
+
+    sq2 = script_questionary(monkeypatch, [])
+    bootstrap.bootstrap("drive", "prod", replay=bootstrap.ReplayAction.SILENT)
+    assert not sq2._scripts, f"unconsumed scripts: {sq2._scripts}"
+    assert (repo / "drive/prod/drive/vars.yml").read_text() == vars_after
+
+
+def test_drive_prometheus_disable_writes_false_keeps_token(repo, monkeypatch):
+    """Turning the metrics off over a committed `true` rewrites it to `false`
+    (the merge never deletes a line), and keeps the token without rotating it."""
+    seed_creds(repo)
+    script_questionary(monkeypatch, drive_first_run_script())
+    bootstrap.bootstrap("drive", "prod")
+    vault_before = (repo / "drive/prod/drive/vault.yml").read_bytes()
+
+    accept_defaults(
+        monkeypatch,
+        [
+            ("select", "Database configuration:", "DATABASE_URL"),
+            ("confirm", "PROMETHEUS_METRICS_ENABLED", False),
+            ("select", "Bootstrap collabora now?", "No — bootstrap later"),
+        ],
+    )
+    bootstrap.bootstrap("drive", "prod", replay=bootstrap.ReplayAction.MODIFY)
+
+    blob = str(tree.load_vars("drive", "prod", "drive")["st_drive_backend_env"])
+    assert "PROMETHEUS_METRICS_ENABLED=false" in blob
+    assert "PROMETHEUS_METRICS_ENABLED=true" not in blob
+    assert "PROMETHEUS_API_KEY={{ vault_prometheus_api_key }}" in blob
+    assert (repo / "drive/prod/drive/vault.yml").read_bytes() == vault_before
 
 
 def test_drive_legacy_s3_indirection_replay_migrates_to_caddy(repo, monkeypatch):

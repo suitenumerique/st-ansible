@@ -16,6 +16,13 @@ st_drive_enabled: false
 st_drive_dir: /opt/drive/drive
 # The host published port for the drive caddy edge.
 st_drive_port: '50100'
+# The host published port of the caddy listener that serves only the backend `/metrics` endpoint, for a scraper on the host such as Alloy.
+# Use the form `ip:port`. The default binds to localhost only. Set it to an empty string to disable the listener.
+# The backend serves `/metrics` only with `PROMETHEUS_METRICS_ENABLED=true` and requires `PROMETHEUS_API_KEY` as a bearer token.
+st_drive_metrics_port: '127.0.0.1:50102'
+# Also serve the backend `/metrics` endpoint on the public caddy edge (`st_drive_port`).
+# The backend still requires `PROMETHEUS_API_KEY` as a bearer token.
+st_drive_metrics_public: false
 # Whether or not to trigger the rollback tasks if the drive deployment fails.
 st_drive_rollback_enabled: false
 # Local path to the custom template to use for drive compose file.

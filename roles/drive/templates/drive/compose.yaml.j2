@@ -11,6 +11,9 @@ services:
       - {{ st_drive_dir }}/Caddyfile:/etc/caddy/Caddyfile:ro
     ports:
       - "{{ st_drive_port }}:50100"
+{% if st_drive_metrics_port | length > 0 %}
+      - "{{ st_drive_metrics_port }}:50102"
+{% endif %}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:50100/__lbheartbeat__"]
       interval: 10s

@@ -27,9 +27,12 @@ drive-caddy (docker.io/caddy), published on the host
   ├── /media/preview/* → S3, forward_auth against drive-backend (inline preview)
   ├── /media/* → S3, forward_auth against drive-backend (download, Content-Disposition attachment)
   └── everything else → drive-frontend (docker.io/lasuite/drive-frontend, stock SPA nginx conf)
+
+drive-caddy metrics listener, published on 127.0.0.1:50102 (st_drive_metrics_port)
+  └── /metrics → drive-backend
 ```
 
-Caddy owns the host port and dispatches each request to the backend, the frontend, or S3.
+Caddy owns the host ports and dispatches each request to the backend, the frontend, or S3.
 
 ## Prerequisites
 
@@ -57,6 +60,8 @@ See [roles/drive/REFERENCE.md](../../roles/drive/REFERENCE.md) for the complete 
 | `st_drive_dir` | Application directory | `/opt/drive/drive` |
 | `st_drive_uid` | Unix UID for the drive user | `1101` |
 | `st_drive_port` | Host port for the caddy edge | `50100` |
+| `st_drive_metrics_port` | Host port of the caddy listener for the backend `/metrics` (`ip:port`, empty disables) | `127.0.0.1:50102` |
+| `st_drive_metrics_public` | Also serve `/metrics` on the public caddy edge | `false` |
 | `st_drive_backend_env` | Backend environment content | _(empty)_ |
 | `st_drive_caddy_env` | Caddy env content: `CADDY_S3_PROTOCOL`, `CADDY_S3_HOST`, `CADDY_S3_BUCKET` for the media proxy, plus optional `CADDY_ADMIN_IP_ALLOWLIST` / `CADDY_TRUSTED_PROXIES` | _(empty, required keys)_ |
 | `st_drive_backend_run_migrations` | Run Django migrations on deploy | `true` |
@@ -66,9 +71,65 @@ See [roles/drive/REFERENCE.md](../../roles/drive/REFERENCE.md) for the complete 
 | Variable | Default | Container port |
 |----------|---------|---------------|
 | `st_drive_port` | `50100` | 50100 (caddy) |
+| `st_drive_metrics_port` | `127.0.0.1:50102` | 50102 (caddy, `/metrics` only) |
 
-Caddy listens on `50100` inside its own container and is the only container published to the
-host. The frontend and backend are only reachable from caddy via the Podman bridge network.
+Caddy listens on `50100` and `50102` inside its own container and is the only container published
+to the host. The frontend and backend are only reachable from caddy via the Podman bridge network.
+
+## Prometheus Metrics
+
+The backend serves Prometheus metrics on `/metrics` (django-prometheus, upstream drive
+`v0.24.0`+). The endpoint is off by default. It requires the `PROMETHEUS_API_KEY` bearer token,
+and the backend does not start when the metrics are on and the key is missing.
+
+Turn it on in the backend env, and pass the key as a secret file:
+
+```yaml
+st_drive_backend_env: |
+  # ...
+  PROMETHEUS_METRICS_ENABLED=true
+
+st_drive_backend_secret_files:
+  - env: PROMETHEUS_API_KEY
+    content: "{{ vault_prometheus_api_key }}"
+```
+
+The backend `/metrics` is not reachable through the public edge by default: Caddy sends it to the
+frontend. Caddy serves it on a second listener, `st_drive_metrics_port`, bound to
+`127.0.0.1:50102`. A scraper on the host, such as Alloy, reads it there with the bearer token.
+See [drive.config.alloy.j2](../99-examples/monitoring/drive.config.alloy.j2). It scrapes only when
+`st_drive_monitoring_prometheus_api_key` is set. Point it at the same secret as `PROMETHEUS_API_KEY`:
+
+```yaml
+# ansible-vault backend
+st_drive_monitoring_prometheus_api_key: "{{ vault_prometheus_api_key }}"
+# hashi_vault backend: the same lookup as PROMETHEUS_API_KEY in st_drive_backend_env
+st_drive_monitoring_prometheus_api_key: "{{ lookup('community.hashi_vault.hashi_vault', 'kv/data/drive:PROMETHEUS_API_KEY') }}"
+```
+
+```bash
+curl -s -H "Authorization: Bearer $PROMETHEUS_API_KEY" http://127.0.0.1:50102/metrics | head
+```
+
+Follow these rules:
+
+- Keep `st_drive_metrics_port` on `127.0.0.1`. The listener is plain HTTP, so the bearer token
+  travels in clear text: do not bind it to an address that another host can reach.
+- To scrape from another host, run the scraper through an authenticated encrypted tunnel to the
+  loopback port (WireGuard, SSH).
+- Set `st_drive_metrics_port` to an empty string to remove the listener.
+- Set `st_drive_metrics_public: true` to also serve `/metrics` on the public edge. The bearer
+  token still protects it. Do this only when a scraper must reach it through the load balancer.
+- With `st_drive_metrics_public: true`, TLS covers the scraper to load balancer hop only. The caddy
+  edge listens in plain HTTP (`auto_https off`), so the bearer token crosses the load balancer to
+  caddy hop in clear text. Enable it only when that hop runs on a trusted private network or
+  through an encrypted tunnel. `X-Forwarded-Proto: https` does not protect this hop: caddy sets
+  it for the backend redirect only.
+- Optional backend variables: `PROMETHEUS_DB_METRICS_ENABLED`, `PROMETHEUS_CELERY_QUEUE_METRICS_ENABLED`,
+  `PROMETHEUS_BUSINESS_METRICS_ENABLED` (all `true` by default) and
+  `PROMETHEUS_BUSINESS_METRICS_CACHE_TTL` (`300` seconds).
+- Do not set `PROMETHEUS_METRICS_SSL_REDIRECT_EXEMPT`. Caddy sets `X-Forwarded-Proto: https`, so
+  the backend does not redirect the scrape.
 
 ## Django Admin IP Allowlist
 
@@ -181,6 +242,7 @@ Upstream drive `v0.22.0` supports `_FILE` for these variables (`SecretFileValue`
 - `OIDC_RP_CLIENT_SECRET`: OIDC client secret.
 - `POSTHOG_KEY`: PostHog key.
 - `WOPI_ONLYOFFICE_CONVERT_JWT_SECRET`: JWT secret of the OnlyOffice conversion.
+- `PROMETHEUS_API_KEY`: bearer token of `/metrics` (upstream drive `v0.24.0`+).
 
 Upstream does not support `_FILE` for other variables.
 If you add an item for another variable, the backend ignores the file.
