@@ -29,6 +29,8 @@ Installs and configures the Drive application from La Suite Territoriale on Debi
 | st_drive_enabled | Triggers the installation of the drive application. | bool | no | `False` |
 | st_drive_dir | Remote path to the base directory for drive app. | str | no | `/opt/drive/drive` |
 | st_drive_port | The host published port for the drive caddy edge. | str | no | `50100` |
+| st_drive_metrics_port | The host published port of the caddy listener that serves only the backend `/metrics` endpoint, for a scraper on the host such as Alloy. Use the form `ip:port`. The default binds to localhost only. Set it to an empty string to disable the listener. The backend serves `/metrics` only with `PROMETHEUS_METRICS_ENABLED=true` and requires `PROMETHEUS_API_KEY` as a bearer token. | str | no | `127.0.0.1:50102` |
+| st_drive_metrics_public | Also serve the backend `/metrics` endpoint on the public caddy edge (`st_drive_port`). The backend still requires `PROMETHEUS_API_KEY` as a bearer token. | bool | no | `False` |
 | st_drive_rollback_enabled | Whether or not to trigger the rollback tasks if the drive deployment fails. | bool | no | `False` |
 | st_drive_compose_template | Local path to the custom template to use for drive compose file. | str | no | `drive/compose.yaml.j2` |
 | st_drive_backend_env_template | Local path to the custom template to use for drive backend env file. | str | no | `drive/backend_env.j2` |

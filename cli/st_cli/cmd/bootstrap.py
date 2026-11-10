@@ -480,6 +480,36 @@ def _ask_transfers_scanner(
     )
 
 
+def _ask_drive_prometheus(
+    answers: dict, backend: SecretBackend, component: str
+) -> None:
+    """Gate the drive backend ``/metrics`` (``PROMETHEUS_METRICS_ENABLED``).
+
+    The backend refuses to start with the metrics on and no
+    ``PROMETHEUS_API_KEY``, so enabling them generates the bearer token. The
+    role serves ``/metrics`` on a localhost caddy listener
+    (``st_drive_metrics_port``) for a scraper on the host.
+
+    A unit committed before this gate has no ``PROMETHEUS_METRICS_ENABLED``
+    line: the silent replay asks it (``auto`` only on a recovered choice), and
+    either answer writes the line, so it is asked once. A ``no`` writes
+    ``false``, never a pop: ``envblob.merge`` never deletes a line, so popping
+    a committed ``true`` would leave the metrics on. The token stays committed
+    for a later re-enable.
+    """
+    if _confirm(
+        "Enable Prometheus metrics on the backend /metrics (PROMETHEUS_METRICS_ENABLED)?",
+        default=_recall_bool(answers, "PROMETHEUS_METRICS_ENABLED", False),
+        auto="PROMETHEUS_METRICS_ENABLED" in answers,
+    ):
+        answers["PROMETHEUS_METRICS_ENABLED"] = "true"
+        _ask_secret(
+            answers, backend, "PROMETHEUS_API_KEY", component, gen=secrets.gen_token
+        )
+    else:
+        answers["PROMETHEUS_METRICS_ENABLED"] = "false"
+
+
 def _ask_cadvisor(label: str, default: bool = True) -> bool:
     """Prompt whether to enable the cadvisor monitoring sidecar for a component.
 
@@ -1208,6 +1238,8 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
 
     _ask_oidc(answers, backend, core_key)
     _ask_email(answers, backend, core_key, app)
+    if app == "drive":
+        _ask_drive_prometheus(answers, backend, core_key)
     if app == "docs" and answers.get("DJANGO_EMAIL_HOST"):
         answers["DJANGO_EMAIL_LOGO_IMG"] = (
             "https://{{ st_docs_public_host }}/assets/logo-suite-numerique.png"

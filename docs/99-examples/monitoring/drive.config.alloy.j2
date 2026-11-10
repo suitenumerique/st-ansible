@@ -28,6 +28,21 @@ prometheus.scrape "default" {
   forward_to = [prometheus.relabel.default.receiver]
 }
 
+{% if st_drive_enabled and st_drive_metrics_port | length > 0 and st_drive_monitoring_prometheus_api_key | default('') | length > 0 %}
+// Drive backend /metrics, through the caddy metrics listener (st_drive_metrics_port).
+// Requires PROMETHEUS_METRICS_ENABLED=true and PROMETHEUS_API_KEY in the backend.
+// st_drive_monitoring_prometheus_api_key must point at the same secret as PROMETHEUS_API_KEY.
+prometheus.scrape "drive_backend" {
+  targets = [
+    { job = "drive-backend", __address__ = "{{ st_drive_metrics_port }}" },
+  ]
+  bearer_token    = {{ st_drive_monitoring_prometheus_api_key | to_json }}
+  scrape_interval = "30s"
+
+  forward_to = [prometheus.relabel.default.receiver]
+}
+
+{% endif %}
 // Relabel the 'instance' label to hostname, needed for some exporters
 prometheus.relabel "default" {
   forward_to = [prometheus.remote_write.default.receiver]
