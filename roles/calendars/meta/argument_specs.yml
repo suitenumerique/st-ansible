@@ -28,7 +28,7 @@ argument_specs:
           - "Tag of the calendars frontend image to deploy."
           - "Upstream publishes only the mutable `main` tag, so the default pins it by digest."
         # renovate: datasource=docker depName=ghcr.io/suitenumerique/calendars-frontend
-        default: "main@sha256:e8e1c118f5ad6a0f1ebad2e1c39d9e37fe0c799d4ee19fe19b79400c90adc23c"
+        default: "main@sha256:216c097eea804322df2b60247d00a7deba5e01c5a001b7809118ab4c52e82aab"
       st_calendars_backend_image:
         type: "str"
         description: "Image repository for the calendars backend and workers."
@@ -39,7 +39,7 @@ argument_specs:
           - "Tag of the calendars backend image to deploy."
           - "Upstream publishes only the mutable `main` tag, so the default pins it by digest."
         # renovate: datasource=docker depName=ghcr.io/suitenumerique/calendars-backend
-        default: "main@sha256:068b74511fdca4c869beeeaa95a5462c3b81eb93ab9bb183abde3037b982cab4"
+        default: "main@sha256:bb5411a05a02c7ac3ea96d8ec9971fef57be026534333c134d9978bf19182cd2"
       st_calendars_caldav_image:
         type: "str"
         description: "Image repository for the calendars CalDAV server (SabreDAV)."
@@ -50,7 +50,7 @@ argument_specs:
           - "Tag of the calendars CalDAV server image to deploy."
           - "Upstream publishes only the mutable `main` tag, so the default pins it by digest."
         # renovate: datasource=docker depName=ghcr.io/suitenumerique/calendars-caldav
-        default: "main@sha256:fafba50741c97da5fdde3ae88d45efacaa73a8efc276ef2aa22b39f23bb7a385"
+        default: "main@sha256:074da1f141d697d8ce0667c6fd6df3208ec70ce6af5b53537ac5dd5f2c814a57"
       st_calendars_enabled:
         type: "bool"
         description: "Triggers the installation of the calendars application."
