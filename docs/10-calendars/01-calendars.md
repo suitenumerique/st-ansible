@@ -62,8 +62,14 @@ maintenance database to check that the target database exists.
 
 Rootless Podman uses pasta networking: a container cannot reach the IP addresses of its own
 host (see [Collabora](../01-drive/03-collabora.md)). When PostgreSQL, Redis or the SMTP relay
-run on the Calendars host, use `host.containers.internal` as their host. The same applies to
-`CALDAV_CALLBACK_BASE_URL` when the public hostname resolves to the Calendars host itself.
+run on the Calendars host, use `host.containers.internal` as their host.
+
+The same applies to `CALDAV_CALLBACK_BASE_URL` when the public hostname resolves to the
+Calendars host itself: use `http://host.containers.internal:<st_calendars_port>`. This URL is
+correct only on the core host. The workers CalDAV server also sends callbacks, and by
+default `st_calendars_workers_caldav_env` is `st_calendars_caldav_env`. When the workers run
+on another host, set `st_calendars_workers_caldav_env` with a callback URL that reaches the
+core backend, for example the public URL.
 
 ## Variable Reference
 
