@@ -1,21 +1,20 @@
 ---
-- name: "Deploy calendars mailbox sync systemd unit and timer."
-  when: _st_calendars_mailbox_sync_enabled | bool
-  ansible.builtin.template:
-    src: "mailbox_sync/{{ item }}.j2"
-    dest: "/opt/calendars/.config/systemd/user/mailbox-sync.{{ item }}"
-    owner: "calendars"
-    group: "calendars"
-    mode: "0600"
-  loop: ["service", "timer"]
-  register: mailbox_sync_units
-
+# INFO: The tasks run as the calendars user, so "~" is its home, where systemd looks for user units.
 - name: "Manage calendars mailbox sync timer."
   become: true
   become_user: "calendars"
   become_method: ansible.builtin.sudo
   become_flags: "-i"
   block:
+    - name: "Deploy calendars mailbox sync systemd unit and timer."
+      when: _st_calendars_mailbox_sync_enabled | bool
+      ansible.builtin.template:
+        src: "mailbox_sync/{{ item }}.j2"
+        dest: "~/.config/systemd/user/mailbox-sync.{{ item }}"
+        mode: "0600"
+      loop: ["service", "timer"]
+      register: mailbox_sync_units
+
     - name: "Ensure calendars mailbox sync timer is started and enabled."
       when: _st_calendars_mailbox_sync_enabled | bool
       ansible.builtin.systemd_service:
@@ -28,7 +27,7 @@
     - name: "Check calendars mailbox sync timer."
       when: not _st_calendars_mailbox_sync_enabled | bool
       ansible.builtin.stat:
-        path: "/opt/calendars/.config/systemd/user/mailbox-sync.timer"
+        path: "~/.config/systemd/user/mailbox-sync.timer"
       register: mailbox_sync_timer
 
     - name: "Ensure calendars mailbox sync timer is stopped and disabled."
@@ -41,9 +40,9 @@
         state: stopped
         scope: user
 
-- name: "Remove calendars mailbox sync systemd unit and timer."
-  when: not _st_calendars_mailbox_sync_enabled | bool
-  ansible.builtin.file:
-    path: "/opt/calendars/.config/systemd/user/mailbox-sync.{{ item }}"
-    state: absent
-  loop: ["service", "timer"]
+    - name: "Remove calendars mailbox sync systemd unit and timer."
+      when: not _st_calendars_mailbox_sync_enabled | bool
+      ansible.builtin.file:
+        path: "~/.config/systemd/user/mailbox-sync.{{ item }}"
+        state: absent
+      loop: ["service", "timer"]
