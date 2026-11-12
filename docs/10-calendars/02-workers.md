@@ -45,11 +45,15 @@ the role stops the timer and removes the units.
 
 ```text
 calendars-worker (ghcr.io/suitenumerique/calendars-backend)
-  └── python worker.py --concurrency=<nproc>
+  └── python worker.py
         └── http://caldav:80 → calendars-workers-caldav (ghcr.io/suitenumerique/calendars-caldav)
 ```
 
 The worker has no healthcheck: `worker.py` has no probe command.
+
+`worker.py` starts 4 processes. To change this number, set `WORKER_CONCURRENCY` in the
+worker env. This env is `st_calendars_workers_env`, which is `st_calendars_backend_env` by
+default.
 
 ## Prerequisites
 

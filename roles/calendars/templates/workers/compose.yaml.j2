@@ -23,7 +23,7 @@ services:
       - ./secrets:/run/secrets:ro
 {% endif %}
     # Dramatiq worker. worker.py has no health probe command, so this service has no healthcheck.
-    command: ["python", "worker.py", "--concurrency={{ ansible_processor_nproc }}"]
+    command: ["python", "worker.py"]
 
   # The tasks call the CalDAV server at http://caldav:80. The workers host can be another host
   # than the core, so it runs its own CalDAV server on the same database.
