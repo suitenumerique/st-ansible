@@ -419,7 +419,7 @@ def test_calendars_round_trip_byte_identical(repo, monkeypatch):
     assert "EMAIL_HOST=smtp.example.org" in core_vars_before
     assert "DEFAULT_FROM_EMAIL=calendars@example.org" in core_vars_before
     assert "DJANGO_EMAIL_HOST=" not in core_vars_before
-    assert "st_calendars_messages_enabled: 'false'" in core_vars_before
+    assert "st_calendars_messages_enabled: false" in core_vars_before
 
     decrypted = vault.decrypt_to_dict(
         paths.vault_path("calendars", "prod", "calendars")
@@ -462,7 +462,7 @@ def test_calendars_messages_round_trip_byte_identical(repo, monkeypatch):
     core_vars_before = vars_path.read_text()
     core_vault_before = vault_path.read_bytes()
 
-    assert "st_calendars_messages_enabled: 'true'" in core_vars_before
+    assert "st_calendars_messages_enabled: true" in core_vars_before
     assert (
         "st_calendars_messages_api_url: https://messages.example.org"
         in core_vars_before
