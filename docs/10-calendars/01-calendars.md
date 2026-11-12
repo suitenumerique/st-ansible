@@ -300,13 +300,49 @@ a mailbox calendar fails. See [Optional Features](#optional-features).
 ## Optional Features
 
 `st-cli` does not prompt for these features. Add the env lines by hand to
-`st_calendars_backend_env`. Every feature is off by default.
+`st_calendars_backend_env`. These features are off by default.
 
 | Feature | Env lines | Upstream doc |
 |---------|-----------|--------------|
 | Organizations | `OIDC_USERINFO_ORGANIZATION_CLAIM` | [organizations.md](https://github.com/suitenumerique/calendars/blob/main/docs/organizations.md) |
 | Entitlements | `ENTITLEMENTS_BACKEND`, `ENTITLEMENTS_BACKEND_PARAMETERS` | [entitlements.md](https://github.com/suitenumerique/calendars/blob/main/docs/entitlements.md) |
 | iTIP METHOD in the ICS attachments | `CALENDAR_ITIP_ENABLED=true` | [invitations.md](https://github.com/suitenumerique/calendars/blob/main/docs/invitations.md) |
+| Silent login: a visitor with an SSO session logs in without the landing page | `FRONTEND_SILENT_LOGIN_ENABLED=true` | |
+| Scheduling address domain of the rooms and resources. The default is `resource.invalid`. | `RESOURCE_EMAIL_DOMAIN` | |
+| Sender of the invitation emails. The default is `DEFAULT_FROM_EMAIL`. | `CALENDAR_INVITATION_FROM_EMAIL` | |
+| Feedback button | `FRONTEND_FEEDBACK_BUTTON_SHOW`, `FRONTEND_FEEDBACK_BUTTON_IDLE` | |
+| Feedback through a Messages widget | `FRONTEND_FEEDBACK_MESSAGES_WIDGET_ENABLED`, `FRONTEND_FEEDBACK_MESSAGES_WIDGET_API_URL`, `FRONTEND_FEEDBACK_MESSAGES_WIDGET_CHANNEL`, `FRONTEND_FEEDBACK_MESSAGES_WIDGET_PATH` | |
+| La Gaufre, the menu of the La Suite apps | `FRONTEND_LAGAUFRE_ENABLED`, `FRONTEND_LAGAUFRE_WIDGET_API_URL`, `FRONTEND_LAGAUFRE_WIDGET_PATH` | |
+| Video call links to Meet | `FRONTEND_MEET_BASE_URL` | |
+| Frontend theme | `FRONTEND_THEME` | |
+
+Silent login needs `OIDC_OP_LOGOUT_ENDPOINT`, which st-cli sets, and `OIDC_STORE_ID_TOKEN`,
+which is `true` by default. Without them, logout keeps the SSO session and silent login logs
+the user in again. The identity provider must support `prompt=none`.
+
+These features are on by default. To turn one off, add its line with `false`:
+
+| Feature | Env line |
+|---------|----------|
+| Channels in the admin | `FEATURE_ADMIN_CHANNELS` |
+| Availabilities in the admin | `FEATURE_ADMIN_AVAILABILITIES` |
+| Rooms and resources in the admin | `FEATURE_ADMIN_RESOURCES` |
+| "Find a time" in the event form (free/busy queries) | `FEATURE_EVENT_SCHEDULING` |
+
+### ProConnect
+
+With ProConnect, st-cli sets only the endpoints. Add the claims and the security level by
+hand, according to the ProConnect application of the deployment. For example:
+
+```text
+OIDC_RP_SCOPES=openid email given_name usual_name siret
+OIDC_USERINFO_FULLNAME_FIELDS=given_name,usual_name
+OIDC_AUTH_REQUEST_EXTRA_PARAMS={"acr_values": "eidas1"}
+OIDC_USERINFO_ORGANIZATION_CLAIM=siret
+```
+
+Without `OIDC_RP_SCOPES` and `OIDC_USERINFO_FULLNAME_FIELDS`, Calendars asks only for
+`openid email`, and the user names stay empty.
 
 ## First Deploy
 
