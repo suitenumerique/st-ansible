@@ -69,6 +69,19 @@
       registryUrls: ["https://deb.debian.org/debian?suite=testing&components=main&binaryArch=amd64"],
       minimumReleaseAge: null,
     },
+    // The calendars images are pinned to the `main` tag by digest. Each merge in
+    // calendars moves `main`, so its newest digest is rarely 7 days old, and the
+    // strict filter above would hold the update forever. A 1-day gate still skips
+    // a broken build that is replaced the same day.
+    {
+      matchDatasources: ["docker"],
+      matchPackageNames: [
+        "ghcr.io/suitenumerique/calendars-frontend",
+        "ghcr.io/suitenumerique/calendars-backend",
+        "ghcr.io/suitenumerique/calendars-caldav",
+      ],
+      minimumReleaseAge: "1 day",
+    },
   ],
 
   // The role image tags / restic version live in each role's generated
