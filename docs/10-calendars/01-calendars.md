@@ -60,6 +60,11 @@ The database user must own the database, or have the `CREATE` privilege on it: t
 schema script creates the `sabre` schema. The script also connects to the `postgres`
 maintenance database to check that the target database exists.
 
+Rootless Podman uses pasta networking: a container cannot reach the IP addresses of its own
+host (see [Collabora](../01-drive/03-collabora.md)). When PostgreSQL, Redis or the SMTP relay
+run on the Calendars host, use `host.containers.internal` as their host. The same applies to
+`CALDAV_CALLBACK_BASE_URL` when the public hostname resolves to the Calendars host itself.
+
 ## Variable Reference
 
 See [roles/calendars/REFERENCE.md](../../roles/calendars/REFERENCE.md) for the complete variable reference.
