@@ -1,0 +1,2 @@
+bugfixes:
+  - "messages: declare the backend healthcheck in the compose file. The backend image is in OCI format, and podman ignores the ``HEALTHCHECK`` of an OCI image. The frontend waits for a healthy backend, so it never started under podman-compose 1.6. The probe is the same as the one in the image."

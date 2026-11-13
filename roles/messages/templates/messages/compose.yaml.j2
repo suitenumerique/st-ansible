@@ -17,6 +17,14 @@ services:
     container_name: messages-backend
     image: "{{ st_messages_backend_image }}:{{ st_messages_tag }}"
     env_file: ./backend_env
+    # Same probe as the HEALTHCHECK of the backend image. The image is in OCI
+    # format, and podman does not apply the HEALTHCHECK of an OCI image, so
+    # the frontend would wait for a healthy backend forever.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; from urllib.request import Request, urlopen; urlopen(Request('http://localhost:8000/__heartbeat__/', headers={'Host': os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost').split(',')[0].strip(), 'X-Forwarded-Proto': 'https'}), timeout=2)"]
+      interval: 30s
+      timeout: 2s
+      start_period: 30s
 {% if st_messages_backend_secret_files | length > 0 %}
     environment:
 {% for secret in st_messages_backend_secret_files %}
