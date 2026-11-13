@@ -7,18 +7,15 @@ st_calendars_gid: '{{ st_calendars_uid }}'
 # Image repository for the calendars frontend.
 st_calendars_frontend_image: ghcr.io/suitenumerique/calendars-frontend
 # Tag of the calendars frontend image to deploy.
-# Upstream publishes only the mutable `main` tag, so the default pins it by digest.
-st_calendars_frontend_tag: 'main@sha256:216c097eea804322df2b60247d00a7deba5e01c5a001b7809118ab4c52e82aab'
+st_calendars_frontend_tag: 0.2.0
 # Image repository for the calendars backend and workers.
 st_calendars_backend_image: ghcr.io/suitenumerique/calendars-backend
 # Tag of the calendars backend image to deploy.
-# Upstream publishes only the mutable `main` tag, so the default pins it by digest.
-st_calendars_backend_tag: 'main@sha256:52ab4bbed7ade5ad6ecf9d1d67ee8cd33149322fd5a06877ed7908dc79be1439'
+st_calendars_backend_tag: 0.2.0
 # Image repository for the calendars CalDAV server (SabreDAV).
 st_calendars_caldav_image: ghcr.io/suitenumerique/calendars-caldav
 # Tag of the calendars CalDAV server image to deploy.
-# Upstream publishes only the mutable `main` tag, so the default pins it by digest.
-st_calendars_caldav_tag: 'main@sha256:074da1f141d697d8ce0667c6fd6df3208ec70ce6af5b53537ac5dd5f2c814a57'
+st_calendars_caldav_tag: 0.2.0
 # Triggers the installation of the calendars application.
 st_calendars_enabled: false
 # Remote path to the base directory for calendars app.

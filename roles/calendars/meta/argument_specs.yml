@@ -24,33 +24,27 @@ argument_specs:
         default: "ghcr.io/suitenumerique/calendars-frontend"
       st_calendars_frontend_tag:
         type: "str"
-        description:
-          - "Tag of the calendars frontend image to deploy."
-          - "Upstream publishes only the mutable `main` tag, so the default pins it by digest."
+        description: "Tag of the calendars frontend image to deploy."
         # renovate: datasource=docker depName=ghcr.io/suitenumerique/calendars-frontend
-        default: "main@sha256:216c097eea804322df2b60247d00a7deba5e01c5a001b7809118ab4c52e82aab"
+        default: "0.2.0"
       st_calendars_backend_image:
         type: "str"
         description: "Image repository for the calendars backend and workers."
         default: "ghcr.io/suitenumerique/calendars-backend"
       st_calendars_backend_tag:
         type: "str"
-        description:
-          - "Tag of the calendars backend image to deploy."
-          - "Upstream publishes only the mutable `main` tag, so the default pins it by digest."
+        description: "Tag of the calendars backend image to deploy."
         # renovate: datasource=docker depName=ghcr.io/suitenumerique/calendars-backend
-        default: "main@sha256:52ab4bbed7ade5ad6ecf9d1d67ee8cd33149322fd5a06877ed7908dc79be1439"
+        default: "0.2.0"
       st_calendars_caldav_image:
         type: "str"
         description: "Image repository for the calendars CalDAV server (SabreDAV)."
         default: "ghcr.io/suitenumerique/calendars-caldav"
       st_calendars_caldav_tag:
         type: "str"
-        description:
-          - "Tag of the calendars CalDAV server image to deploy."
-          - "Upstream publishes only the mutable `main` tag, so the default pins it by digest."
+        description: "Tag of the calendars CalDAV server image to deploy."
         # renovate: datasource=docker depName=ghcr.io/suitenumerique/calendars-caldav
-        default: "main@sha256:074da1f141d697d8ce0667c6fd6df3208ec70ce6af5b53537ac5dd5f2c814a57"
+        default: "0.2.0"
       st_calendars_enabled:
         type: "bool"
         description: "Triggers the installation of the calendars application."

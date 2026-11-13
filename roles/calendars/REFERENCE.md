@@ -24,11 +24,11 @@ Installs and configures the Calendars application from La Suite Territoriale on 
 | st_calendars_gid | GID of the `calendars` group, used for the podman role. | int | no | `{{ st_calendars_uid }}` |
 | st_calendars_registries | Optional private container registries to login the `calendars` user onto. | list of `dict` | no |  |
 | st_calendars_frontend_image | Image repository for the calendars frontend. | str | no | `ghcr.io/suitenumerique/calendars-frontend` |
-| st_calendars_frontend_tag | Tag of the calendars frontend image to deploy. Upstream publishes only the mutable `main` tag, so the default pins it by digest. | str | no | `main@sha256:216c097eea804322df2b60247d00a7deba5e01c5a001b7809118ab4c52e82aab` |
+| st_calendars_frontend_tag | Tag of the calendars frontend image to deploy. | str | no | `0.2.0` |
 | st_calendars_backend_image | Image repository for the calendars backend and workers. | str | no | `ghcr.io/suitenumerique/calendars-backend` |
-| st_calendars_backend_tag | Tag of the calendars backend image to deploy. Upstream publishes only the mutable `main` tag, so the default pins it by digest. | str | no | `main@sha256:52ab4bbed7ade5ad6ecf9d1d67ee8cd33149322fd5a06877ed7908dc79be1439` |
+| st_calendars_backend_tag | Tag of the calendars backend image to deploy. | str | no | `0.2.0` |
 | st_calendars_caldav_image | Image repository for the calendars CalDAV server (SabreDAV). | str | no | `ghcr.io/suitenumerique/calendars-caldav` |
-| st_calendars_caldav_tag | Tag of the calendars CalDAV server image to deploy. Upstream publishes only the mutable `main` tag, so the default pins it by digest. | str | no | `main@sha256:074da1f141d697d8ce0667c6fd6df3208ec70ce6af5b53537ac5dd5f2c814a57` |
+| st_calendars_caldav_tag | Tag of the calendars CalDAV server image to deploy. | str | no | `0.2.0` |
 | st_calendars_enabled | Triggers the installation of the calendars application. | bool | no | `False` |
 | st_calendars_dir | Remote path to the base directory for calendars app. | str | no | `/opt/calendars/calendars` |
 | st_calendars_port | The host published port for the calendars caddy edge. | str | no | `51000` |

@@ -69,19 +69,6 @@
       registryUrls: ["https://deb.debian.org/debian?suite=testing&components=main&binaryArch=amd64"],
       minimumReleaseAge: null,
     },
-    // The calendars images are pinned to the `main` tag by digest. Each merge in
-    // calendars moves `main`, so its newest digest is rarely 7 days old, and the
-    // strict filter above would hold the update forever. A 1-day gate still skips
-    // a broken build that is replaced the same day.
-    {
-      matchDatasources: ["docker"],
-      matchPackageNames: [
-        "ghcr.io/suitenumerique/calendars-frontend",
-        "ghcr.io/suitenumerique/calendars-backend",
-        "ghcr.io/suitenumerique/calendars-caldav",
-      ],
-      minimumReleaseAge: "1 day",
-    },
   ],
 
   // The role image tags / restic version live in each role's generated
@@ -98,10 +85,8 @@
       managerFilePatterns: ["/roles/[^/]+/meta/argument_specs\\.yml$/"],
       // Matches a `# renovate: datasource=… depName=… [versioning=…] [extractVersion=…]`
       // comment immediately followed by the `default: "<value>"` line it annotates.
-      // A `<tag>@sha256:<digest>` value (calendars pins the mutable `main` tag) also
-      // captures the digest, so Renovate updates it when the tag moves.
       matchStrings: [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*default: \"?(?<currentValue>[^\"\\n@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?\"?",
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*default: \"?(?<currentValue>[^\"\\n]+)\"?",
       ],
       // Most annotated deps are Docker tags (e.g. `2.11.4-alpine`, `26.04.2.1.1`)
       // which the semver default mishandles, so default to `docker` versioning.

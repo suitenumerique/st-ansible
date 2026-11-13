@@ -38,11 +38,11 @@ backend, in its own schema (`CALDAV_DB_SCHEMA`, `sabre` in the st-cli scaffold).
 
 ## Images
 
-Upstream publishes the images on `ghcr.io` with the mutable `main` tag only. The role pins each
-image by digest, for example `main@sha256:...`. Renovate updates the digest when the `main` tag
-moves. Each image has its own tag variable: `st_calendars_frontend_tag`,
-`st_calendars_backend_tag` and `st_calendars_caldav_tag`. Use the three images of the same
-upstream commit.
+Upstream publishes the images on `ghcr.io` with a tag per release and the mutable `main` tag. The
+role pins a release. Do not pin `main` by digest: the upstream CI deletes untagged images, so the
+digest disappears from the registry when `main` moves. Each image has its own tag variable:
+`st_calendars_frontend_tag`, `st_calendars_backend_tag` and `st_calendars_caldav_tag`. Use the
+three images of the same release.
 
 ## Prerequisites
 
@@ -81,9 +81,9 @@ See [roles/calendars/REFERENCE.md](../../roles/calendars/REFERENCE.md) for the c
 |----------|-------------|---------|
 | `st_calendars_enabled` | Enable the calendars app | `false` |
 | `st_calendars_public_host` | Public hostname for the app | **(required)** |
-| `st_calendars_frontend_tag` | Frontend image tag | `main@sha256:...` |
-| `st_calendars_backend_tag` | Backend and workers image tag | `main@sha256:...` |
-| `st_calendars_caldav_tag` | CalDAV server image tag | `main@sha256:...` |
+| `st_calendars_frontend_tag` | Frontend image tag | `0.2.0` |
+| `st_calendars_backend_tag` | Backend and workers image tag | `0.2.0` |
+| `st_calendars_caldav_tag` | CalDAV server image tag | `0.2.0` |
 | `st_calendars_dir` | Application directory | `/opt/calendars/calendars` |
 | `st_calendars_uid` | Unix UID for the calendars user | `1110` |
 | `st_calendars_port` | Host port for the caddy edge | `51000` |
