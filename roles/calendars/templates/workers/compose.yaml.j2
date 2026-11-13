@@ -1,0 +1,41 @@
+---
+{{ ansible_managed | comment }}
+
+name: calendars_workers
+services:
+  worker:
+    container_name: calendars-worker
+    image: "{{ st_calendars_backend_image }}:{{ st_calendars_backend_tag }}"
+    env_file: ./env
+{% if _st_calendars_workers_secret_files | length > 0 or st_calendars_messages_enabled | bool %}
+    environment:
+{% for secret in _st_calendars_workers_secret_files %}
+      {{ secret.env }}_FILE: /run/secrets/{{ secret.env }}
+{% endfor %}
+{% if st_calendars_messages_enabled | bool %}
+      FEATURE_MESSAGES_INTEGRATION: "true"
+      MESSAGES_API_URL: {{ st_calendars_messages_api_url | to_json }}
+      MESSAGES_CHANNEL_ID: {{ st_calendars_messages_channel_id | to_json }}
+{% endif %}
+{% endif %}
+{% if _st_calendars_workers_secret_files | length > 0 %}
+    volumes:
+      - ./secrets:/run/secrets:ro
+{% endif %}
+    # Dramatiq worker. worker.py has no health probe command. The image healthcheck probes the web
+    # server, which does not run here.
+    command: ["python", "worker.py"]
+    healthcheck:
+      disable: true
+
+  # The tasks call the CalDAV server at http://caldav:80. The workers host can be another host
+  # than the core, so it runs its own CalDAV server on the same database.
+  caldav:
+    container_name: calendars-workers-caldav
+    image: "{{ st_calendars_caldav_image }}:{{ st_calendars_caldav_tag }}"
+    env_file: ./caldav_env
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1/caldav/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

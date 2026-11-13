@@ -74,13 +74,22 @@ _IDP_PLACEHOLDER = "https://idp.example.org"
 _SMTP_PLACEHOLDER = "smtp.example.org"
 _DOCS_CORE_SECRETS = ("COLLABORATION_SERVER_SECRET", "Y_PROVIDER_API_KEY")
 
-# Apps that carry upstream DJANGO_EMAIL_* settings; messages is skipped (no such
-# settings upstream) so its questionnaire never prompts for SMTP config.
-_EMAIL_APPS = {"drive", "meet", "docs", "transfers", "conversations"}
+# Apps that carry upstream SMTP settings (DJANGO_EMAIL_*, or EMAIL_* for
+# _PLAIN_EMAIL_APPS); messages is skipped (no such settings upstream) so its
+# questionnaire never prompts for SMTP config.
+_EMAIL_APPS = {"drive", "meet", "docs", "transfers", "conversations", "calendars"}
 
-# Upstream reads only the discrete DB_* vars and ignores DATABASE_URL, so
-# `_ask_db` shows no "Database configuration:" select for these apps.
-_DISCRETE_DB_APPS = {"conversations"}
+# Apps that need the discrete DB_* vars, so `_ask_db` shows no
+# "Database configuration:" select for them:
+# - conversations reads only DB_* and ignores DATABASE_URL;
+# - the calendars backend accepts DATABASE_URL, but its CalDAV server
+#   reads the same database from the PG* vars. The caldav env blob builds
+#   them from the DB_* answers.
+_DISCRETE_DB_APPS = {"conversations", "calendars"}
+
+# Upstream calendars reads the plain Django EMAIL_* and DEFAULT_FROM_EMAIL
+# settings, not the django-lasuite DJANGO_EMAIL_* ones.
+_PLAIN_EMAIL_APPS = {"calendars"}
 
 # Inverse of _ask_keycloak's "jdbc:postgresql://host:port/name" composition, so
 # the 3 separate DB prompts can be pre-filled from the single recovered
@@ -345,13 +354,24 @@ def _ask_oidc(answers: dict, backend: SecretBackend, component: str) -> None:
 def _ask_email(answers: dict, backend: SecretBackend, component: str, app: str) -> None:
     """Prompt the Django transactional email (SMTP) settings of an app in _EMAIL_APPS.
 
-    Skipped for ``messages`` (no ``DJANGO_EMAIL_*`` upstream). The confirm
-    gate defaults to whether SMTP is already configured, so an Enter-through
-    rebootstrap never silently drops a working configuration.
+    Skipped for ``messages`` (no ``DJANGO_EMAIL_*`` upstream). An app in
+    `_PLAIN_EMAIL_APPS` gets the same prompts on the plain ``EMAIL_*`` keys and
+    ``DEFAULT_FROM_EMAIL``, without the brand name. The confirm gate defaults
+    to whether SMTP is already configured, so an Enter-through rebootstrap
+    never silently drops a working configuration.
     """
     if app not in _EMAIL_APPS:
         return
-    smtp_configured = bool(_recall(answers, "DJANGO_EMAIL_HOST"))
+    plain = app in _PLAIN_EMAIL_APPS
+    prefix = "" if plain else "DJANGO_"
+    host_key = f"{prefix}EMAIL_HOST"
+    port_key = f"{prefix}EMAIL_PORT"
+    user_key = f"{prefix}EMAIL_HOST_USER"
+    password_key = f"{prefix}EMAIL_HOST_PASSWORD"
+    tls_key = f"{prefix}EMAIL_USE_TLS"
+    ssl_key = f"{prefix}EMAIL_USE_SSL"
+    from_key = "DEFAULT_FROM_EMAIL" if plain else "DJANGO_EMAIL_FROM"
+    smtp_configured = bool(_recall(answers, host_key))
     prompt = (
         "SMTP is configured — review its settings?"
         if smtp_configured
@@ -359,39 +379,31 @@ def _ask_email(answers: dict, backend: SecretBackend, component: str, app: str) 
     )
     if not _confirm(prompt, default=smtp_configured):
         return
-    answers["DJANGO_EMAIL_HOST"] = _ask(
-        "DJANGO_EMAIL_HOST",
-        _recall(answers, "DJANGO_EMAIL_HOST"),
+    answers[host_key] = _ask(
+        host_key,
+        _recall(answers, host_key),
         placeholder=_SMTP_PLACEHOLDER,
     )
-    answers["DJANGO_EMAIL_PORT"] = _ask(
-        "DJANGO_EMAIL_PORT", _recall(answers, "DJANGO_EMAIL_PORT", "587")
-    )
-    _ask_optional(
-        answers, "DJANGO_EMAIL_HOST_USER", "DJANGO_EMAIL_HOST_USER (optional)"
-    )
-    _ask_secret(answers, backend, "DJANGO_EMAIL_HOST_PASSWORD", component)
-    answers["DJANGO_EMAIL_USE_TLS"] = (
+    answers[port_key] = _ask(port_key, _recall(answers, port_key, "587"))
+    _ask_optional(answers, user_key, f"{user_key} (optional)")
+    _ask_secret(answers, backend, password_key, component)
+    answers[tls_key] = (
         "true"
-        if _confirm(
-            "DJANGO_EMAIL_USE_TLS?",
-            default=_recall_bool(answers, "DJANGO_EMAIL_USE_TLS", True),
-        )
+        if _confirm(f"{tls_key}?", default=_recall_bool(answers, tls_key, True))
         else "false"
     )
-    answers["DJANGO_EMAIL_USE_SSL"] = (
+    answers[ssl_key] = (
         "true"
-        if _confirm(
-            "DJANGO_EMAIL_USE_SSL?",
-            default=_recall_bool(answers, "DJANGO_EMAIL_USE_SSL", False),
-        )
+        if _confirm(f"{ssl_key}?", default=_recall_bool(answers, ssl_key, False))
         else "false"
     )
-    answers["DJANGO_EMAIL_FROM"] = _ask(
-        "DJANGO_EMAIL_FROM",
-        _recall(answers, "DJANGO_EMAIL_FROM"),
+    answers[from_key] = _ask(
+        from_key,
+        _recall(answers, from_key),
         placeholder="noreply@example.org",
     )
+    if plain:
+        return
     _ask_optional(
         answers, "DJANGO_EMAIL_BRAND_NAME", "DJANGO_EMAIL_BRAND_NAME (optional)"
     )
@@ -1010,7 +1022,7 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             "LOGIN_REDIRECT_URL_FAILURE": f"https://{host}/",
             "LOGOUT_REDIRECT_URL": f"https://{host}/",
         }
-    elif app in ("drive", "conversations"):
+    elif app in ("drive", "conversations", "calendars"):
         # Public-facing URLs point at st_<app>_public_host (resolved at
         # deploy), like meet above. DJANGO_ALLOWED_HOSTS/CSRF/CORS keep the
         # literal domain.
@@ -1022,8 +1034,10 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
             "LOGIN_REDIRECT_URL": f"https://{host}/",
             "LOGIN_REDIRECT_URL_FAILURE": f"https://{host}/",
             "LOGOUT_REDIRECT_URL": f"https://{host}/",
-            "MEDIA_BASE_URL": f"https://{host}",
         }
+        # calendars stores no media file.
+        if app != "calendars":
+            derived["MEDIA_BASE_URL"] = f"https://{host}"
     else:
         derived = {
             "DJANGO_ALLOWED_HOSTS": domain,
@@ -1068,6 +1082,11 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
         # keeps a committed value: unlike the cache it must not evict, so it can
         # legitimately point somewhere else.
         answers.setdefault("WORKER_BROKER_URL", answers["REDIS_URL"])
+    elif app == "calendars":
+        # dramatiq, not celery. Same reason as transfers to keep a committed
+        # value. The backend polls the import task status in the result backend.
+        answers.setdefault("DRAMATIQ_BROKER_URL", answers["REDIS_URL"])
+        answers.setdefault("DRAMATIQ_RESULT_BACKEND_URL", answers["REDIS_URL"])
     else:
         answers["CELERY_BROKER_URL"] = answers["REDIS_URL"]
     if app == "conversations":
@@ -1076,8 +1095,8 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
 
     # messages does NOT use the django-lasuite default S3 storage (AWS_S3_*). It
     # uses STORAGE_MESSAGE_* instead (see _ask_messages_storage), so skip the S3
-    # questionnaire entirely for it.
-    if app != "messages":
+    # questionnaire entirely for it. calendars stores no file at all.
+    if app not in ("messages", "calendars"):
         # Every app keeps the literal endpoint and bucket in the backend blob.
         endpoint = _ask(
             "AWS_S3_ENDPOINT_URL",
@@ -1206,6 +1225,9 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
         )
         _ask_secret(answers, backend, "AI_API_KEY", core_key)
 
+    if app == "calendars":
+        _ask_calendars(answers, backend, core_key)
+
     _ask_oidc(answers, backend, core_key)
     _ask_email(answers, backend, core_key, app)
     if app == "docs" and answers.get("DJANGO_EMAIL_HOST"):
@@ -1220,6 +1242,70 @@ def _ask_core(meta, backend: SecretBackend, answers: dict | None = None) -> dict
     if app == "meet":
         _set_meet_recording(answers)
     return answers
+
+
+def _ask_calendars(answers: dict, backend: SecretBackend, core_key: str) -> None:
+    """Set the calendars answers that need no prompt.
+
+    The backend and the CalDAV server share the three CALDAV_*_API_KEY
+    secrets. Each fixed value is a `setdefault`, so a hand edit survives a
+    replay.
+    """
+    host = "{{ st_calendars_public_host }}"
+    answers.setdefault("APP_URL", f"https://{host}")
+    answers.setdefault("CALDAV_URL", "http://caldav:80")
+    answers.setdefault("CALDAV_DB_SCHEMA", "sabre")
+    answers.setdefault("CALDAV_BASE_URI", "/caldav/")
+    # The workers host runs its own CalDAV server without a backend next to
+    # it, so the scheduling callback goes through the public URL.
+    answers.setdefault("CALDAV_CALLBACK_BASE_URL", f"https://{host}")
+    # SALT_KEY derives the Fernet key of the channel tokens. Upstream ships a
+    # public default.
+    _ask_secret(answers, backend, "SALT_KEY", core_key, gen=secrets.gen_secret)
+    for key in (
+        "CALDAV_INBOUND_API_KEY",
+        "CALDAV_OUTBOUND_API_KEY",
+        "CALDAV_INTERNAL_API_KEY",
+    ):
+        _ask_secret(answers, backend, key, core_key, gen=secrets.gen_token)
+    _ask_calendars_messages(answers, backend, core_key)
+
+
+def _ask_calendars_messages(
+    answers: dict, backend: SecretBackend, core_key: str
+) -> None:
+    """Ask for the Messages integration of calendars.
+
+    The answers feed role variables, not env lines. Every key always gets a
+    value, because a component var with a missing answer renders as its
+    literal template. Turning the integration off keeps the other values.
+    """
+    for key in ("MESSAGES_API_URL", "MESSAGES_CHANNEL_ID", "MESSAGES_API_KEY"):
+        answers.setdefault(key, "")
+    enabled = _recall_bool(answers, "FEATURE_MESSAGES_INTEGRATION", False)
+    prompt = (
+        "The Messages integration is enabled. Keep it?"
+        if enabled
+        else "Enable the Messages integration (mailbox calendars)?"
+    )
+    if not _confirm(prompt, default=enabled):
+        answers["FEATURE_MESSAGES_INTEGRATION"] = "false"
+        return
+    answers["FEATURE_MESSAGES_INTEGRATION"] = "true"
+    answers["MESSAGES_API_URL"] = _ask(
+        "Messages base URL (MESSAGES_API_URL)",
+        _recall(answers, "MESSAGES_API_URL"),
+        placeholder="https://messages.example.org",
+    )
+    answers["MESSAGES_CHANNEL_ID"] = _ask(
+        "Id of the Messages api_key channel (MESSAGES_CHANNEL_ID)",
+        _recall(answers, "MESSAGES_CHANNEL_ID"),
+    )
+    # Messages generates the key when it creates the channel. An empty value
+    # means "not asked yet", so remove it to let _ask_secret prompt.
+    if not answers["MESSAGES_API_KEY"]:
+        del answers["MESSAGES_API_KEY"]
+    _ask_secret(answers, backend, "MESSAGES_API_KEY", core_key)
 
 
 def _ask_messages_provider(

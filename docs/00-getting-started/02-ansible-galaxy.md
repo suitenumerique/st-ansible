@@ -104,14 +104,17 @@ multiple roles can run **on the same host** without conflicting. The defaults ar
 | `messages` | `1104` | `50400` |
 | `projects` | `1105` | `50500` |
 | `docs` | `1106` | `50600` |
+| `transfers` | `1107` | `50700` |
+| `file_scanner` | `1108` | `50800` |
 | `conversations` | `1109` | `50900` |
+| `calendars` | `1110` | `51000` |
 
 Each role owns a `50<n>00`–`50<n>99` port block (where `<n>` is the role's index — drive
-`1`, keycloak `2`, meet `3`, messages `4`, projects `5`, docs `6`, conversations `9`). The
-frontend sits at `50<n>00`, auxiliary services increment from there (e.g. `messages`
-mpa/rspamd on `50402`–`50404`, pymta on `50425`), and cAdvisor is
-pinned at `50<n>99`. This layout leaves room to grow: an 11th–20th role would carry into
-`51<n>00` (and UIDs into `111<n>`). You can still override any `st_<role>_uid` or
+`1`, keycloak `2`, meet `3`, messages `4`, projects `5`, docs `6`, transfers `7`,
+file_scanner `8`, conversations `9`). The frontend sits at `50<n>00`, auxiliary services
+increment from there (e.g. `messages` mpa/rspamd on `50402`–`50404`, pymta on `50425`), and
+cAdvisor is pinned at `50<n>99`. From the 10th role on, the block carries into `51000`: calendars
+(index `10`) owns `51000`–`51099` and UID `1110`, and an 11th role would take `51100` and UID `1111`. You can still override any `st_<role>_uid` or
 `st_<role>_port` to fit your own numbering scheme:
 
 ```yaml

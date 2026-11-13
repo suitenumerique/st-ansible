@@ -1,0 +1,73 @@
+---
+- name: "Deploy calendars workers."
+  hosts: calendars_workers
+  tasks:
+    - name: "Install calendars base."
+      become: true
+      become_user: root
+      ansible.builtin.import_role:
+        name: suitenumerique.st.calendars
+
+    # NOTE: Splitting in two tasks is not mandatory, you could also play
+    # the whole thing as root by appending the variables on the first task.
+    # This setup is useful for CI/CD pipelines without root access.
+    - name: "Deploy calendars workers application."
+      become: true
+      become_user: calendars
+      become_method: ansible.builtin.sudo
+      become_flags: "-i"
+      ansible.builtin.import_role:
+        name: suitenumerique.st.calendars
+        tasks_from: deploy.yml
+      vars:
+        st_calendars_workers_enabled: true
+        st_calendars_workers_rollback_enabled: true
+        st_calendars_workers_env: |
+          DJANGO_CONFIGURATION=Production
+          DJANGO_SETTINGS_MODULE=calendars.settings
+          DJANGO_SECRET_KEY=changeme
+          DJANGO_ALLOWED_HOSTS=calendars.example.com
+          DJANGO_CSRF_TRUSTED_ORIGINS=https://calendars.example.com
+          DB_HOST=db.example.com
+          DB_NAME=calendars
+          DB_USER=calendars
+          DB_PASSWORD=changeme
+          DB_PORT=5432
+          REDIS_URL=redis://redis.example.com:6379/0
+          DRAMATIQ_BROKER_URL=redis://redis.example.com:6379/0
+          DRAMATIQ_RESULT_BACKEND_URL=redis://redis.example.com:6379/0
+          SALT_KEY=changeme
+          APP_URL=https://calendars.example.com
+          CALDAV_URL=http://caldav:80
+          CALDAV_INBOUND_API_KEY=changeme-inbound
+          CALDAV_OUTBOUND_API_KEY=changeme-outbound
+          CALDAV_INTERNAL_API_KEY=changeme-internal
+          OIDC_RP_CLIENT_ID=calendars
+          OIDC_RP_CLIENT_SECRET=changeme
+          OIDC_OP_JWKS_ENDPOINT=https://sso.example.com/realms/example/protocol/openid-connect/certs
+          OIDC_OP_AUTHORIZATION_ENDPOINT=https://sso.example.com/realms/example/protocol/openid-connect/auth
+          OIDC_OP_TOKEN_ENDPOINT=https://sso.example.com/realms/example/protocol/openid-connect/token
+          OIDC_OP_USER_ENDPOINT=https://sso.example.com/realms/example/protocol/openid-connect/userinfo
+          OIDC_OP_LOGOUT_ENDPOINT=https://sso.example.com/realms/example/protocol/openid-connect/logout
+          LOGIN_REDIRECT_URL=https://calendars.example.com/
+          LOGIN_REDIRECT_URL_FAILURE=https://calendars.example.com/
+          LOGOUT_REDIRECT_URL=https://calendars.example.com/
+          EMAIL_HOST=smtp.example.com
+          EMAIL_PORT=587
+          EMAIL_HOST_USER=calendars
+          EMAIL_HOST_PASSWORD=changeme
+          EMAIL_USE_TLS=true
+          DEFAULT_FROM_EMAIL=calendars@example.com
+          # ... check https://github.com/suitenumerique/calendars/blob/main/src/backend/calendars/settings.py
+        st_calendars_workers_caldav_env: |
+          PGHOST=db.example.com
+          PGPORT=5432
+          PGDATABASE=calendars
+          PGUSER=calendars
+          PGPASSWORD=changeme
+          CALDAV_DB_SCHEMA=sabre
+          CALDAV_BASE_URI=/caldav/
+          CALDAV_INBOUND_API_KEY=changeme-inbound
+          CALDAV_OUTBOUND_API_KEY=changeme-outbound
+          CALDAV_INTERNAL_API_KEY=changeme-internal
+          CALDAV_CALLBACK_BASE_URL=https://calendars.example.com

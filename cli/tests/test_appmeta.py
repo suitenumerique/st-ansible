@@ -190,7 +190,15 @@ def test_file_scanner_component_metadata():
 
 def test_worker_component_metadata():
     """Each app exposes a first-class workers component (is_worker, app_name, enabled_var)."""
-    for app in ("drive", "messages", "meet", "docs", "transfers", "conversations"):
+    for app in (
+        "drive",
+        "messages",
+        "meet",
+        "docs",
+        "transfers",
+        "conversations",
+        "calendars",
+    ):
         w = appmeta.load_app(app).worker()
         assert w is not None, f"{app} has no workers component"
         assert w.is_worker is True
@@ -347,3 +355,40 @@ def test_conversations_component_metadata():
     assert any("S3" in r for r in reqs)
     assert any("Identity provider" in r for r in reqs)
     assert any("AI" in r for r in reqs)
+
+
+def test_calendars_component_metadata():
+    """calendars has two components (core + workers), no dependencies, and a
+    backend plus a caldav env_render layer: no caddy S3 keys, no frontend env."""
+    meta = appmeta.load_app("calendars")
+    assert {c.key for c in meta.components} == {"calendars", "workers"}
+    assert meta.dependencies == []
+
+    core = meta.core()
+    assert core.key == "calendars"
+    assert core.role == "suitenumerique.st.calendars"
+    assert core.user == "calendars"
+    assert core.dir_var == "st_calendars_dir"
+    assert core.enabled_var == "st_calendars_enabled"
+    assert core.deploy_order == 20
+
+    spec = meta.env_render_spec("calendars")
+    assert set(spec.keys()) == {"backend", "caldav"}
+    assert spec["backend"]["blob_var"] == "st_calendars_backend_env"
+    assert spec["backend"]["templates"] == ["calendars.backend.env.j2"]
+    assert spec["caldav"]["blob_var"] == "st_calendars_caldav_env"
+    assert spec["caldav"]["templates"] == ["calendars.caldav.env.j2"]
+
+    assert meta.component_vars("calendars")["st_calendars_public_host"] == "{DOMAIN}"
+
+    worker = meta.worker()
+    assert worker is not None
+    assert worker.deploy_order == 30
+    assert worker.implemented is True
+
+    reqs = meta.requirements
+    assert any("PostgreSQL" in r for r in reqs)
+    assert any("Redis" in r for r in reqs)
+    assert any("Identity provider" in r for r in reqs)
+    assert any("SMTP" in r for r in reqs)
+    assert not any("S3" in r for r in reqs)

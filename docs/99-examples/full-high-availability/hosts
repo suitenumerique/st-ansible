@@ -46,3 +46,10 @@ conversations2 ansible_host=10.0.0.21
 
 [conversations_workers]
 conversations-workers1 ansible_host=10.0.0.22
+
+[calendars]
+calendars1 ansible_host=10.0.0.23
+calendars2 ansible_host=10.0.0.24
+
+[calendars_workers]
+calendars-workers1 ansible_host=10.0.0.25

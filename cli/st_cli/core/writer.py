@@ -114,6 +114,10 @@ def apply_component_vars(data, meta, comp, answers: dict) -> None:
                 continue
             # nothing to preserve; leave the literal template for the user to fix
             rendered = str(tmpl)
+        # A var that renders to "true" or "false" is a flag: write a YAML bool.
+        if rendered.lower() in ("true", "false"):
+            data[name] = rendered.lower() == "true"
+            continue
         data[name] = _scalar(rendered)
 
 

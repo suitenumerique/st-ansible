@@ -475,6 +475,47 @@ def conversations_first_run_script() -> list[tuple]:
     ]
 
 
+def calendars_first_run_script(*, messages: bool = False) -> list[tuple]:
+    """Build a first-run calendars core script, up to and including the
+    "cadvisor" confirm."""
+    if messages:
+        messages_steps = [
+            ("confirm", "Enable the Messages integration", True),
+            ("text", "Messages base URL", "https://messages.example.org"),
+            ("text", "Id of the Messages api_key channel", "calendars-channel"),
+            ("password", "MESSAGES_API_KEY", "msgk_secret"),
+        ]
+    else:
+        messages_steps = [("confirm", "Enable the Messages integration", False)]
+    return [
+        ("select", "Secret backend:", "ansible-vault"),
+        ("text", "calendars host(s)", "10.0.0.13"),
+        ("text", "workers (leave blank", ""),
+        ("text", "Public domain for calendars", "calendars.example.org"),
+        ("text", "DB_HOST", "db.example.org"),
+        ("text", "DB_NAME", "calendars"),
+        ("text", "DB_USER", "calendars"),
+        ("password", "DB_PASSWORD", "dbpass123"),
+        ("text", "DB_PORT", "5432"),
+        ("text", "REDIS_URL", "redis://redis:6379/0"),
+        *messages_steps,
+        ("select", "Identity provider:", "keycloak"),
+        ("text", "Keycloak base URL", "https://idp.example.org"),
+        ("text", "Keycloak realm", "master"),
+        ("text", "OIDC_RP_CLIENT_ID", "calendars-client-id"),
+        ("password", "OIDC_RP_CLIENT_SECRET", "oidc-secret"),
+        ("confirm", "Configure transactional email (SMTP) settings?", True),
+        ("text", "EMAIL_HOST", "smtp.example.org"),
+        ("text", "EMAIL_PORT", "587"),
+        ("text", "EMAIL_HOST_USER (optional)", "calendars"),
+        ("password", "EMAIL_HOST_PASSWORD", "smtppass"),
+        ("confirm", "EMAIL_USE_TLS?", True),
+        ("confirm", "EMAIL_USE_SSL?", False),
+        ("text", "DEFAULT_FROM_EMAIL", "calendars@example.org"),
+        ("confirm", "cadvisor", True),
+    ]
+
+
 def messages_first_run_script(
     *,
     db_mode: str = "url",

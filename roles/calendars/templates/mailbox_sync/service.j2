@@ -1,0 +1,8 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Sync the Messages mailbox access into the calendars CalDAV shares.
+
+[Service]
+Type=oneshot
+WorkingDirectory={{ st_calendars_workers_dir }}
+ExecStart=podman-compose --no-ansi run --rm --no-deps worker python manage.py sync_mailbox_acls
