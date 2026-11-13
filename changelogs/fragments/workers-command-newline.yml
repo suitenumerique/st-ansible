@@ -1,0 +1,2 @@
+bugfixes:
+  - "conversations, drive, messages: fix the workers compose file. The ``command`` line ended with a Jinja block tag, and Ansible removes the newline after a block tag. The ``healthcheck`` key joined the ``command`` line, and podman-compose rejected the file."
