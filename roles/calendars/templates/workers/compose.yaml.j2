@@ -22,8 +22,11 @@ services:
     volumes:
       - ./secrets:/run/secrets:ro
 {% endif %}
-    # Dramatiq worker. worker.py has no health probe command, so this service has no healthcheck.
+    # Dramatiq worker. worker.py has no health probe command. The image healthcheck probes the web
+    # server, which does not run here.
     command: ["python", "worker.py"]
+    healthcheck:
+      disable: true
 
   # The tasks call the CalDAV server at http://caldav:80. The workers host can be another host
   # than the core, so it runs its own CalDAV server on the same database.

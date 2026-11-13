@@ -13,7 +13,7 @@ st_calendars_frontend_tag: 'main@sha256:216c097eea804322df2b60247d00a7deba5e01c5
 st_calendars_backend_image: ghcr.io/suitenumerique/calendars-backend
 # Tag of the calendars backend image to deploy.
 # Upstream publishes only the mutable `main` tag, so the default pins it by digest.
-st_calendars_backend_tag: 'main@sha256:bb5411a05a02c7ac3ea96d8ec9971fef57be026534333c134d9978bf19182cd2'
+st_calendars_backend_tag: 'main@sha256:52ab4bbed7ade5ad6ecf9d1d67ee8cd33149322fd5a06877ed7908dc79be1439'
 # Image repository for the calendars CalDAV server (SabreDAV).
 st_calendars_caldav_image: ghcr.io/suitenumerique/calendars-caldav
 # Tag of the calendars CalDAV server image to deploy.

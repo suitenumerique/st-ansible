@@ -51,13 +51,6 @@ services:
     volumes:
       - ./secrets:/run/secrets:ro
 {% endif %}
-    healthcheck:
-      # The backend has no heartbeat URL. manage.py check boots the whole Django application.
-      test: ["CMD", "python", "manage.py", "check"]
-      interval: 30s
-      timeout: 60s
-      retries: 3
-      start_period: 30s
 
   # SabreDAV. Only the backend calls it, at http://caldav:80 over the compose network.
   caldav:
